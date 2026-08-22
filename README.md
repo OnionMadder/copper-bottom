@@ -398,3 +398,17 @@ without any migration:
 { "id":"d1", "kind":"diode", "ref":"D1", "value":"1N5817",
   "polarized": true, "pkg":"DO-41", "pins": [[0,2],[1,5]] }
 ```
+
+## Licence
+
+Copyright © 2026 Kellye Strickland. Released under the
+[GNU General Public License v3.0](LICENSE).
+
+Use it, study it, change it, share it. The one condition is that anything you build on
+top of it stays free the same way — if you distribute a modified version, it carries the
+same licence and the source goes with it.
+
+That choice is deliberate rather than a default. The parts of this worth having are the
+ideas: that the nets come from the board rather than a schematic, that a netlist is a
+second opinion and never a gate, and that a check which knows a pin is a CMOS input can
+say something a geometric one cannot. Those should stay where anyone can read them.
