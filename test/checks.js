@@ -1099,11 +1099,11 @@ for(const q of ['TL074','TL084','TL064','LM324','LM348']){
   ok(r[12] === 'in' && r[13] === 'in' && r[14] === 'out',
      q + ': the fourth amp is IN+ 12, IN- 13, OUT 14');
 }
-ok(IC_LIB.TL074.roles[4] === 'vdd' && IC_LIB.TL074.roles[11] === 'gnd',
-   'quad op-amp rails are 4 and 11');
+ok(IC_LIB.TL074.roles[4] === 'vdd' && IC_LIB.TL074.roles[11] === 'vee',
+   'quad op-amp rails are 4 and 11, and 11 is VEE not ground');
 for(const d of ['TL072','TL082','JRC4558','NE5532','LM358','OPA2134']){
   const r = IC_LIB[d].roles;
-  ok(r[1] === 'out' && r[7] === 'out' && r[4] === 'gnd' && r[8] === 'vdd',
+  ok(r[1] === 'out' && r[7] === 'out' && r[4] === 'vee' && r[8] === 'vdd',
      d + ': outputs 1 and 7, rails 4 and 8');
 }
 
@@ -1119,8 +1119,18 @@ for(const c of ['NE555','CD4093','CD40106','TL072','LM13700','PT2399','LM386','C
   ok(!!IC_LIB[c], c + ' is in the library');
 }
 ok(Object.keys(IC_LIB).length >= 40, 'the library holds at least 40 parts');
-ok(IC_LIB.LM13700.roles[8] === 'gnd' && IC_LIB.LM13700.roles[16] === 'vdd',
+ok(IC_LIB.LM13700.roles[8] === 'vee' && IC_LIB.LM13700.roles[16] === 'vdd',
    'LM13700 rails are 8 and 16, not the 7/14 an op-amp habit would guess');
+
+/* On a +-12V rack an op-amp's pin 4 goes to -12V, not to ground. CMOS logic is
+   the other way: its VSS really does sit at 0V, on racks and pedals alike. */
+console.log('-- rails: vee is not ground --');
+ok(IC_LIB.TL072.roles[4] === 'vee' && IC_LIB.CD4093.roles[7] === 'gnd',
+   "an op-amp's negative rail is vee; a CMOS gate's VSS stays gnd");
+ok(IC_LIB.CD4051.roles[7] === 'vee' && IC_LIB.CD4051.roles[8] === 'gnd',
+   'the 4051 has both, and they are different pins doing different jobs');
+let veeCount = Object.values(IC_LIB).filter(d => Object.values(d.roles || {}).includes('vee')).length;
+ok(veeCount >= 18, 'every op-amp and the OTA carry a vee pin: ' + veeCount);
 ok(IC_LIB.PT2399.cmos === false,
    'the PT2399 is marked non-CMOS on purpose — CC0/CC1 are meant to float');
 
@@ -1247,6 +1257,63 @@ let bare = Object.entries(IC_LIB)
   .filter(([k, v]) => !v.pinInfo && k.indexOf('DIP-') !== 0)
   .map(([k]) => k);
 ok(bare.length === 0, 'no real part is left without a pin table: ' + bare.join(', '));
+
+S = demoProject(); computeNets();
+
+/* Hangs the supply pads on whatever strips the chip's own VDD and VEE/GND pins
+   land on, so the check is exercised the way a real board would drive it. */
+function onRails(part, posLabel, negLabel){
+  const def = IC_LIB[part], n = def.pins, half = n / 2, cuts = [];
+  for(let i = 0; i < half; i++) cuts.push(K(i, 3));
+  S = {name:'t', board:{rows:half + 4, cols:14}, cuts:cuts.slice(), parts:[],
+       ics:[{id:'u', ref:'IC1', part:part, pins:n, pin1:[0,2], span:3, autoCuts:cuts.slice()}],
+       pads:[]};
+  computeNets();
+  const ic = S.ics[0];
+  const pinAt = (role) => {
+    for(const q of Object.keys(def.roles)) if(def.roles[q] === role) return pinPos(ic, +q);
+    return null;
+  };
+  const vdd = pinAt('vdd'), neg = pinAt('vee') || pinAt('gnd');
+  const side = (at) => at[1] < 3 ? 0 : 12;
+  S.pads = [{id:'p1', label:posLabel, at:[vdd[0], side(vdd)]},
+            {id:'p2', label:negLabel, at:[neg[0], side(neg)]}];
+  computeNets();
+  return runDRC().filter(x => x.rule === 'supply-range');
+}
+const sev1 = f => f.length ? f[0].sev : 'none';
+
+console.log('-- supply: over the maximum costs you the part --');
+ok(sev1(onRails('PT2399', '+12V', 'GND')) === 'error',
+   'a PT2399 on a 12V rack rail is an error — it is a 5V part');
+ok(sev1(onRails('PT2399', '+9V', 'GND')) === 'error', 'and on a 9V pedal rail too');
+ok(sev1(onRails('PT2399', '+5V', 'GND')) === 'none', 'on its own 5V regulator it is fine');
+ok(onRails('PT2399', '+9V', 'GND')[0].msg.indexOf('regulator') >= 0,
+   'and the finding says what to do about it');
+
+console.log('-- supply: under the minimum only wastes an evening --');
+ok(sev1(onRails('LM13700', '+9V', 'GND')) === 'warn',
+   'an OTA on 9V is a warning, not an error — nothing burns, it just will not bias');
+ok(sev1(onRails('TL072', '+5V', 'GND')) === 'warn', 'same for a TL072 on 5V');
+
+console.log('-- supply: a rack runs both rails, and total is what matters --');
+ok(sev1(onRails('TL072', '+12V', '-12V')) === 'none',
+   'a TL072 across +-12V sees 24V and is happy');
+ok(sev1(onRails('LM13700', '+12V', '-12V')) === 'none', 'so is the OTA');
+ok(sev1(onRails('TL072', '+9V', 'GND')) === 'none', 'and 9V single-rail is still fine');
+
+/* The trap you only meet once you leave pedals: 4000-series logic tops out at
+   18V, and both rack rails together are 24V. */
+ok(sev1(onRails('CD4093', '+12V', 'GND')) === 'none', 'a 4093 from +12V to ground is fine');
+ok(sev1(onRails('CD4093', '+24V', 'GND')) === 'error',
+   'but 24V across it is an error — CMOS stops at 18V');
+
+console.log('-- supply: no number, no opinion --');
+ok(sev1(onRails('NE555', 'VIN', 'GND')) === 'none',
+   'a rail labelled VIN states no voltage, so nothing is claimed about it');
+ok(sev1(onRails('NE555', '+9V', 'GND')) === 'none', 'a 555 on 9V is within 4.5-16V');
+ok(Object.values(IC_LIB).filter(d => d.volts).every(d => d.volts.min < d.volts.max),
+   'every declared range has a minimum below its maximum');
 
 S = demoProject(); computeNets();
 

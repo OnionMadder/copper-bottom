@@ -12,7 +12,7 @@ Single self-contained HTML file. No build step, no install, no server — double
 node test/fixture.test.js
 ```
 
-508 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+525 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -57,6 +57,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | chip library — ~40 parts, shared family pinouts | done |
 | explain layer — what a hole is FOR, not just what it is | done |
 | pin descriptions for all 40 parts | done |
+| supply-voltage ranges + the supply-range DRC | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -261,6 +262,8 @@ Click any finding to ring the offending hole and pin its net. Hover to light the
 | warn | a net has exactly one connection — goes nowhere |
 | warn | two part bodies want the same physical space |
 | warn | an axial part is wider than the holes it spans — will not lie flat |
+| error | a chip is on a supply outside its datasheet range |
+| warn | a chip is below its minimum supply |
 
 ### Lead span, and why it says "will not lie flat"
 

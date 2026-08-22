@@ -573,12 +573,16 @@ const PINS_PT2399 = {
    silent on a genuinely floating pin 8. Verified against the datasheets:
    inputs 1,2,5,6,8,9,12,13 and outputs 3,4,10,11.
 
-   'gnd' does duty for a negative supply too. Nothing here runs split rails, and
-   inventing a 'vee' the DRC never reads would be vocabulary for its own sake. */
-const OPAMP_DUAL   = {1:'out',2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'vdd'};
-const OPAMP_SINGLE = {2:'in',3:'in',4:'gnd',6:'out',7:'vdd'};   // 1,5 offset null; 8 nc
+   'vee' is a NEGATIVE supply pin, distinct from 'gnd'. An earlier version of this
+   file folded the two together on the grounds that nothing here runs split rails.
+   That was pedal thinking. Eurorack is +-12V, and on a +-12V module a TL072's
+   pin 4 goes to -12V, not to ground — calling it ground would have been wrong on
+   34 chips at once. CMOS logic keeps 'gnd', because its VSS really does sit at
+   0V on the racks and the pedals alike. */
+const OPAMP_DUAL   = {1:'out',2:'in',3:'in',4:'vee',5:'in',6:'in',7:'out',8:'vdd'};
+const OPAMP_SINGLE = {2:'in',3:'in',4:'vee',6:'out',7:'vdd'};   // 1,5 offset null; 8 nc
 const OPAMP_QUAD   = {1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',
-                      8:'out',9:'in',10:'in',11:'gnd',12:'in',13:'in',14:'out'};
+                      8:'out',9:'in',10:'in',11:'vee',12:'in',13:'in',14:'out'};
 const GATE_QUAD2   = {1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',
                       8:'in',9:'in',10:'out',11:'out',12:'in',13:'in',14:'vdd'};
 const INV_HEX      = {1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',
@@ -592,43 +596,54 @@ const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gn
    know: an analog switch throw, a timing cap leg, a trim pin. Saying nothing is
    the honest answer there, and it keeps the floating-input rule off pins where
    floating is normal. */
+/* Supply range in TOTAL volts across both rails, because that is the one number
+   that means the same thing on a 9V pedal and a +-12V rack: 9V single-rail reads
+   as 9, +-12V reads as 24, and both compare against the same figure. Datasheets
+   quote split rails as +-N, so those are doubled here.
+
+   A chip with no `volts` entry is one whose range has not been checked against a
+   datasheet yet. It produces no finding at all rather than a guessed one. */
+const V_CD4000B = {min:3,  max:18, note:'3-18V, with 20V the absolute maximum'};
+const V_TL0XX   = {min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across both rails'};
+const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
+
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
-  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, roles:INV_HEX, pinInfo:PINS_INV_HEX,
+  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
     note:'The inputs are Schmitt triggers: they snap over rather than drift, which is why a ' +
          'resistor and capacitor on one input turns an inverter into an oscillator.'},
-  CD4069 :{pins:14, name:'hex inverter',         cmos:true, roles:INV_HEX, pinInfo:PINS_INV_HEX},
-  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
-  CD4050 :{pins:16, name:'hex buffer',           cmos:true, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
+  CD4069 :{pins:14, name:'hex inverter',         cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX},
+  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
+  CD4050 :{pins:16, name:'hex buffer',           cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
 
-  CD4011 :{pins:14, name:'quad NAND',            cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
+  CD4011 :{pins:14, name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
     note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does — ' +
          'with the second input left as a gate to switch the whole thing on and off.'},
-  CD4001 :{pins:14, name:'quad NOR',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4071 :{pins:14, name:'quad OR',              cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4081 :{pins:14, name:'quad AND',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4070 :{pins:14, name:'quad XOR',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4001 :{pins:14, name:'quad NOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4071 :{pins:14, name:'quad OR',              cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4081 :{pins:14, name:'quad AND',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4070 :{pins:14, name:'quad XOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
-  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true, pinInfo:PINS_CD4013,
+  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4013,
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
-  CD4017 :{pins:16, name:'decade counter', cmos:true, pinInfo:PINS_CD4017,
+  CD4017 :{pins:16, name:'decade counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4017,
     roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
-  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true, pinInfo:PINS_CD4040,
+  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4040,
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
-  CD4046 :{pins:16, name:'phase-locked loop', cmos:true, pinInfo:PINS_CD4046,
+  CD4046 :{pins:16, name:'phase-locked loop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4046,
     /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
     roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
            13:'out',14:'in',16:'vdd'}},
 
   /* Analog switches: the switched pins carry signal either way, so the tool
      claims a direction only for the control pins and the rails. */
-  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true, pinInfo:PINS_CD4051,
-    roles:{6:'in',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
-  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true, pinInfo:PINS_CD4066,
+  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4051,
+    roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
+  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
 
   /* ---- timers ---- */
@@ -641,42 +656,45 @@ const IC_LIB = {
     note:'Trigger (2) starts the pulse, threshold (6) ends it, and discharge (7) empties the ' +
          'timing cap between the two. Tying 2 to 6 makes it run continuously.',
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
-    ties:[[2,6],[6,7],[2,6,7]], pinInfo:PINS_NE555},
+    ties:[[2,6],[6,7],[2,6,7]], volts:{min:4.5, max:16}, pinInfo:PINS_NE555},
 
   /* ---- op-amps ---- */
-  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   LM741  :{pins:8,  name:'op-amp',                cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
-  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   JRC4558:{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
-  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  LM324  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM324  :{pins:14, name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
   /* ---- the odd-shaped ones ---- */
   LM386  :{pins:8, name:'audio power amp', cmos:false,
+    volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
   LM13700:{pins:16, name:'dual OTA', cmos:false,
-    roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'gnd',
+    volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'vee',
            9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}, pinInfo:PINS_LM13700},
   /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
      open on most delay builds, and the floating-input rule would cry wolf on
      every one of them. That rule is aimed at unbuffered logic inputs. */
   PT2399 :{pins:16, name:'echo processor', cmos:false,
+    volts:{min:4.5, max:5.5, note:'5V only - it needs its own regulator on a 9V pedal or a 12V rack'},
     roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'in',8:'in',
            9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
 
@@ -1097,6 +1115,25 @@ function runDRC(){
         a);
   }
 
+  /* --- a chip on the wrong supply ---
+     The one mistake here that costs you the part rather than an evening. Over
+     the maximum is an error: a PT2399 on 9V is a dead PT2399. Under the minimum
+     is a warning, because the board simply will not work and nothing burns.
+
+     Only fires where both rails resolve to a stated voltage, so a rail labelled
+     "VIN" or fed from an on-board regulator is left alone rather than guessed at. */
+  for(const ic of S.ics){
+    const def = IC_LIB[ic.part];
+    if(!def || !def.volts) continue;
+    const sup = icSupply(ic);
+    if(!sup) continue;
+    const tail = def.volts.note ? ' — ' + def.volts.note : '';
+    const runs = ic.ref + ' (' + ic.part + ') wants ' + def.volts.min + '-' + def.volts.max +
+                 'V and this board gives it ' + sup.total + 'V';
+    if(sup.total > def.volts.max)      add('error', 'supply-range', runs + tail, pinPos(ic, 1));
+    else if(sup.total < def.volts.min) add('warn',  'supply-range', runs + tail, pinPos(ic, 1));
+  }
+
   /* --- two bodies wanting the same space ---
      Electrically these boards are fine; physically one of the parts is not
      going on. Only pairs that cannot slide clear of each other are reported. */
@@ -1262,6 +1299,44 @@ function buildList(){
   items.sort((a, b) => a.rank - b.rank ||
     a.ref.localeCompare(b.ref, undefined, {numeric:true}));
   return items;
+}
+
+/* What a chip is ACTUALLY sitting across, read off the board rather than assumed.
+
+   The voltage is taken from the chip's own supply pins — follow VDD to its net,
+   find a pad there whose label names a voltage, then do the same for VEE, or for
+   GND if the part has no negative rail. Total is the difference, so a +-12V rack
+   reads 24 and a 9V pedal reads 9.
+
+   Deliberately narrow. If either rail lands on a pad the tool cannot read a
+   number from — a bare "VIN", or a rail fed from an on-board regulator — this
+   returns null and no check runs. A module can perfectly well carry +-12V for
+   the op-amps and a regulated 5V for a PT2399, and a board-wide guess would
+   condemn that board wrongly. Silence beats a false accusation, especially to
+   someone who has no way to tell which of us is wrong. */
+function icSupply(ic){
+  const def = IC_LIB[ic.part];
+  if(!def || !def.roles) return null;
+  const voltsOn = (role) => {
+    for(const pin of Object.keys(def.roles)){
+      if(def.roles[pin] !== role) continue;
+      const at = pinPos(ic, +pin);
+      if(!at) continue;
+      const net = NET.netAt(at[0], at[1]);
+      if(!net) continue;
+      for(const d of padsOnNet(net)){
+        const c = powerClass(d.label);
+        if(c && c.volts !== null) return c.volts;
+      }
+    }
+    return null;
+  };
+  const pos = voltsOn('vdd');
+  if(pos === null) return null;
+  let neg = voltsOn('vee');
+  if(neg === null) neg = voltsOn('gnd');
+  if(neg === null) return null;
+  return {pos:pos, neg:neg, total:+(pos - neg).toFixed(2)};
 }
 
 /* ============================================================
