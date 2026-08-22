@@ -1,0 +1,371 @@
+{
+  "version": 2,
+  "name": "two-voice optical theremin",
+  "board": {
+    "rows": 15,
+    "cols": 30
+  },
+  "cuts": [
+    "4,8",
+    "5,8",
+    "6,8",
+    "7,8",
+    "8,8",
+    "9,8",
+    "10,8",
+    "11,10"
+  ],
+  "ics": [
+    {
+      "id": "u1",
+      "ref": "IC1",
+      "part": "CD40106",
+      "pins": 14,
+      "pin1": [
+        4,
+        7
+      ],
+      "span": 3,
+      "autoCuts": [
+        "4,8",
+        "5,8",
+        "6,8",
+        "7,8",
+        "8,8",
+        "9,8",
+        "10,8"
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "d1",
+      "kind": "diode",
+      "ref": "D1",
+      "value": "1N5817",
+      "polarized": true,
+      "pins": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "c5",
+      "kind": "cap",
+      "ref": "C5",
+      "value": "100n",
+      "pins": [
+        [
+          1,
+          19
+        ],
+        [
+          12,
+          19
+        ]
+      ]
+    },
+    {
+      "id": "c1",
+      "kind": "cap",
+      "ref": "C1",
+      "value": "10n",
+      "pins": [
+        [
+          4,
+          0
+        ],
+        [
+          12,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "c2",
+      "kind": "cap",
+      "ref": "C2",
+      "value": "100n",
+      "pins": [
+        [
+          6,
+          1
+        ],
+        [
+          12,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "c3",
+      "kind": "ecap",
+      "ref": "C3",
+      "value": "10u",
+      "polarized": true,
+      "pins": [
+        [
+          5,
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "c4",
+      "kind": "ecap",
+      "ref": "C4",
+      "value": "10u",
+      "polarized": true,
+      "pins": [
+        [
+          7,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "r1",
+      "kind": "res",
+      "ref": "R1",
+      "value": "10k",
+      "pins": [
+        [
+          2,
+          5
+        ],
+        [
+          11,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "r2",
+      "kind": "res",
+      "ref": "R2",
+      "value": "10k",
+      "pins": [
+        [
+          3,
+          6
+        ],
+        [
+          11,
+          6
+        ]
+      ]
+    },
+    {
+      "id": "j1",
+      "kind": "link",
+      "ref": "J1",
+      "value": "",
+      "pins": [
+        [
+          1,
+          13
+        ],
+        [
+          4,
+          13
+        ]
+      ]
+    },
+    {
+      "id": "j2",
+      "kind": "link",
+      "ref": "J2",
+      "value": "",
+      "pins": [
+        [
+          10,
+          3
+        ],
+        [
+          12,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "j3",
+      "kind": "link",
+      "ref": "J3",
+      "value": "",
+      "pins": [
+        [
+          8,
+          4
+        ],
+        [
+          12,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "j4",
+      "kind": "link",
+      "ref": "J4",
+      "value": "",
+      "pins": [
+        [
+          9,
+          15
+        ],
+        [
+          12,
+          15
+        ]
+      ]
+    },
+    {
+      "id": "j5",
+      "kind": "link",
+      "ref": "J5",
+      "value": "",
+      "pins": [
+        [
+          7,
+          16
+        ],
+        [
+          12,
+          16
+        ]
+      ]
+    },
+    {
+      "id": "j6",
+      "kind": "link",
+      "ref": "J6",
+      "value": "",
+      "pins": [
+        [
+          5,
+          17
+        ],
+        [
+          12,
+          17
+        ]
+      ]
+    }
+  ],
+  "pads": [
+    {
+      "id": "p1",
+      "label": "+12V",
+      "at": [
+        0,
+        0
+      ],
+      "to": "DC jack centre pin"
+    },
+    {
+      "id": "p2",
+      "label": "GND",
+      "at": [
+        12,
+        2
+      ],
+      "to": "DC jack sleeve / battery -"
+    },
+    {
+      "id": "p3",
+      "label": "V1_IN",
+      "at": [
+        4,
+        4
+      ],
+      "to": "LDR1 leg 1"
+    },
+    {
+      "id": "p4",
+      "label": "V1_RET",
+      "at": [
+        5,
+        4
+      ],
+      "to": "LDR1 leg 2"
+    },
+    {
+      "id": "p5",
+      "label": "V2_IN",
+      "at": [
+        6,
+        4
+      ],
+      "to": "LDR2 leg 1"
+    },
+    {
+      "id": "p6",
+      "label": "V2_RET",
+      "at": [
+        7,
+        4
+      ],
+      "to": "LDR2 leg 2"
+    },
+    {
+      "id": "p7",
+      "label": "VOL_1",
+      "at": [
+        11,
+        8
+      ],
+      "to": "volume pot lug 1"
+    },
+    {
+      "id": "p8",
+      "label": "VOL_W",
+      "at": [
+        11,
+        12
+      ],
+      "to": "volume pot lug 2 (wiper)"
+    },
+    {
+      "id": "p9",
+      "label": "VOL_3",
+      "at": [
+        12,
+        6
+      ],
+      "to": "volume pot lug 3"
+    },
+    {
+      "id": "p10",
+      "label": "OUT",
+      "at": [
+        11,
+        15
+      ],
+      "to": "output jack tip"
+    },
+    {
+      "id": "p11",
+      "label": "OUT_GND",
+      "at": [
+        12,
+        12
+      ],
+      "to": "output jack sleeve"
+    }
+  ],
+  "netlist": "# two-voice optical theremin, CD40106, +12V\n\nRAW:     @+12V D1.A                      # before the protection diode\nV+:      D1.B IC1.14 C5.A                # protected rail\nGND:     @GND @VOL_3 @OUT_GND IC1.7 C5.B C1.B C2.B IC1.5 IC1.9 IC1.11 IC1.13\n\nV1_IN:   IC1.1 C1.A @V1_IN               # LDR1 one leg, timing cap\nV1_OUT:  IC1.2 C3.A @V1_RET              # LDR1 other leg, coupling cap +\nV1_MIX:  C3.B R1.A\n\nV2_IN:   IC1.3 C2.A @V2_IN\nV2_OUT:  IC1.4 C4.A @V2_RET\nV2_MIX:  C4.B R2.A\n\nMIX:     R1.B R2.B @VOL_1                # both voices meet, then the pot\nOUT:     @VOL_W @OUT               # wiper back from the pot, out to the jack"
+}

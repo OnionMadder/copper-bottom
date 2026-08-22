@@ -1,0 +1,18 @@
+# Copper Bottom has no build step and no dependencies — the app is one
+# self-contained HTML file — so there is very little to ignore.
+#
+# Note the one generated artefact does NOT live here: deploy/build-site.js
+# writes the hosted copy of the editor straight into the onionmadder.com
+# working copy, so it is that repo's business, not this one's.
+
+node_modules/
+*.log
+
+# OS and editor litter
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/

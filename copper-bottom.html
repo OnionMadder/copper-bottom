@@ -1,0 +1,3127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COPPER BOTTOM</title>
+<meta name="description" content="Stripboard layout editor with design-rule checking and a 1:1 build sheet.">
+<style>
+:root{
+  --void:#0B0813; --panel:#100D1A; --line:#241F36; --line2:#332B4d;
+  --mint:#00FFA3; --cyan:#00F0FF; --mag:#D926A9; --violet:#7B2CBF;
+  --gray:#B0B0B0; --dim:#6B6580;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--void); color:#fff;
+  font:12px/1.45 ui-monospace,"Cascadia Mono","Consolas",monospace;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.hdr{
+  display:flex; align-items:center; gap:14px; padding:0 12px; height:38px;
+  border-bottom:1px solid var(--line); background:var(--panel); flex:0 0 auto;
+}
+.brand{font-weight:700; letter-spacing:.28em; font-size:12px; color:#fff}
+.brand span{color:var(--mint)}
+.hdr .sp{flex:1}
+input,select,button{
+  font:inherit; color:#fff; background:#171325;
+  border:1px solid var(--line2); border-radius:3px; padding:3px 7px;
+}
+input:focus,select:focus{outline:1px solid var(--cyan); border-color:var(--cyan)}
+button{cursor:pointer}
+button:hover{border-color:var(--cyan); color:var(--cyan)}
+.main{flex:1; display:flex; min-height:0}
+
+/* ---- tool rail ---- */
+.rail{
+  width:186px; flex:0 0 auto; border-right:1px solid var(--line);
+  background:var(--panel); display:flex; flex-direction:column; min-height:0;
+}
+.rail .scroll{overflow-y:auto; padding:8px}
+.sect{
+  font-size:10px; letter-spacing:.2em; color:var(--dim); font-weight:700;
+  margin:12px 2px 6px;
+}
+.sect:first-child{margin-top:2px}
+.tool{
+  display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  padding:5px 7px; margin-bottom:3px; background:transparent; border:1px solid transparent;
+  color:var(--gray); border-radius:3px;
+}
+.tool:hover{background:#171325; color:#fff; border-color:var(--line2)}
+.tool.on{background:#1c1630; border-color:var(--mint); color:var(--mint)}
+.tool kbd{
+  font:inherit; min-width:16px; text-align:center; padding:1px 3px; border-radius:2px;
+  background:#241F36; color:var(--dim); border:1px solid var(--line2);
+}
+.tool.on kbd{color:var(--mint); border-color:var(--mint)}
+.ctx{border-top:1px solid var(--line); padding:8px; display:flex; flex-direction:column; gap:6px}
+.ctx label{font-size:10px; letter-spacing:.16em; color:var(--dim)}
+.ctx input,.ctx select{width:100%}
+.hint{color:var(--dim); font-size:10.5px; line-height:1.5; padding:0 2px}
+
+/* ---- board ---- */
+.stage{flex:1; min-width:0; overflow:auto; padding:22px; background:var(--void)}
+svg{display:block; margin:0 auto; user-select:none; touch-action:none}
+.hit{fill:transparent; cursor:crosshair}
+.phit{cursor:move}
+.pinhit{cursor:crosshair}
+
+/* ---- right panel ---- */
+.side{
+  width:274px; flex:0 0 auto; border-left:1px solid var(--line); background:var(--panel);
+  display:flex; flex-direction:column; min-height:0;
+}
+.side h2{
+  font-size:10px; letter-spacing:.2em; color:var(--dim); font-weight:700;
+  margin:0; padding:9px 10px 7px; border-bottom:1px solid var(--line);
+}
+.readout{padding:9px 10px; border-bottom:1px solid var(--line); min-height:96px; font-size:11px}
+.readout .big{font-size:14px; font-weight:700; letter-spacing:.08em}
+.readout .row{color:var(--gray); margin-top:3px}
+.readout .row b{color:#fff; font-weight:400}
+.netwrap{flex:1; overflow-y:auto; min-height:0}
+.drcwrap{flex:1.3; overflow-y:auto; min-height:54px; border-bottom:1px solid var(--line)}
+.f{display:flex; align-items:flex-start; gap:6px; padding:5px 9px 5px 8px; cursor:pointer;
+   border-left:3px solid transparent; font-size:11px; line-height:1.4}
+.f:hover{background:#1a1528}
+.f.error{border-left-color:var(--mag); color:#F2C8E4}
+.f.warn{border-left-color:#A46BE8; color:#D8C8F0}
+.f .msg{flex:1}
+.f .loc{color:var(--dim)}
+.f .fix{padding:0 6px; font-size:10px; border-color:var(--mint); color:var(--mint); background:transparent}
+.f .fix:hover{background:var(--mint); color:#0B0813}
+.clean{padding:9px 10px; color:var(--mint); font-size:11px; line-height:1.5}
+.net{
+  display:flex; align-items:center; gap:8px; padding:4px 10px; cursor:pointer;
+  border-left:2px solid transparent;
+}
+.net:hover,.net.on{background:#1a1528; border-left-color:currentColor}
+.sw{width:10px; height:10px; border-radius:2px; flex:0 0 auto}
+.net .nm{flex:1; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.net .ct{color:var(--dim); font-size:10.5px}
+
+/* ---- footer ---- */
+.foot{
+  height:26px; flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
+  display:flex; align-items:center; gap:16px; padding:0 12px; color:var(--dim); font-size:11px;
+}
+.foot b{color:var(--gray); font-weight:400}
+.foot .sp{flex:1}
+.foot input{width:44px; padding:1px 4px; text-align:center}
+#saved{color:var(--mint)}
+@media (max-width:900px){ .side{display:none} .rail{width:52px} .rail .lbl,.ctx,.hint{display:none} }
+
+/* ---- build sheet: a document, so it is white whatever the app is ---- */
+.sheet{position:fixed; inset:0; z-index:50; background:#0B0813; display:flex; flex-direction:column}
+.sheet[hidden]{display:none}
+.sheetbar{
+  display:flex; align-items:center; gap:8px; padding:0 12px; height:38px; flex:0 0 auto;
+  background:var(--panel); border-bottom:1px solid var(--line);
+}
+.sheetbar b{letter-spacing:.24em; font-size:11px}
+.sheetbar .sp{flex:1}
+.sheetdoc{
+  flex:1; overflow:auto; background:#fff; color:#111; padding:16mm 14mm 24mm;
+  font:12px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+.sheetdoc h1{font-size:22px; margin:0 0 2px; letter-spacing:.04em}
+.sheetdoc h2{font-size:13px; letter-spacing:.18em; margin:26px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px}
+.sheetdoc h2 .n{color:#777; font-weight:400; letter-spacing:0}
+.sheetdoc p{margin:4px 0 10px; color:#444; max-width:150mm}
+.sheetdoc p.sub{color:#111}
+.sheetdoc .svgwrap{margin:6px 0 4px; overflow-x:auto}
+.sheetdoc svg{display:block; border:1px solid #ddd}
+.sheetdoc table{border-collapse:collapse; margin:2px 0 6px; font-size:11.5px}
+.sheetdoc th{text-align:left; font-weight:700; border-bottom:1.5px solid #333; padding:3px 10px 3px 0; white-space:nowrap}
+.sheetdoc td{border-bottom:1px solid #ddd; padding:3px 10px 3px 0; white-space:nowrap}
+.sheetdoc td.mono{color:#555}
+.sheetdoc td.fill{min-width:52mm; border-bottom:1px solid #999}
+.tick{display:inline-block; cursor:pointer}
+.tick input{position:absolute; opacity:0; width:0; height:0}
+.tick span{display:block; width:11px; height:11px; border:1.4px solid #333; border-radius:2px}
+.tick input:checked + span{background:#333; box-shadow:inset 0 0 0 2px #fff}
+
+@media print{
+  .hdr,.main,.foot,.sheetbar{display:none !important}
+  .sheet{position:static; background:#fff}
+  .sheet[hidden]{display:none}
+  .sheetdoc{overflow:visible; padding:0; color:#000}
+  .sheetdoc svg{border:none}
+  .sheetdoc h2{page-break-after:avoid}
+  .sheetdoc .svgwrap{page-break-inside:avoid}
+  tr,h1{page-break-inside:avoid}
+}
+@page{ margin:12mm; }
+
+/* ---- netlist overlay ---- */
+.nlnote{color:var(--dim); font-size:10.5px; letter-spacing:.04em}
+.nlbody{flex:1; display:flex; min-height:0}
+.nlleft{width:46%; min-width:280px; display:flex; border-right:1px solid var(--line)}
+.nlleft textarea{
+  flex:1; resize:none; border:0; outline:0; background:#0E0B18; color:#D8D4E4;
+  font:12px/1.7 ui-monospace,"Cascadia Mono",Consolas,monospace; padding:12px 14px;
+}
+.nlright{flex:1; overflow-y:auto; padding:12px 14px; font-size:11.5px; line-height:1.6}
+.nlright h4{margin:0 0 6px; font-size:10px; letter-spacing:.2em; color:var(--dim); font-weight:700}
+.nlright .grp{margin-bottom:16px}
+.nlok{color:var(--mint)}
+.nlbad{color:#F2C8E4; border-left:3px solid var(--mag); padding:4px 0 4px 8px; margin-bottom:5px}
+.nldim{color:var(--dim)}
+.nlchip{
+  display:inline-block; padding:1px 6px; margin:0 4px 4px 0; border-radius:3px;
+  background:#171325; border:1px solid var(--line2); color:var(--gray); font-size:10.5px;
+}
+</style>
+</head>
+
+<body>
+<div class="hdr">
+  <div class="brand">COPPER<span>BOTTOM</span></div>
+  <input id="projname" value="untitled" size="18" title="project name">
+  <div class="sp"></div>
+  <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
+  <button id="btnNew">new</button>
+  <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
+  <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
+  <button id="btnExport">export .json</button>
+  <button id="btnImport">import</button>
+  <input type="file" id="file" accept=".json,application/json" style="display:none">
+</div>
+
+<div class="main">
+  <div class="rail">
+    <div class="scroll">
+      <div class="sect">INSPECT</div>
+      <button class="tool" data-tool="inspect"><kbd>V</kbd><span class="lbl">inspect net</span></button>
+      <button class="tool" data-tool="select"><kbd>S</kbd><span class="lbl">select / move</span></button>
+      <button class="tool" data-tool="area"><kbd>A</kbd><span class="lbl">region</span></button>
+      <button class="tool" data-tool="line"><kbd>B</kbd><span class="lbl">rows &amp; cols</span></button>
+      <div class="sect">BOARD</div>
+      <button class="tool" data-tool="cut"><kbd>X</kbd><span class="lbl">cut track</span></button>
+      <button class="tool" data-tool="link"><kbd>J</kbd><span class="lbl">wire link</span></button>
+      <div class="sect">PARTS</div>
+      <button class="tool" data-tool="res"><kbd>R</kbd><span class="lbl">resistor</span></button>
+      <button class="tool" data-tool="cap"><kbd>C</kbd><span class="lbl">capacitor</span></button>
+      <button class="tool" data-tool="ecap"><kbd>E</kbd><span class="lbl">electrolytic</span></button>
+      <button class="tool" data-tool="diode"><kbd>D</kbd><span class="lbl">diode</span></button>
+      <button class="tool" data-tool="trans"><kbd>Q</kbd><span class="lbl">transistor</span></button>
+      <button class="tool" data-tool="trim"><kbd>W</kbd><span class="lbl">trimpot</span></button>
+      <button class="tool" data-tool="reg"><kbd>G</kbd><span class="lbl">regulator</span></button>
+      <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
+      <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
+      <div class="sect">EDIT</div>
+      <button class="tool" data-tool="erase"><kbd>Del</kbd><span class="lbl">erase</span></button>
+    </div>
+    <div class="ctx" id="ctx"></div>
+    <div class="ctx"><div class="hint" id="hint"></div></div>
+  </div>
+
+  <div class="stage" id="stage"></div>
+
+  <div class="side">
+    <h2>INSPECTOR</h2>
+    <div class="readout" id="readout"></div>
+    <h2 id="drchdr">DRC</h2>
+    <div class="drcwrap" id="drclist"></div>
+    <h2 id="nethdr">NETS</h2>
+    <div class="netwrap" id="netlist"></div>
+  </div>
+</div>
+
+<div class="sheet" id="netl" hidden>
+  <div class="sheetbar">
+    <b>NETLIST</b>
+    <span class="nlnote">optional — a second opinion, never required</span>
+    <span class="sp"></span>
+    <span id="nlVerdict"></span>
+    <button id="nlClose">close</button>
+  </div>
+  <div class="nlbody">
+    <div class="nlleft">
+      <textarea id="nlText" spellcheck="false" placeholder="GND:    IC1.7 C1.B @GND&#10;V1_IN:  IC1.1 C1.A @V1_IN&#10;&#10;# REF.LEG for a part leg or IC pin&#10;# @LABEL for a pad&#10;# legs are A/B, or E/B/C on a transistor"></textarea>
+    </div>
+    <div class="nlright" id="nlOut"></div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheetbar">
+    <b>BUILD SHEET</b>
+    <span class="sp"></span>
+    <button id="btnSvgC">component .svg</button>
+    <button id="btnSvgS">solder .svg</button>
+    <button id="btnMd">copy markdown</button>
+    <button id="btnPrint">print</button>
+    <button id="sheetClose">close</button>
+  </div>
+  <div class="sheetdoc" id="sheetdoc"></div>
+</div>
+
+<div class="foot">
+  <span>rows <input id="rows" type="number" min="2" max="60" value="13"></span>
+  <span>cols <input id="cols" type="number" min="2" max="80" value="20"></span>
+  <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
+  <span>strips <button id="tnet" title="N — colour every net, or leave the board quiet">copper</button></span>
+  <div class="sp"></div>
+  <span id="stat"></span>
+  <span id="netbadge"></span>
+  <span id="saved"></span>
+</div>
+
+<script>
+"use strict";
+/*#region model — extracted verbatim by test/fixture.test.js */
+/* ============================================================
+   MODEL
+   ============================================================ */
+const K = (r,c) => r + ',' + c;
+
+let S = { version:2, name:'untitled', board:{rows:13, cols:20}, cuts:[], parts:[], ics:[], pads:[] };
+
+/* Part kinds. `legs` is how many holes the part occupies, and the placement
+   tool simply collects that many clicks. */
+const PART_LIB = {
+  link:  {legs:2, name:'wire link',    prefix:'J'},
+  res:   {legs:2, name:'resistor',     prefix:'R'},
+  cap:   {legs:2, name:'capacitor',    prefix:'C'},
+  ecap:  {legs:2, name:'electrolytic', prefix:'C', polarized:true},
+  diode: {legs:2, name:'diode',        prefix:'D', polarized:true},
+  trans: {legs:3, name:'transistor',   prefix:'Q'},
+  trim:  {legs:3, name:'trimpot',      prefix:'VR'},
+  reg:   {legs:3, name:'regulator',    prefix:'U'},
+};
+const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
+
+/* Three-leg pinouts, read left to right with the flat face toward you and the
+   legs pointing down. Getting this backwards is the classic stripboard
+   build-killer, so the legs are lettered on the board. Check any device you
+   are unsure of against its own datasheet -- packages do vary by maker. */
+const LEG_LIB = {
+  trans:{
+    '2N5088':['E','B','C'], '2N5089':['E','B','C'],
+    '2N3904':['E','B','C'], '2N3906':['E','B','C'],
+    '2N5087':['E','B','C'], '2N5457':['D','S','G'],
+    'BC547' :['C','B','E'], 'BC549' :['C','B','E'],
+    'BC550' :['C','B','E'], 'BC557' :['C','B','E'],
+    'J201'  :['D','S','G'], 'MPF102':['D','S','G'],
+    '2N7000':['S','G','D'], 'TO-92' :['1','2','3'],
+  },
+  reg:{ '78L05':['O','G','I'], '78L09':['O','G','I'], '78L12':['O','G','I'],
+        'TO-92':['1','2','3'] },
+  trim:{ 'trimpot':['1','W','3'] },
+};
+function legLabels(p){
+  const fam = LEG_LIB[p.kind];
+  if(!fam) return null;
+  return fam[p.device] || fam[Object.keys(fam)[0]] || null;
+}
+
+/* v1 kept two-lead parts as a/b. v2 keeps pins[], which is what lets a
+   transistor or a trimpot exist at all. Old files migrate on load. */
+function migrate(obj){
+  const o = Object.assign({version:2, name:'untitled', board:{rows:13, cols:20},
+                           cuts:[], parts:[], ics:[], pads:[]}, obj || {});
+  o.parts = (o.parts || []).map(p => {
+    if(p.pins) return p;
+    const q = Object.assign({}, p);
+    q.pins = [p.a, p.b].filter(Boolean);
+    delete q.a; delete q.b;
+    return q;
+  });
+  if(o.netlist === '') delete o.netlist;
+  o.version = 2;
+  return o;
+}
+
+/* IC library. `roles` drives pin labelling now and the floating-input DRC later.
+   in = logic input, out = output, vdd/gnd = supply. */
+const IC_LIB = {
+  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true,
+    roles:{1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'}},
+  CD4069 :{pins:14, name:'hex inverter', cmos:true,
+    roles:{1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'}},
+  CD4093 :{pins:14, name:'quad Schmitt NAND', cmos:true,
+    roles:{1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'}},
+  CD4011 :{pins:14, name:'quad NAND', cmos:true,
+    roles:{1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'}},
+  CD4017 :{pins:16, name:'decade counter', cmos:true,
+    roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
+  TL072  :{pins:8, name:'dual FET op-amp', cmos:false,
+    roles:{1:'out',2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'vdd'}},
+  TL074  :{pins:14, name:'quad FET op-amp', cmos:false,
+    roles:{1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',8:'out',9:'in',10:'in',11:'gnd',12:'out',13:'in',14:'in'}},
+  NE555  :{pins:8, name:'timer', cmos:false,
+    roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'}},
+  'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
+  'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
+  'DIP-16':{pins:16, name:'generic 16-pin', cmos:false, roles:{}},
+};
+
+/* pin i (1-based) of an IC to [row,col]. By default pins run down the left row
+   then back up the right row, exactly like a real DIP.
+
+   A package that is not a plain DIP carries `pinMap`: one [dRow,dCol] offset
+   per pin, measured from `pin1`. Once a map exists `pin1` is really just the
+   anchor the whole footprint hangs off, so moving, duplicating and shifting a
+   row all keep working unchanged — they only ever move the anchor. */
+function defaultPinMap(ic){
+  const half = ic.pins / 2, out = [];
+  for(let i = 1; i <= ic.pins; i++)
+    out.push(i <= half ? [i - 1, 0] : [ic.pins - i, ic.span]);
+  return out;
+}
+function hasFootprint(ic){ return !!(ic && ic.pinMap && ic.pinMap.length === ic.pins); }
+
+function pinPos(ic, i){
+  if(hasFootprint(ic)){
+    const d = ic.pinMap[i - 1];
+    return [ic.pin1[0] + d[0], ic.pin1[1] + d[1]];
+  }
+  const half = ic.pins / 2, r0 = ic.pin1[0], c0 = ic.pin1[1];
+  return i <= half ? [r0 + i - 1, c0] : [r0 + (ic.pins - i), c0 + ic.span];
+}
+
+/* the box every pin actually falls inside, whatever the shape */
+function icExtent(ic){
+  let r0 = Infinity, c0 = Infinity, r1 = -Infinity, c1 = -Infinity;
+  for(let i = 1; i <= ic.pins; i++){
+    const p = pinPos(ic, i);
+    if(p[0] < r0) r0 = p[0];
+    if(p[0] > r1) r1 = p[0];
+    if(p[1] < c0) c0 = p[1];
+    if(p[1] > c1) c1 = p[1];
+  }
+  return {r0:r0, c0:c0, r1:r1, c1:c1};
+}
+
+/* Materialise the current geometry so editing starts from what is on the board
+   rather than from nothing. */
+function editFootprint(ic){
+  if(ic && !hasFootprint(ic)) ic.pinMap = defaultPinMap(ic);
+  return ic ? ic.pinMap : null;
+}
+function setIcPin(ic, i, at){
+  if(!ic || i < 1 || i > ic.pins) return false;
+  editFootprint(ic);
+  ic.pinMap[i - 1] = [at[0] - ic.pin1[0], at[1] - ic.pin1[1]];
+  return true;
+}
+function resetFootprint(ic){
+  if(!ic) return false;
+  delete ic.pinMap;
+  return true;
+}
+
+/* A custom footprint has no notion of "the column between the pin rows", so it
+   manages its own cuts. Returns the cuts now owned by the chip. */
+function refreshAutoCuts(ic){
+  const had = new Set(ic.autoCuts || []);
+  S.cuts = S.cuts.filter(k => !had.has(k));
+  if(hasFootprint(ic)){ ic.autoCuts = []; return ic.autoCuts; }
+  ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
+  S.cuts = S.cuts.concat(ic.autoCuts);
+  return ic.autoCuts;
+}
+function icPinAt(ic, r, c){
+  for(let i = 1; i <= ic.pins; i++){
+    const p = pinPos(ic, i);
+    if(p[0] === r && p[1] === c) return i;
+  }
+  return 0;
+}
+/* One column of cuts down the middle of the DIP is enough to split each strip.
+   For a 0.3in package (span 3, pin 1 at col 7) that lands on col 8, matching
+   the hand-built fixture. */
+function icCutCol(pin1, span){ return pin1[1] + Math.floor(span / 2); }
+function icCutKeys(pin1, span, pins){
+  const c = icCutCol(pin1, span), out = [];
+  for(let i = 0; i < pins / 2; i++) out.push(K(pin1[0] + i, c));
+  return out;
+}
+
+/* ============================================================
+   CONNECTIVITY - segment, union, net
+   ============================================================ */
+let NET = null;
+
+function segAt(seg, r, c){
+  const row = seg[r];
+  if(!row) return null;
+  const v = row[c];
+  return v === undefined ? null : v;
+}
+
+function computeNets(){
+  const rows = S.board.rows, cols = S.board.cols;
+  const cut = new Set(S.cuts);
+  const seg = [];            // seg[r][c] -> segment id, or null on a cut
+  const segHoles = [];
+  let n = 0;
+
+  /* step 1 - segment every strip */
+  for(let r = 0; r < rows; r++){
+    seg[r] = [];
+    let cur = -1;
+    for(let c = 0; c < cols; c++){
+      if(cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
+      if(cur < 0){ cur = n++; segHoles[cur] = []; }
+      seg[r][c] = cur;
+      segHoles[cur].push([r,c]);
+    }
+  }
+
+  /* step 2 - union-find over segments, merged only by wire links */
+  const par = Array.from({length:n}, (_, i) => i);
+  const find = x => { while(par[x] !== x){ par[x] = par[par[x]]; x = par[x]; } return x; };
+  const union = (a, b) => { a = find(a); b = find(b); if(a !== b) par[a] = b; };
+  for(const p of S.parts){
+    if(p.kind !== 'link') continue;
+    const A = segAt(seg, p.pins[0][0], p.pins[0][1]),
+          B = segAt(seg, p.pins[1][0], p.pins[1][1]);
+    if(A !== null && B !== null) union(A, B);
+  }
+
+  /* step 3 - roots become nets, ordered top-left first so colours stay stable */
+  const byRoot = new Map();
+  for(let s = 0; s < n; s++){
+    const root = find(s);
+    if(!byRoot.has(root)) byRoot.set(root, {segs:[], holes:[]});
+    const net = byRoot.get(root);
+    net.segs.push(s);
+    for(const h of segHoles[s]) net.holes.push(h);
+  }
+  const nets = [...byRoot.values()];
+  for(const net of nets){
+    net.holes.sort((a,b) => a[0] - b[0] || a[1] - b[1]);
+    net.min = net.holes[0] || [0,0];
+  }
+  nets.sort((a,b) => a.min[0] - b.min[0] || a.min[1] - b.min[1]);
+
+  const netOfSeg = new Array(n).fill(-1);
+  nets.forEach((net, i) => {
+    net.id = i;
+    net.color = netColor(i);
+    for(const s of net.segs) netOfSeg[s] = i;
+  });
+
+  NET = {
+    seg, nets, netOfSeg,
+    segAt: (r,c) => segAt(seg, r, c),
+    netAt: (r,c) => { const s = segAt(seg, r, c); return s === null ? null : nets[netOfSeg[s]]; },
+  };
+  return NET;
+}
+
+const PALETTE = ['#00FFA3','#00F0FF','#D926A9','#7B2CBF','#FFB300','#FF5C7A',
+                 '#4DFF88','#5BA8FF','#C77DFF','#00D4B4','#FF8A3D','#9DFF4D'];
+const netColor = i => PALETTE[i % PALETTE.length];
+
+/* what is sitting in a given hole */
+function occupants(r, c){
+  const out = [];
+  if(S.cuts.indexOf(K(r,c)) >= 0) out.push({type:'cut'});
+  for(const p of S.parts)
+    p.pins.forEach((at, i) => {
+      if(at[0] === r && at[1] === c) out.push({type:'part', part:p, leg:i});
+    });
+  for(const ic of S.ics){
+    const n = icPinAt(ic, r, c);
+    if(n) out.push({type:'ic', ic:ic, pin:n});
+  }
+  for(const d of S.pads) if(d.at[0] === r && d.at[1] === c) out.push({type:'pad', pad:d});
+  return out;
+}
+function padsOnNet(net){
+  if(!net) return [];
+  const set = new Set(net.holes.map(h => K(h[0], h[1])));
+  return S.pads.filter(d => set.has(K(d.at[0], d.at[1])));
+}
+function pinsOnNet(net){
+  if(!net) return [];
+  const set = new Set(net.holes.map(h => K(h[0], h[1])));
+  const out = [];
+  for(const ic of S.ics)
+    for(let i = 1; i <= ic.pins; i++){
+      const p = pinPos(ic, i);
+      if(set.has(K(p[0], p[1]))) out.push({ic:ic, pin:i});
+    }
+  return out;
+}
+
+let _uid = 0;
+function uid(){ return 'e' + (++_uid).toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
+
+/* ============================================================
+   TEST FIXTURE - CD40106 two-voice optical theremin
+   ============================================================ */
+function demoProject(){
+  const P = (kind, ref, value, a, b) => ({id:uid(), kind:kind, ref:ref, value:value, pins:[a, b]});
+  const cuts = [3,4,5,6,7,8,9].map(r => K(r,8));
+  return {
+    version:2, name:'40106 two-voice theremin', board:{rows:13, cols:20},
+    cuts: cuts.slice(),
+    parts:[
+      P('cap','C1','10n',[3,0],[12,0]),
+      P('cap','C2','15n',[5,1],[12,1]),
+      P('ecap','C3','10u',[4,2],[2,2]),
+      P('ecap','C4','10u',[6,3],[1,3]),
+      P('cap','C5','100n',[0,19],[12,19]),
+      P('res','R1','10k',[2,4],[10,4]),
+      P('res','R2','10k',[1,5],[10,5]),
+      Object.assign(P('res','R3','10k',[10,6],[12,6]), {mount:'vertical'}),
+      P('link','J1','',[3,13],[0,13]),
+      P('link','J2','',[9,3],[12,3]),
+      P('link','J3','',[4,15],[12,15]),
+      P('link','J4','',[6,16],[12,16]),
+      P('link','J5','',[8,17],[12,17]),
+      P('link','J6','',[7,4],[12,4]),
+    ],
+    ics:[{id:uid(), ref:'IC1', part:'CD40106', pins:14, pin1:[3,7], span:3, autoCuts:cuts.slice()}],
+    pads:[
+      {id:uid(), label:'+12V',    at:[0,0]},
+      {id:uid(), label:'GND',     at:[12,18]},
+      {id:uid(), label:'OUT',     at:[10,7]},
+      {id:uid(), label:'OUT_GND', at:[12,7]},
+      {id:uid(), label:'V1_IN',   at:[3,5]},
+      {id:uid(), label:'V1_RET',  at:[4,6]},
+      {id:uid(), label:'V2_IN',   at:[5,5]},
+      {id:uid(), label:'V2_RET',  at:[6,6]},
+    ],
+  };
+}
+
+/* ============================================================
+   DRC
+   ============================================================ */
+
+/* Is this pad label naming a supply rail? Returns a class and, where the label
+   states one, a voltage. Used to decide whether two pads on one net are a short. */
+function powerClass(label){
+  const s = String(label == null ? '' : label).trim().toUpperCase().replace(/\s+/g, '');
+  if(/^(GND|GROUND|EARTH|0V|VSS|AGND|DGND)$/.test(s)) return {cls:'gnd', volts:0};
+  let m = /^([+-]?)(\d+(?:[.,]\d+)?)V?$/.exec(s);
+  if(m && /\d/.test(s) && /^[+-]|V$/.test(s)){
+    const v = parseFloat(m[2].replace(',', '.'));
+    return m[1] === '-' ? {cls:'neg', volts:-v} : {cls:'pos', volts:v};
+  }
+  if(/^(VCC|VDD|B\+|V\+|\+V|\+)$/.test(s)) return {cls:'pos', volts:null};
+  if(/^(VEE|V-|-V|-)$/.test(s))            return {cls:'neg', volts:null};
+  return null;
+}
+function railConflict(a, b){
+  if(a.cls !== b.cls) return true;
+  if(a.cls === 'gnd') return false;
+  return a.volts != null && b.volts != null && a.volts !== b.volts;
+}
+
+/* Every electrical connection on the board. Wire-link leads are deliberately
+   excluded: a link defines a net, it does not populate one. Counting its ends
+   would hide exactly the orphan nets this is meant to find. */
+function connections(){
+  const list = [];
+  for(const p of S.parts){
+    if(p.kind === 'link') continue;
+    const names = legLabels(p);
+    p.pins.forEach((at, i) => list.push({
+      label:p.ref + '.' + (names ? names[i] : (i < 2 ? 'AB'[i] : i + 1)),
+      at:at, kind:'lead', part:p}));
+  }
+  for(const ic of S.ics)
+    for(let i = 1; i <= ic.pins; i++)
+      list.push({label:ic.ref + '.' + i, at:pinPos(ic, i), kind:'pin', ic:ic, pin:i,
+                 role:(IC_LIB[ic.part] && IC_LIB[ic.part].roles[i]) || ''});
+  for(const d of S.pads) list.push({label:d.label, at:d.at, kind:'pad', pad:d});
+  return list;
+}
+
+function runDRC(){
+  const rows = S.board.rows, cols = S.board.cols;
+  const cutSet = new Set(S.cuts);
+  const inB = (r,c) => r >= 0 && c >= 0 && r < rows && c < cols;
+  const out = [];
+  const add = (sev, rule, msg, at, net, fix) =>
+    out.push({sev:sev, rule:rule, msg:msg, at:at || null,
+              net:(net === undefined || net === null) ? null : net, fix:fix || null});
+
+  /* --- off the board, and leads on dead holes --- */
+  const sites = [];
+  for(const p of S.parts){
+    const names = legLabels(p);
+    p.pins.forEach((at, i) => {
+      const nm = names ? 'leg ' + names[i] : (i < 2 ? 'lead ' + 'AB'[i] : 'lead ' + (i + 1));
+      sites.push({who:p.ref + ' ' + nm, at:at});
+    });
+  }
+  for(const ic of S.ics)
+    for(let i = 1; i <= ic.pins; i++) sites.push({who:ic.ref + ' pin ' + i, at:pinPos(ic, i)});
+  for(const d of S.pads) sites.push({who:'pad ' + d.label, at:d.at});
+
+  for(const s of sites){
+    const r = s.at[0], c = s.at[1];
+    if(!inB(r, c)) add('error', 'bounds', s.who + ' is off the board', s.at);
+    else if(cutSet.has(K(r,c))) add('error', 'on-cut', s.who + ' sits on a cut hole', s.at);
+  }
+
+  /* --- group every connection by net --- */
+  const conns = connections();
+  const byNet = new Map();
+  for(const cn of conns){
+    const net = NET.netAt(cn.at[0], cn.at[1]);
+    if(!net) continue;
+    cn.netId = net.id;
+    if(!byNet.has(net.id)) byNet.set(net.id, []);
+    byNet.get(net.id).push(cn);
+  }
+
+  /* --- two supply rails shorted together --- */
+  for(const net of NET.nets){
+    const ps = padsOnNet(net).map(d => ({d:d, p:powerClass(d.label)})).filter(x => x.p);
+    for(let i = 0; i < ps.length; i++)
+      for(let j = i + 1; j < ps.length; j++)
+        if(railConflict(ps[i].p, ps[j].p))
+          add('error', 'power-short',
+              ps[i].d.label + ' and ' + ps[j].d.label + ' are on the same net',
+              ps[i].d.at, net.id);
+  }
+
+  /* --- two pins of one IC shorted together ---
+     Narrowed from the original plan, which fired five times on the CD40106
+     fixture: pin 7 plus the four tied-off unused inputs all correctly land on
+     ground. A net carrying a supply pad is a rail, and multiple pins on a rail
+     is how CMOS is supposed to be built. Only unlabelled nets are flagged. */
+  for(const ic of S.ics){
+    const pinsByNet = new Map();
+    for(let i = 1; i <= ic.pins; i++){
+      const p = pinPos(ic, i);
+      const net = NET.netAt(p[0], p[1]);
+      if(!net) continue;
+      if(!pinsByNet.has(net.id)) pinsByNet.set(net.id, []);
+      pinsByNet.get(net.id).push(i);
+    }
+    for(const [id, pins] of pinsByNet){
+      if(pins.length < 2) continue;
+      if(padsOnNet(NET.nets[id]).some(d => powerClass(d.label))) continue;   // it's a rail
+      add('error', 'pin-short',
+          ic.ref + ' pins ' + pins.join(', ') + ' are all on one net',
+          pinPos(ic, pins[0]), id);
+    }
+  }
+
+  /* --- two legs of one part landing on the same net ---
+     A wire link exists precisely to merge nets, so its two ends sharing one is
+     the point of it. Anything else with two legs on the same strip is shorted
+     out: a resistor doing nothing, or a transistor with its collector tied to
+     its emitter. Schema v2 is what makes this checkable for three-leg parts. */
+  for(const p of S.parts){
+    if(p.kind === 'link') continue;
+    const names = legLabels(p);
+    const byNet = new Map();
+    p.pins.forEach((at, i) => {
+      const net = NET.netAt(at[0], at[1]);
+      if(!net) return;
+      if(!byNet.has(net.id)) byNet.set(net.id, []);
+      byNet.get(net.id).push(names ? names[i] : (i < 2 ? 'AB'[i] : String(i + 1)));
+    });
+    for(const [id, legs] of byNet){
+      if(legs.length < 2) continue;
+      add('error', 'part-short',
+          p.ref + ' ' + (p.pins.length > 2 ? 'legs ' : 'leads ') +
+          (legs.length > 2 ? legs.slice(0, -1).join(', ') + ' and ' + legs[legs.length-1]
+                           : legs.join(' and ')) +
+          ' are on the same net — shorted out', p.pins[0], id);
+    }
+  }
+
+  /* --- an axial body wider than the holes it was given ---
+     Axial only, and deliberately so. When the leads leave opposite ends of the
+     package, lying the part flat needs the holes to be at least a body apart.
+     Radial parts are exempt: a film cap or a can brings both leads out of one
+     face, so a wider span is just splaying the legs.
+
+     This is a warning, not an error, and the wording matters. The part is not
+     unbuildable — standing an axial part on end is ordinary practice and takes
+     two adjacent holes. What the builder needs told is that this one cannot lie
+     flat, because that decides how tall the board ends up, which is the thing
+     that bites inside an enclosure. Say `mount:'vertical'` on the part once
+     that is the intent and the warning goes quiet.
+
+     Note the body-clash check still measures a vertical part as though it were
+     lying flat, so it may over-warn about collisions and will never under-warn.
+     Erring that way is deliberate: the renderer draws these flat too, and a
+     check that disagreed with the drawing would be the worse lie. */
+  for(const p of S.parts){
+    if(p.pins.length !== 2) continue;
+    if(p.mount === 'vertical') continue;
+    const fp = footprintOf(p);
+    if(!fp || fp.leads !== 'axial') continue;
+    const a = p.pins[0], b = p.pins[1];
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if(span >= fp.len) continue;
+    add('warn', 'lead-span',
+        p.ref + (p.kind === 'diode' ? ' (' + diodePkg(p) + ')' : '') +
+        ' will not lie flat — a ' + holesMM(fp.len) + ' body across ' +
+        holesMM(span) + ' of holes. Stand it up, or give it ' +
+        Math.ceil(fp.len - span) + ' more hole' +
+        (Math.ceil(fp.len - span) === 1 ? '' : 's') + '.',
+        a);
+  }
+
+  /* --- two bodies wanting the same space ---
+     Electrically these boards are fine; physically one of the parts is not
+     going on. Only pairs that cannot slide clear of each other are reported. */
+  for(const clash of checkBodies())
+    add('warn', 'body-clash',
+        clash.a + ' and ' + clash.b + ' bodies overlap — ' + clash.why,
+        clash.at);
+
+  /* --- DIP straddling an uncut strip --- */
+  for(const ic of S.ics){
+    if(hasFootprint(ic)) continue;   // no "between the pin rows" to speak of
+    const half = ic.pins / 2, bad = [];
+    for(let i = 0; i < half; i++){
+      const r = ic.pin1[0] + i, cL = ic.pin1[1], cR = cL + ic.span;
+      const a = NET.segAt(r, cL), b = NET.segAt(r, cR);
+      if(a !== null && b !== null && a === b) bad.push(r);
+    }
+    if(bad.length)
+      add('warn', 'ic-nocuts',
+          ic.ref + ' has no cut between its pin rows (' + bad.length + ' row' + (bad.length > 1 ? 's' : '') + ')',
+          [bad[0], ic.pin1[1]], null, {type:'ic-cuts', id:ic.id});
+  }
+
+  /* --- two things in one hole --- */
+  const holes = new Map();
+  for(const s of sites){
+    const k = K(s.at[0], s.at[1]);
+    if(!holes.has(k)) holes.set(k, []);
+    holes.get(k).push(s.who);
+  }
+  for(const [k, who] of holes)
+    if(who.length > 1)
+      add('warn', 'shared-hole', who.join(' and ') + ' share hole [' + k + ']', k.split(',').map(Number));
+
+  /* --- floating CMOS input --- */
+  const floatingNets = new Set();
+  for(const ic of S.ics){
+    const def = IC_LIB[ic.part];
+    if(!def || !def.cmos) continue;
+    for(let i = 1; i <= def.pins; i++){
+      if(def.roles[i] !== 'in') continue;
+      const p = pinPos(ic, i);
+      const net = NET.netAt(p[0], p[1]);
+      if(!net) continue;
+      const others = (byNet.get(net.id) || []).filter(cn => !(cn.kind === 'pin' && cn.ic === ic && cn.pin === i));
+      if(others.length === 0){
+        floatingNets.add(net.id);
+        add('warn', 'floating',
+            ic.ref + ' pin ' + i + ' is a CMOS input connected to nothing — tie it to a rail',
+            p, net.id);
+      }
+    }
+  }
+
+  /* --- a net with a single connection ---
+     Generalises the plan's orphan rule. An unused IC *output* left open is
+     correct practice, so a lone output does not warn; a lone passive lead,
+     input or pad does. */
+  for(const net of NET.nets){
+    if(floatingNets.has(net.id)) continue;
+    const cs = byNet.get(net.id) || [];
+    if(cs.length !== 1) continue;
+    const only = cs[0];
+    if(only.kind === 'pin' && (only.role === 'out' || only.role === 'nc')) continue;
+    add('warn', 'orphan', only.label + ' is the only thing on its net — connects nowhere', only.at, net.id);
+  }
+
+  const order = {error:0, warn:1};
+  out.sort((a, b) => order[a.sev] - order[b.sev] ||
+                     (a.at ? a.at[0] : 0) - (b.at ? b.at[0] : 0) ||
+                     (a.at ? a.at[1] : 0) - (b.at ? b.at[1] : 0));
+  return out;
+}
+
+/* ============================================================
+   RESISTOR COLOUR BANDS
+   Decoding the value into real bands means the drawing matches the
+   part in your hand -- you can check one against the other without
+   reading a single number.
+   ============================================================ */
+const BAND      = ['#1A1A1A','#7A4A22','#D32F2F','#E8712A','#F2D024','#3EA34A','#2E6FD9','#8E44AD','#9E9E9E','#F5F5F5'];
+const BAND_NAME = ['black','brown','red','orange','yellow','green','blue','violet','grey','white'];
+const multColour = m => m === -1 ? '#C9A227' : m === -2 ? '#C0C0C0' : BAND[m];
+const multName   = m => m === -1 ? 'gold'    : m === -2 ? 'silver'  : BAND_NAME[m];
+
+/* Accepts the notations builders actually write: 10k, 4k7, 470R, 1M, 2k2, 100, 0R22 */
+function ohms(v){
+  const s = String(v == null ? '' : v).trim().toUpperCase().replace(/OHMS?|Ω/g, '').replace(/\s+/g, '');
+  if(!s) return null;
+  let m = /^(\d*)([RKM])(\d*)$/.exec(s);
+  if(m){
+    const mult = {R:1, K:1e3, M:1e6}[m[2]];
+    const num = parseFloat((m[1] || '0') + '.' + (m[3] || '0'));
+    return num > 0 ? num * mult : null;
+  }
+  m = /^(\d+(?:\.\d+)?)([RKM]?)$/.exec(s);
+  if(m){
+    const n = parseFloat(m[1]) * ({'':1, R:1, K:1e3, M:1e6}[m[2]]);
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+
+/* Two significant digits plus a multiplier -- the E12/E24 four-band scheme. */
+function bandDigits(value){
+  const r = ohms(value);
+  if(r == null) return null;
+  let e = Math.floor(Math.log10(r));
+  let mant = Math.round(r / Math.pow(10, e - 1));
+  if(mant >= 100){ mant = Math.round(mant / 10); e++; }
+  const mult = e - 1;
+  if(mult < -2 || mult > 9) return null;
+  return {d1:Math.floor(mant / 10), d2:mant % 10, mult:mult};
+}
+function resistorBands(value){
+  const b = bandDigits(value);
+  return b ? [BAND[b.d1], BAND[b.d2], multColour(b.mult), '#C9A227'] : null;
+}
+function resistorBandNames(value){
+  const b = bandDigits(value);
+  return b ? [BAND_NAME[b.d1], BAND_NAME[b.d2], multName(b.mult)] : null;
+}
+
+/* ============================================================
+   BUILD DOCUMENTATION
+   ============================================================ */
+
+/* Layout coordinates are zero-indexed [row,col] seen from the component side.
+   At the bench you count holes from an edge starting at one, and when you turn
+   the board over to cut tracks it is flipped left to right. Doing that flip in
+   your head is where builds die, so it is done here instead. */
+function mirrorCol(c){ return S.board.cols - 1 - c; }
+function backHole(c){ return mirrorCol(c) + 1; }
+
+/* Cuts in the order you would work across the back of the board. */
+function cutList(){
+  return S.cuts.map(k => {
+    const p = k.split(',');
+    return {row:+p[0], col:+p[1], back:backHole(+p[1])};
+  }).sort((a, b) => a.row - b.row || a.back - b.back);
+}
+
+/* Solder the flat things first or you will not be able to reach them later. */
+const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9};
+
+function buildList(){
+  const items = [];
+  for(const p of S.parts)
+    items.push({
+      key:'part:' + p.id, ref:p.ref, kind:p.kind,
+      name:(PART_LIB[p.kind] || {}).name || p.kind,
+      what:p.device || p.value || '',
+      holes:p.pins.map(q => '[' + q[0] + ',' + q[1] + ']').join(' '),
+      rank:BUILD_ORDER[p.kind] || 5,
+    });
+  for(const ic of S.ics)
+    items.push({
+      key:'ic:' + ic.id, ref:ic.ref, kind:'ic', name:'IC',
+      what:ic.part,
+      holes:'pin 1 at [' + ic.pin1[0] + ',' + ic.pin1[1] + ']',
+      rank:BUILD_ORDER.ic,
+    });
+  items.sort((a, b) => a.rank - b.rank ||
+    a.ref.localeCompare(b.ref, undefined, {numeric:true}));
+  return items;
+}
+
+/* Off-board wiring: the step that turns a working board into a working pedal,
+   and the one no other tool writes down. */
+function wireList(){
+  return S.pads.slice()
+    .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1])
+    .map(d => ({key:'pad:' + d.id, label:d.label, row:d.at[0], col:d.at[1],
+                back:backHole(d.at[1]), to:d.to || ''}));
+}
+
+function buildMarkdown(){
+  const L = [];
+  const table = (head, rows) => {
+    L.push('| ' + head.join(' | ') + ' |');
+    L.push('|' + head.map(() => '---').join('|') + '|');
+    for(const r of rows) L.push('| ' + r.join(' | ') + ' |');
+    L.push('');
+  };
+  L.push('# ' + (S.name || 'untitled'));
+  L.push('');
+  L.push(S.board.rows + ' rows x ' + S.board.cols + ' cols, 0.1in pitch.');
+  L.push('');
+
+  const cuts = cutList();
+  L.push('## Cuts (' + cuts.length + ')');
+  L.push('');
+  L.push('Made on the **solder side**, with the board flipped left to right.');
+  L.push('"from left (back)" counts holes from the left edge as you look at the back.');
+  L.push('');
+  table(['row', 'col', 'from left (back)'],
+        cuts.map(c => [c.row, c.col, c.back]));
+
+  const items = buildList();
+  L.push('## Build order (' + items.length + ')');
+  L.push('');
+  L.push('Flat parts first, tall parts last.');
+  L.push('');
+  table(['#', 'ref', 'part', 'value', 'holes'],
+        items.map((it, i) => [i + 1, it.ref, it.name, it.what || '-', it.holes]));
+
+  const wires = wireList();
+  if(wires.length){
+    L.push('## Off-board wiring (' + wires.length + ')');
+    L.push('');
+    table(['pad', 'hole', 'from left (back)', 'goes to'],
+          wires.map(w => [w.label, '[' + w.row + ',' + w.col + ']', w.back, w.to || '-']));
+  }
+  return L.join('\n');
+}
+
+/* ============================================================
+   REGIONS
+   A 40106 gives you six identical voices. Laying the second one out by hand
+   is tedious; laying out the sixth is a mistake waiting to happen.
+   ============================================================ */
+function nextRef(kind){
+  const pre = (PART_LIB[kind] || {}).prefix || 'X';
+  let max = 0;
+  for(const part of S.parts){
+    const m = /^([A-Za-z]+)(\d+)$/.exec(part.ref || '');
+    if(m && m[1] === pre) max = Math.max(max, +m[2]);
+  }
+  return pre + (max + 1);
+}
+function nextIcRef(){
+  let max = 0;
+  for(const ic of S.ics){
+    const m = /^IC(\d+)$/.exec(ic.ref || '');
+    if(m) max = Math.max(max, +m[1]);
+  }
+  return 'IC' + (max + 1);
+}
+
+
+function normRegion(a, b){
+  return {r0:Math.min(a[0], b[0]), c0:Math.min(a[1], b[1]),
+          r1:Math.max(a[0], b[0]), c1:Math.max(a[1], b[1])};
+}
+function inRegion(reg, r, c){
+  return r >= reg.r0 && r <= reg.r1 && c >= reg.c0 && c <= reg.c1;
+}
+
+/* Only things wholly inside count. A resistor with one lead outside the box
+   belongs to the circuitry around it, and copying half of it means nothing. */
+function regionContents(reg){
+  return {
+    parts: S.parts.filter(p => p.pins.every(q => inRegion(reg, q[0], q[1]))),
+    ics:   S.ics.filter(ic => {
+             for(let i = 1; i <= ic.pins; i++){
+               const q = pinPos(ic, i);
+               if(!inRegion(reg, q[0], q[1])) return false;
+             }
+             return true;
+           }),
+    pads:  S.pads.filter(d => inRegion(reg, d.at[0], d.at[1])),
+    cuts:  S.cuts.filter(k => { const p = k.split(','); return inRegion(reg, +p[0], +p[1]); }),
+  };
+}
+function regionCount(reg){
+  const c = regionContents(reg);
+  return c.parts.length + c.ics.length + c.pads.length + c.cuts.length;
+}
+function regionFits(reg, dr, dc){
+  return reg.r0 + dr >= 0 && reg.c0 + dc >= 0 &&
+         reg.r1 + dr < S.board.rows && reg.c1 + dc < S.board.cols;
+}
+const shiftKey = (k, dr, dc) => { const p = k.split(','); return K(+p[0] + dr, +p[1] + dc); };
+
+/* Refs renumber as we go: nextRef() rescans S.parts each time, and each clone
+   is pushed before the next is named, so a copied R1 R2 becomes R3 R4. */
+function duplicateRegion(reg, dr, dc){
+  const src = regionContents(reg);
+  const made = {parts:[], ics:[], pads:[], cuts:[]};
+
+  for(const k of src.cuts){
+    const nk = shiftKey(k, dr, dc);
+    if(S.cuts.indexOf(nk) < 0){ S.cuts.push(nk); made.cuts.push(nk); }
+  }
+  for(const p of src.parts){
+    const q = JSON.parse(JSON.stringify(p));
+    q.id = uid();
+    q.pins = p.pins.map(g => [g[0] + dr, g[1] + dc]);
+    q.ref = nextRef(p.kind);
+    S.parts.push(q);
+    made.parts.push(q);
+  }
+  for(const ic of src.ics){
+    const q = JSON.parse(JSON.stringify(ic));
+    q.id = uid();
+    q.pin1 = [ic.pin1[0] + dr, ic.pin1[1] + dc];
+    q.ref = nextIcRef();
+    /* its auto-cuts sit between its own pin rows, so they were inside the
+       region and the loop above has already copied them */
+    q.autoCuts = (ic.autoCuts || []).map(k => shiftKey(k, dr, dc));
+    S.ics.push(q);
+    made.ics.push(q);
+  }
+  for(const d of src.pads){
+    const q = {id:uid(), label:d.label, at:[d.at[0] + dr, d.at[1] + dc]};
+    if(d.to) q.to = d.to;
+    S.pads.push(q);
+    made.pads.push(q);
+  }
+  return made;
+}
+
+function moveRegion(reg, dr, dc){
+  const src = regionContents(reg);
+  const gone = new Set(src.cuts);
+  S.cuts = S.cuts.filter(k => !gone.has(k));
+  for(const k of src.cuts){
+    const nk = shiftKey(k, dr, dc);
+    if(S.cuts.indexOf(nk) < 0) S.cuts.push(nk);
+  }
+  for(const p of src.parts) p.pins = p.pins.map(g => [g[0] + dr, g[1] + dc]);
+  for(const ic of src.ics){
+    ic.pin1 = [ic.pin1[0] + dr, ic.pin1[1] + dc];
+    ic.autoCuts = (ic.autoCuts || []).map(k => shiftKey(k, dr, dc));
+  }
+  for(const d of src.pads) d.at = [d.at[0] + dr, d.at[1] + dc];
+  return src;
+}
+
+function deleteRegion(reg){
+  const src = regionContents(reg);
+  const gone = new Set(src.cuts);
+  for(const ic of src.ics) for(const k of (ic.autoCuts || [])) gone.add(k);
+  S.cuts = S.cuts.filter(k => !gone.has(k));
+  const dp = new Set(src.parts.map(p => p.id));
+  const di = new Set(src.ics.map(x => x.id));
+  const da = new Set(src.pads.map(x => x.id));
+  S.parts = S.parts.filter(p => !dp.has(p.id));
+  S.ics   = S.ics.filter(x => !di.has(x.id));
+  S.pads  = S.pads.filter(x => !da.has(x.id));
+  return src;
+}
+
+/* ============================================================
+   INSERT / DELETE A ROW OR COLUMN
+   Running out of room one row short should not mean moving the whole
+   layout by hand.
+   ============================================================ */
+
+/* axis 0 = rows, 1 = cols. delta +1 inserts a blank line at `at`, -1 deletes
+   the line at `at`. Things wholly past the line move; things spanning it
+   stretch or shrink; on delete, whatever sits ON the line goes with it. */
+function lineEdit(axis, at, delta){
+  const dim = axis ? 'cols' : 'rows';
+  const size = S.board[dim];
+  const max = axis ? 80 : 60;
+  if(at < 0 || at >= size)            return {ok:false, reason:'no ' + dim.slice(0,-1) + ' ' + at};
+  if(delta > 0 && size >= max)        return {ok:false, reason:'already at the maximum of ' + max + ' ' + dim};
+  if(delta < 0 && size <= 2)          return {ok:false, reason:'a board needs at least two ' + dim};
+
+  const icEnd   = ic => axis ? icExtent(ic).c1 : icExtent(ic).r1;
+  const icStart = ic => axis ? icExtent(ic).c0 : icExtent(ic).r0;
+
+  /* A DIP cannot stretch, so refuse rather than silently tearing it away from
+     whatever it was wired to. Move the chip first, then insert. */
+  if(delta > 0)
+    for(const ic of S.ics)
+      if(at > icStart(ic) && at <= icEnd(ic))
+        return {ok:false, reason:'that line runs through ' + ic.ref + ', and a DIP cannot stretch'};
+
+  const removed = {parts:[], ics:[], pads:[], cuts:0};
+  const bump = p => axis ? [p[0], p[1] + delta] : [p[0] + delta, p[1]];
+
+  /* auto-cuts are derived from where their IC sits, so lift them out now and
+     rebuild them at the end rather than shifting them in step */
+  const auto = new Set();
+  for(const ic of S.ics) for(const k of (ic.autoCuts || [])) auto.add(k);
+  let cuts = S.cuts.filter(k => !auto.has(k)).map(k => k.split(',').map(Number));
+
+  if(delta > 0){
+    cuts = cuts.map(p => p[axis] >= at ? bump(p) : p);
+    for(const p of S.parts) p.pins = p.pins.map(g => g[axis] >= at ? bump(g) : g);
+    for(const d of S.pads) if(d.at[axis] >= at) d.at = bump(d.at);
+    for(const ic of S.ics) if(ic.pin1[axis] >= at) ic.pin1 = bump(ic.pin1);
+  }else{
+    cuts = cuts.filter(p => { if(p[axis] === at){ removed.cuts++; return false; } return true; })
+               .map(p => p[axis] > at ? bump(p) : p);
+
+    S.parts = S.parts.filter(p => {
+      if(p.pins.some(g => g[axis] === at)){ removed.parts.push(p.ref); return false; }
+      p.pins = p.pins.map(g => g[axis] > at ? bump(g) : g);
+      return true;
+    });
+    S.pads = S.pads.filter(d => {
+      if(d.at[axis] === at){ removed.pads.push(d.label); return false; }
+      if(d.at[axis] > at) d.at = bump(d.at);
+      return true;
+    });
+    S.ics = S.ics.filter(ic => {
+      if(at >= icStart(ic) && at <= icEnd(ic)){ removed.ics.push(ic.ref); return false; }
+      if(ic.pin1[axis] > at) ic.pin1 = bump(ic.pin1);
+      return true;
+    });
+  }
+
+  S.board[dim] = size + delta;
+
+  S.cuts = cuts.map(p => K(p[0], p[1]));
+  for(const ic of S.ics){
+    if(hasFootprint(ic)){ ic.autoCuts = []; continue; }
+    ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
+    S.cuts = S.cuts.concat(ic.autoCuts);
+  }
+  return {ok:true, removed:removed};
+}
+const insertLine = (axis, at) => lineEdit(axis, at, 1);
+const deleteLine = (axis, at) => lineEdit(axis, at, -1);
+
+/* Reshape a part by moving one leg and leaving the others where they are.
+   A resistor whose far end is already soldered should not have to move. */
+function movePartPin(p, index, at){
+  if(!p || !p.pins || index < 0 || index >= p.pins.length) return false;
+  p.pins = p.pins.map((g, i) => i === index ? [at[0], at[1]] : g);
+  return true;
+}
+
+/* ============================================================
+   ROTATION
+   On stripboard a quarter turn is not cosmetic. A resistor lying along a
+   strip is shorted out; the same resistor turned 90 degrees spans strips and
+   does its job. So rotation is an electrical edit, and the DRC re-runs on it
+   like any other.
+   ============================================================ */
+
+const quarterTurns = t => ((t % 4) + 4) % 4;
+const onBoard = (r, c) => r >= 0 && c >= 0 && r < S.board.rows && c < S.board.cols;
+
+/* One quarter turn clockwise on screen, about the origin: rows grow downward,
+   so (dr, dc) -> (dc, -dr). */
+function spin(dr, dc, turns){
+  for(let i = 0; i < turns; i++){ const ndr = dc; dc = -dr; dr = ndr; }
+  return [dr, dc];
+}
+
+/* A part turns about its FIRST leg, which keeps that leg soldered where it is
+   and lands every other leg exactly on a hole. */
+function rotatePart(p, turns){
+  turns = quarterTurns(turns);
+  if(!p || !p.pins || !p.pins.length) return {ok:false, reason:'nothing to rotate'};
+  if(!turns) return {ok:true};
+  const pr = p.pins[0][0], pc = p.pins[0][1];
+  const next = p.pins.map(g => {
+    const d = spin(g[0] - pr, g[1] - pc, turns);
+    return [pr + d[0], pc + d[1]];
+  });
+  if(!next.every(g => onBoard(g[0], g[1])))
+    return {ok:false, reason:'turning ' + (p.ref || 'that') + ' would put a leg off the board'};
+  p.pins = next;
+  return {ok:true};
+}
+
+/* A block turns about its top-left corner, so the corner stays put and the
+   footprint transposes. Every hole lands on the grid. */
+function rotateRegion(reg, turns){
+  turns = quarterTurns(turns);
+  if(!turns) return {ok:true, region:reg};
+  const src = regionContents(reg);
+  if(src.ics.length)
+    return {ok:false, reason:src.ics.map(i => i.ref).join(', ') +
+            ' cannot turn — a DIP straddles its strips one way only'};
+
+  const H = reg.r1 - reg.r0 + 1, W = reg.c1 - reg.c0 + 1;
+  const nH = (turns % 2) ? W : H, nW = (turns % 2) ? H : W;
+  if(reg.r0 + nH - 1 >= S.board.rows || reg.c0 + nW - 1 >= S.board.cols)
+    return {ok:false, reason:'turned, the block would run off the board'};
+
+  const map = (r, c) => {
+    let dr = r - reg.r0, dc = c - reg.c0, hh = H, ww = W;
+    for(let i = 0; i < turns; i++){
+      const ndr = dc, ndc = hh - 1 - dr;
+      dr = ndr; dc = ndc;
+      const t = hh; hh = ww; ww = t;
+    }
+    return [reg.r0 + dr, reg.c0 + dc];
+  };
+
+  const moved = new Set(src.cuts);
+  S.cuts = S.cuts.filter(k => !moved.has(k));
+  for(const k of src.cuts){
+    const p = k.split(',').map(Number);
+    const q = map(p[0], p[1]);
+    const nk = K(q[0], q[1]);
+    if(S.cuts.indexOf(nk) < 0) S.cuts.push(nk);
+  }
+  for(const p of src.parts) p.pins = p.pins.map(g => map(g[0], g[1]));
+  for(const d of src.pads) d.at = map(d.at[0], d.at[1]);
+
+  return {ok:true, region:{r0:reg.r0, c0:reg.c0, r1:reg.r0 + nH - 1, c1:reg.c0 + nW - 1}};
+}
+
+/* ============================================================
+   NETLIST CHECK  (optional, always)
+   Every other tool in this space starts from a schematic and checks the board
+   against it. That is a door this one refuses to make anyone walk through, so
+   a netlist here is a second opinion you may supply, never a prerequisite. An
+   empty netlist means "no opinion", not "nothing is connected".
+   ============================================================ */
+
+/* Human-writable, one net per line:
+     GND:   IC1.7  C1.B  @GND
+     V1_IN: IC1.1  C1.A  @V1_IN
+   A bare REF.LEG is a part leg or an IC pin; @LABEL is a pad. # starts a
+   comment. Legs are A/B for two-lead parts, the leg letters for three-leg
+   ones (E/B/C), and pin numbers for ICs. */
+function parseNetlist(text){
+  const nets = [], errors = [];
+  const lines = String(text || '').split(/\r?\n/);
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/#.*$/, '').trim();
+    if(!line) return;
+    const at = line.indexOf(':');
+    if(at < 0){ errors.push({line:i + 1, msg:'no colon — expected "name: member member"', raw:raw.trim()}); return; }
+    const name = line.slice(0, at).trim();
+    if(!name){ errors.push({line:i + 1, msg:'net has no name', raw:raw.trim()}); return; }
+    const members = line.slice(at + 1).trim().split(/\s+/).filter(Boolean);
+    if(!members.length){ errors.push({line:i + 1, msg:'net "' + name + '" lists nothing', raw:raw.trim()}); return; }
+    nets.push({name:name, line:i + 1, members:members});
+  });
+  return {nets:nets, errors:errors};
+}
+
+/* Where does one member of a netlist sit on the board? */
+function resolveMember(token){
+  if(token[0] === '@'){
+    const label = token.slice(1);
+    const pad = S.pads.find(d => d.label.toUpperCase() === label.toUpperCase());
+    return pad ? {ok:true, at:pad.at} : {ok:false, why:'no pad labelled "' + label + '"'};
+  }
+  const dot = token.lastIndexOf('.');
+  if(dot < 0) return {ok:false, why:'expected REF.LEG or @PAD'};
+  const ref = token.slice(0, dot), leg = token.slice(dot + 1);
+
+  const ic = S.ics.find(x => (x.ref || '').toUpperCase() === ref.toUpperCase());
+  if(ic){
+    const num = +leg;
+    if(!num || num < 1 || num > ic.pins) return {ok:false, why:ic.ref + ' has no pin ' + leg};
+    return {ok:true, at:pinPos(ic, num)};
+  }
+
+  const part = S.parts.find(p => (p.ref || '').toUpperCase() === ref.toUpperCase());
+  if(!part) return {ok:false, why:'nothing on the board is called "' + ref + '"'};
+  const names = legLabels(part);
+  let idx = -1;
+  if(names) idx = names.findIndex(nm => nm.toUpperCase() === leg.toUpperCase());
+  if(idx < 0 && /^[A-Za-z]$/.test(leg)) idx = leg.toUpperCase().charCodeAt(0) - 65;
+  if(idx < 0 && /^\d+$/.test(leg)) idx = +leg - 1;
+  if(idx < 0 || idx >= part.pins.length)
+    return {ok:false, why:part.ref + ' has no leg "' + leg + '"' +
+            (names ? ' (try ' + names.join('/') + ')' : ' (try A/B)')};
+  return {ok:true, at:part.pins[idx]};
+}
+
+/* Diff the declared circuit against the board as built. Two kinds of problem:
+   things you said belong together that are not, and things you said belong
+   apart that the copper has joined. */
+function checkNetlist(text){
+  const parsed = parseNetlist(text);
+  const findings = [];
+  for(const e of parsed.errors)
+    findings.push({sev:'error', rule:'netlist-syntax', msg:'line ' + e.line + ': ' + e.msg});
+
+  const placed = [];           // {net, token, netId}
+  for(const dn of parsed.nets){
+    for(const token of dn.members){
+      const r = resolveMember(token);
+      if(!r.ok){
+        findings.push({sev:'error', rule:'netlist-unknown', msg:token + ' — ' + r.why, net:dn.name});
+        continue;
+      }
+      const net = NET.netAt(r.at[0], r.at[1]);
+      if(!net){
+        findings.push({sev:'error', rule:'netlist-oncut',
+                       msg:token + ' sits on a cut hole, so it connects to nothing', net:dn.name, at:r.at});
+        continue;
+      }
+      placed.push({net:dn.name, token:token, netId:net.id, at:r.at});
+    }
+  }
+
+  /* declared together, actually apart */
+  const byDeclared = new Map();
+  for(const m of placed){
+    if(!byDeclared.has(m.net)) byDeclared.set(m.net, []);
+    byDeclared.get(m.net).push(m);
+  }
+  for(const [name, ms] of byDeclared){
+    const groups = new Map();
+    for(const m of ms){
+      if(!groups.has(m.netId)) groups.set(m.netId, []);
+      groups.get(m.netId).push(m.token);
+    }
+    if(groups.size > 1){
+      const parts = [...groups.values()].map(g => g.join('+'));
+      findings.push({sev:'error', rule:'netlist-open',
+                     msg:name + ' is broken into ' + groups.size + ' pieces on the board: ' + parts.join('  |  '),
+                     net:name, at:ms[0].at});
+    }
+  }
+
+  /* declared apart, actually together */
+  const byActual = new Map();
+  for(const m of placed){
+    if(!byActual.has(m.netId)) byActual.set(m.netId, new Map());
+    const g = byActual.get(m.netId);
+    if(!g.has(m.net)) g.set(m.net, []);
+    g.get(m.net).push(m.token);
+  }
+  for(const [netId, g] of byActual){
+    if(g.size < 2) continue;
+    const names = [...g.keys()];
+    findings.push({sev:'error', rule:'netlist-short',
+                   msg:names.join(' and ') + ' are joined on the board but you declared them separately',
+                   net:names[0], at:placed.find(m => m.netId === netId).at});
+  }
+
+  /* what the netlist never mentioned — worth knowing, not worth failing over */
+  const named = new Set(placed.map(m => m.token.toUpperCase()));
+  const unmentioned = connections()
+    .filter(c => !named.has(c.label.toUpperCase()) && !named.has(('@' + c.label).toUpperCase()))
+    .map(c => c.label);
+
+  return {
+    declared: parsed.nets.length,
+    resolved: placed.length,
+    findings: findings,
+    unmentioned: unmentioned,
+    clean: parsed.nets.length > 0 && findings.length === 0,
+  };
+}
+
+/* ============================================================
+   BODIES — the space a part takes up, not just its holes
+   Two parts can be electrically perfect and still refuse to share the board.
+   ============================================================ */
+
+/* Footprints in hole units (1 = 0.1in = 2.54mm), from real package sizes.
+   These drive the drawing as well as the check, so what you see is what gets
+   tested — a body the tool draws smaller than it tests would be a lie. */
+const FOOTPRINT = {
+  link:  null,                                                  // bare wire, lies flat, takes no room
+  res:   {shape:'box',  len:2.48, wid:0.94, leads:'axial'},     // 1/4W, 6.3 x 2.4 mm
+  cap:   {shape:'box',  len:1.60, wid:1.60, leads:'radial'},    // small film or ceramic
+  diode: {shape:'box',  len:1.40, wid:0.70, leads:'axial'},     // DO-35 glass; see DIODE_PKG
+  ecap:  {shape:'disc', dia:1.80, leads:'radial'},              // 4.5 mm radial can
+  trans: {shape:'disc', dia:1.90, leads:'radial'},              // TO-92
+  reg:   {shape:'disc', dia:1.90, leads:'radial'},              // TO-92
+  trim:  {shape:'box',  len:1.90, wid:1.71, leads:'radial'},    // small square trimmer
+};
+
+/* 'axial' means the leads leave opposite ends of the body, so the holes have
+   to be at least a body apart. 'radial' means they leave the same face on a
+   fixed pitch, and spreading them wider is just bending the legs — normal, and
+   not something to complain about. That distinction is the whole reason the
+   lead-span check below can be strict without being wrong. */
+
+/* Axial diodes come in two bodies far enough apart to decide whether a part
+   goes into its holes at all, and only the value says which. A 1N4148 is a
+   3.6mm glass bead. A 1N5817 is a 5.2mm plastic slug that will not fit the
+   same two holes. Treating both as DO-35 draws the second one a third too
+   small and passes a board that cannot be built. */
+const DIODE_PKG = {
+  'DO-35': {len:1.40, wid:0.70},    // glass small-signal, 3.6 x 1.8 mm
+  'DO-41': {len:2.05, wid:1.06},    // plastic rectifier / Schottky, 5.2 x 2.7 mm
+};
+
+/* Only families that can be named with confidence. An unrecognised value keeps
+   DO-35 and can be overridden with an explicit `pkg` on the part: guessing the
+   bigger body for an unknown diode would invent errors that are not real, and
+   a DRC that cries wolf gets switched off. */
+const DIODE_PKG_BY_VALUE = [
+  [/^\s*1N(400[1-7]|540[1-8]|58[12][0-9])\b/i, 'DO-41'],
+  [/^\s*1N(4148|4448|914)\b/i,                 'DO-35'],
+];
+
+function diodePkg(part){
+  if(part.pkg && DIODE_PKG[part.pkg]) return part.pkg;
+  for(const [re, name] of DIODE_PKG_BY_VALUE) if(re.test(part.value || '')) return name;
+  return 'DO-35';
+}
+
+/* The footprint a given part actually has. The drawing, the collision check and
+   the lead-span check all come through here, so a part is never tested against
+   a size it was not drawn at. */
+function footprintOf(part){
+  const fp = FOOTPRINT[part.kind];
+  if(!fp) return fp;
+  if(part.kind === 'diode') return Object.assign({}, fp, DIODE_PKG[diodePkg(part)]);
+  return fp;
+}
+
+/* hole units -> mm, for findings that have to mean something at the bench */
+const HOLE_MM = 2.54;
+const holesMM = n => (n * HOLE_MM).toFixed(1).replace(/.0$/, '') + 'mm';
+
+/* A body can slide along its own leads. Below this much room to move we treat
+   its position as fixed, because there is nowhere useful to slide it to. */
+const PINNED_SLACK = 0.6;
+
+/* Every occupied body on the board, in hole units. Angles are radians, with
+   x running along columns and y down rows. */
+function bodies(){
+  const out = [];
+
+  for(const p of S.parts){
+    const fp = footprintOf(p);
+    if(!fp) continue;
+
+    if(p.pins.length >= 3){
+      const ys = p.pins.map(q => q[0]), xs = p.pins.map(q => q[1]);
+      const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+      const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const ang = Math.atan2(ys[ys.length-1] - ys[0], xs[xs.length-1] - xs[0]);
+      /* the package sits off to one side of its legs, as drawn */
+      const k = 0.8 * (fp.dia ? fp.dia / 2 : fp.wid / 2);
+      out.push(Object.assign({}, fp, {ref:p.ref, kind:p.kind, part:p, ang:ang, pinned:true,
+        cx:cx + k * Math.sin(ang), cy:cy - k * Math.cos(ang)}));
+      continue;
+    }
+
+    const a = p.pins[0], b = p.pins[1];
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const along = fp.shape === 'disc' ? fp.dia : fp.len;
+    out.push(Object.assign({}, fp, {
+      ref:p.ref, kind:p.kind, part:p,
+      cx:(a[1] + b[1]) / 2, cy:(a[0] + b[0]) / 2,
+      ang:Math.atan2(b[0] - a[0], b[1] - a[1]),
+      span:span, slack:Math.max(0, span - along),
+      pinned:(span - along) < PINNED_SLACK,
+    }));
+  }
+
+  for(const ic of S.ics){
+    const ex = icExtent(ic);
+    out.push({shape:'box', ref:ic.ref, kind:'ic', ic:ic, ang:0, pinned:true,
+      cx:(ex.c0 + ex.c1) / 2, cy:(ex.r0 + ex.r1) / 2,
+      len:(ex.c1 - ex.c0) + 0.7, wid:(ex.r1 - ex.r0) + 0.5});
+  }
+  return out;
+}
+
+/* ---- overlap tests, all in hole units ---- */
+function boxCorners(b){
+  const c = Math.cos(b.ang), s = Math.sin(b.ang);
+  const hx = b.len / 2, hy = b.wid / 2;
+  return [[-hx,-hy], [hx,-hy], [hx,hy], [-hx,hy]]
+    .map(p => [b.cx + p[0]*c - p[1]*s, b.cy + p[0]*s + p[1]*c]);
+}
+function boxesOverlap(A, B){
+  /* separating axis: two convex boxes miss only if some edge normal separates them */
+  const ca = boxCorners(A), cb = boxCorners(B);
+  for(const box of [A, B]){
+    for(const ang of [box.ang, box.ang + Math.PI/2]){
+      const ax = Math.cos(ang), ay = Math.sin(ang);
+      const pa = ca.map(p => p[0]*ax + p[1]*ay);
+      const pb = cb.map(p => p[0]*ax + p[1]*ay);
+      if(Math.max.apply(null, pa) <= Math.min.apply(null, pb) + 1e-9) return false;
+      if(Math.max.apply(null, pb) <= Math.min.apply(null, pa) + 1e-9) return false;
+    }
+  }
+  return true;
+}
+function discBoxOverlap(d, b){
+  /* nearest point on the box to the disc centre, measured in the box's frame */
+  const c = Math.cos(-b.ang), s = Math.sin(-b.ang);
+  const dx = d.cx - b.cx, dy = d.cy - b.cy;
+  const lx = dx*c - dy*s, ly = dx*s + dy*c;
+  const nx = Math.max(-b.len/2, Math.min(b.len/2, lx));
+  const ny = Math.max(-b.wid/2, Math.min(b.wid/2, ly));
+  return Math.hypot(lx - nx, ly - ny) < d.dia/2 - 1e-9;
+}
+function bodiesOverlap(A, B){
+  if(A.shape === 'disc' && B.shape === 'disc')
+    return Math.hypot(A.cx - B.cx, A.cy - B.cy) < (A.dia + B.dia)/2 - 1e-9;
+  if(A.shape === 'disc') return discBoxOverlap(A, B);
+  if(B.shape === 'disc') return discBoxOverlap(B, A);
+  return boxesOverlap(A, B);
+}
+
+/* Only report a clash both parts are stuck with. A body whose leads are wider
+   than itself can be slid along them, so an overlap there is the builder's to
+   solve by eye and not worth interrupting them for. */
+function checkBodies(){
+  const bs = bodies();
+  const out = [];
+  for(let i = 0; i < bs.length; i++)
+    for(let j = i + 1; j < bs.length; j++){
+      const A = bs[i], B = bs[j];
+      if(!A.pinned || !B.pinned) continue;
+      if(!bodiesOverlap(A, B)) continue;
+      out.push({a:A.ref, b:B.ref,
+        at:[Math.round(A.cy), Math.round(A.cx)],
+        why:A.kind === 'ic' || B.kind === 'ic'
+          ? 'a part body is sitting on the chip'
+          : 'neither has room to slide clear'});
+    }
+  return out;
+}
+/*#endregion model */
+/* ============================================================
+   RENDER
+   ============================================================ */
+const PITCH = 30, MARGIN = 34;
+let Z = 1;
+let NETCOLOUR = false;   // false = quiet copper board, true = every net painted
+let hoverHole = null;     // [r,c] under the cursor
+let pinnedNet = null;     // net id pinned by clicking with the inspect tool
+let pending   = [];       // legs clicked so far for the part being placed
+let focusHole = null;     // hole ringed by clicking a DRC finding
+let SEL       = null;     // {type:"part"|"ic", id} currently selected
+let FOOT      = false;    // editing the selected IC pin by pin
+let drag      = null;     // in-flight move
+let REGION    = null;     // {r0,c0,r1,c1} block marquee
+let RDR = 0, RDC = 0;     // where a copy of it would land
+let LINE      = null;     // [row,col] picked for a row/column insert or delete
+
+const X = c => MARGIN + c * PITCH;
+const Y = r => MARGIN + r * PITCH;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+function bandsSvg(value, w, hgt){
+  const b = resistorBands(value);
+  const bw = w * 0.095, y = -hgt/2, hh = hgt;
+  if(!b) return '<rect x="' + (-bw/2) + '" y="' + y + '" width="' + bw + '" height="' + hh + '" fill="#6B5334"/>';
+  const at = [-0.33, -0.19, -0.05, 0.31].map(f => f * w);
+  return b.map((col, i) =>
+    '<rect x="' + (at[i] - bw/2) + '" y="' + y + '" width="' + bw + '" height="' + hh +
+    '" fill="' + col + '"/>').join('');
+}
+
+function highlightedNet(){
+  if(listNet !== null) return listNet;
+  if(pinnedNet !== null) return pinnedNet;
+  if(hoverHole){
+    const n = NET.netAt(hoverHole[0], hoverHole[1]);
+    return n ? n.id : null;
+  }
+  return null;
+}
+
+function render(){
+  computeNets();
+  const rows = S.board.rows, cols = S.board.cols;
+  const W = MARGIN * 2 + (cols - 1) * PITCH;
+  const H = MARGIN * 2 + (rows - 1) * PITCH;
+  const hl = highlightedNet();
+  const cutSet = new Set(S.cuts);
+  const o = [];
+
+  o.push('<svg id="board" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
+         '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
+  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="#0E0B18" stroke="#241F36"/>');
+
+  /* --- rulers --- */
+  for(let c = 0; c < cols; c++)
+    o.push('<text class="rule" x="' + X(c) + '" y="' + (MARGIN - 17) + '">' + c + '</text>');
+  for(let r = 0; r < rows; r++)
+    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + r + '</text>');
+
+  /* --- copper: one rounded bar per uncut run.
+     Quiet by default, so parts and cuts are what your eye lands on. The lit net
+     always goes bright, and NETCOLOUR mode paints every net at once. --- */
+  for(let r = 0; r < rows; r++){
+    let c = 0;
+    while(c < cols){
+      if(cutSet.has(K(r,c))){ c++; continue; }
+      let e = c;
+      while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
+      const net = NET.netAt(r, c);
+      const col = net ? net.color : '#555';
+      const on  = net && net.id === hl;
+      const x0 = X(c) - PITCH * 0.44, w = X(e) - X(c) + PITCH * 0.88;
+      const bar = (f, fo, s, so, sw) =>
+        o.push('<rect x="' + x0 + '" y="' + (Y(r) - 9.5) + '" width="' + w + '" height="19" rx="9.5" fill="' + f +
+               '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
+      if(on)             bar(col, 0.34, col, 1, 1.6);
+      else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+      else { bar('#B0703A', 0.13, '#C98B4B', 0.26, 1); bar(col, 0.06, col, 0.14, 1); }
+      c = e + 1;
+    }
+  }
+
+  /* --- holes --- */
+  for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
+    if(cutSet.has(K(r,c))) continue;
+    const net = NET.netAt(r, c);
+    const col = net ? net.color : '#555';
+    const on  = net && net.id === hl;
+    const rim = on ? col : (NETCOLOUR ? col : '#C98B4B');
+    if(on) o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
+    o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="#07050D" stroke="' + rim +
+           '" stroke-opacity="' + (on ? 1 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
+  }
+
+  /* --- ICs --- */
+  for(const ic of S.ics){
+    const ex = icExtent(ic), custom = hasFootprint(ic);
+    const x0 = X(ex.c0) - 9, x1 = X(ex.c1) + 9;
+    const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
+    if(SEL && SEL.type === 'ic' && SEL.id === ic.id)
+      o.push('<rect x="' + (x0-5) + '" y="' + (y0-5) + '" width="' + (x1-x0+10) + '" height="' + (y1-y0+10) +
+             '" rx="8" fill="#00FFA3" fill-opacity="0.16" stroke="#00FFA3" stroke-width="1.6"/>');
+    o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
+           '" rx="4" fill="#191426" fill-opacity="0.94" stroke="#5B5280" stroke-width="1.2"/>');
+    if(!custom)
+      o.push('<path d="M' + ((x0+x1)/2 - 8) + ' ' + y0 + 'a8 8 0 0 0 16 0" fill="#0E0B18" stroke="#5B5280" stroke-width="1.2"/>');
+    o.push('<text class="icref" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 - 3) + '">' + esc(ic.ref) + '</text>');
+    o.push('<text class="icpart" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 + 11) + '">' + esc(ic.part) + '</text>');
+    for(let i = 1; i <= ic.pins; i++){
+      const p = pinPos(ic, i), x = X(p[1]), y = Y(p[0]);
+      const net = NET.netAt(p[0], p[1]);
+      const on = net && net.id === hl;
+      o.push('<rect x="' + (x-7) + '" y="' + (y-6) + '" width="14" height="12" rx="' + (i === 1 ? 0 : 2) + '" fill="#8B849E" ' +
+             (on ? 'stroke="' + net.color + '" stroke-width="1.6"' : '') + '/>');
+      o.push('<circle cx="' + x + '" cy="' + y + '" r="3" fill="#07050D"/>');
+      /* number sits on whichever side faces the body, which works for a
+         reshaped package as well as a plain DIP */
+      const inward = x <= (x0 + x1) / 2 ? 13 : -13;
+      const role = (IC_LIB[ic.part] && IC_LIB[ic.part].roles[i]) || '';
+      o.push('<text class="pin ' + (role === 'in' ? 'pin-in' : role === 'out' ? 'pin-out' : role ? 'pin-pwr' : '') +
+             '" x="' + (x + inward) + '" y="' + (y + 3) + '">' + i + '</text>');
+    }
+  }
+
+  /* --- parts, drawn at real size: a 1/4W resistor body really is two holes
+     long, and seeing that is what tells you whether it will physically fit --- */
+  /* one table drives both the drawing and the collision check, so a part is
+     never tested against a size it was not drawn at */
+  const RW = PITCH * FOOTPRINT.res.len,   RH = PITCH * FOOTPRINT.res.wid;
+  const CW = PITCH * FOOTPRINT.cap.len,   CH = PITCH * FOOTPRINT.cap.wid;
+  /* diodes are sized per part inside the loop — see DIODE_PKG */
+  const ER = PITCH * FOOTPRINT.ecap.dia / 2;
+  const TR = PITCH * FOOTPRINT.trans.dia / 2;
+  const labels = [];
+  for(const p of S.parts){
+    const xs = p.pins.map(q => X(q[1])), ys = p.pins.map(q => Y(q[0]));
+    const sel = SEL && SEL.type === 'part' && SEL.id === p.id;
+    const wire = (x1, y1, x2, y2, col, w) =>
+      '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+      '" stroke="' + col + '" stroke-width="' + w + '" stroke-linecap="round"/>';
+
+    if(sel){
+      const d = xs.map((x, i) => (i ? 'L' : 'M') + x + ' ' + ys[i]).join('');
+      o.push('<path d="' + d + '" fill="none" stroke="#00FFA3" stroke-width="' + (PITCH*0.66) +
+             '" stroke-opacity="0.25" stroke-linecap="round" stroke-linejoin="round"/>');
+    }
+
+    /* ---- three-leg devices ---- */
+    if(p.pins.length >= 3){
+      const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+      const a3 = Math.atan2(ys[ys.length-1] - ys[0], xs[xs.length-1] - xs[0]);
+      for(let i = 0; i < xs.length; i++){
+        o.push(wire(xs[i], ys[i], cx, cy, '#07050D', 4.6));
+        o.push(wire(xs[i], ys[i], cx, cy, '#A9A3BC', 1.5));
+      }
+      const g3 = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a3*180/Math.PI) +
+                 ') translate(0,' + (-TR*0.8) + ')">';
+      if(p.kind === 'trim'){
+        o.push(g3 +
+          '<rect x="' + (-TR) + '" y="' + (-TR*0.9) + '" width="' + (2*TR) + '" height="' + (TR*1.8) +
+          '" rx="' + (TR*0.16) + '" fill="#2C6E4C" stroke="#0B2418" stroke-width="1.2"/>' +
+          '<circle cx="0" cy="0" r="' + (TR*0.48) + '" fill="#E6E0C6" stroke="#0B2418" stroke-width="1"/>' +
+          '<rect x="' + (-TR*0.42) + '" y="-1.7" width="' + (TR*0.84) + '" height="3.4" fill="#0B2418"/>' +
+          '</g>');
+      }else{
+        /* TO-92 from above: a circle with one flat, the flat facing the legs */
+        const fx = TR*0.9075, fy = TR*0.42;
+        o.push(g3 +
+          '<path d="M' + (-fx) + ' ' + fy + 'A' + TR + ' ' + TR + ' 0 1 1 ' + fx + ' ' + fy +
+          'Z" fill="#1E1B26" stroke="#B9B4C7" stroke-width="1.3"/>' +
+          '<line x1="' + (-fx) + '" y1="' + fy + '" x2="' + fx + '" y2="' + fy +
+          '" stroke="#B9B4C7" stroke-width="1.3"/></g>');
+      }
+      const ll = legLabels(p);
+      if(ll) p.pins.forEach((q, i) =>
+        labels.push('<text class="leg" x="' + (xs[i] + 11) + '" y="' + (ys[i] + 3.5) + '">' +
+                    esc(ll[i] || '') + '</text>'));
+      const name = p.device || p.value || '';
+      labels.push('<text class="lbl" style="fill:#CFC8E0" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
+                  esc(p.ref + (name ? ' ' + name : '')) + '</text>');
+      continue;
+    }
+
+    /* ---- two-lead parts ---- */
+    const ax = xs[0], ay = ys[0], bx = xs[1], by = ys[1];
+    const mx = (ax+bx)/2, my = (ay+by)/2;
+    const ang = Math.atan2(by-ay, bx-ax), deg = ang * 180 / Math.PI;
+    const nx = Math.sin(ang), ny = -Math.cos(ang);
+
+    if(p.kind === 'link'){
+      o.push(wire(ax, ay, bx, by, '#07050D', 6.6));
+      o.push(wire(ax, ay, bx, by, '#F4F2FA', 3.4));
+      continue;
+    }
+    o.push(wire(ax, ay, bx, by, '#07050D', 4.6));
+    o.push(wire(ax, ay, bx, by, '#A9A3BC', 1.5));
+
+    const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
+    let tint = '#fff', off = 18, half = 12;
+
+    if(p.kind === 'res'){
+      tint = '#EBD3A6'; off = RH/2 + 13; half = RW/2;
+      o.push(g +
+        '<rect x="' + (-RW/2) + '" y="' + (-RH/2) + '" width="' + RW + '" height="' + RH +
+        '" rx="' + (RH*0.42) + '" fill="#C8A97E" stroke="#141020" stroke-width="1.1"/>' +
+        bandsSvg(p.value, RW, RH) +
+        '<rect x="' + (-RW/2) + '" y="' + (-RH/2) + '" width="' + RW + '" height="' + (RH*0.30) +
+        '" rx="' + (RH*0.15) + '" fill="#FFFFFF" fill-opacity="0.15"/>' +
+        '</g>');
+
+    }else if(p.kind === 'cap'){
+      tint = '#A8C6F2'; off = CH/2 + 12; half = CW/2;
+      o.push(g +
+        '<rect x="' + (-CW/2) + '" y="' + (-CH/2) + '" width="' + CW + '" height="' + CH +
+        '" rx="' + (CH*0.24) + '" fill="#3B6FC4" stroke="#0C1526" stroke-width="1.1"/>' +
+        '<rect x="' + (-CW/2) + '" y="' + (-CH/2) + '" width="' + CW + '" height="' + (CH*0.34) +
+        '" rx="' + (CH*0.17) + '" fill="#7FA9EA" fill-opacity="0.55"/>' +
+        '</g>');
+
+    }else if(p.kind === 'diode'){
+      /* cathode band at the B end, matching how the real part is printed */
+      const dfp = footprintOf(p);
+      const DW = PITCH * dfp.len, DH = PITCH * dfp.wid;
+      tint = '#CFC8E0'; off = DH/2 + 12; half = DW/2;
+      o.push(g +
+        '<rect x="' + (-DW/2) + '" y="' + (-DH/2) + '" width="' + DW + '" height="' + DH +
+        '" rx="' + (DH*0.22) + '" fill="#1A1620" stroke="#B9B4C7" stroke-width="1.1"/>' +
+        '<rect x="' + (DW*0.22) + '" y="' + (-DH/2) + '" width="' + (DW*0.17) + '" height="' + DH +
+        '" fill="#E8E4F0"/>' +
+        '</g>');
+
+    }else{
+      /* electrolytic seen from above: dark can with a silver stripe down the
+         NEGATIVE side, which is how the real part is actually marked */
+      tint = '#DAD6E4'; off = ER + 12; half = ER;
+      o.push(g +
+        '<circle cx="0" cy="0" r="' + ER + '" fill="#17151F" stroke="#B9B4C7" stroke-width="1.3"/>' +
+        '<path d="M' + (ER*0.47) + ' ' + (-ER*0.883) + 'A' + ER + ' ' + ER + ' 0 0 1 ' +
+        (ER*0.47) + ' ' + (ER*0.883) + 'Z" fill="#C9C4D6"/>' +
+        '<circle cx="0" cy="0" r="' + (ER*0.44) + '" fill="none" stroke="#4A4458" stroke-width="1"/>' +
+        '</g>');
+      labels.push('<text class="pol" x="' + (ax + nx*13) + '" y="' + (ay + ny*13 + 4) + '">+</text>');
+    }
+
+    const label = p.ref + (p.value ? ' ' + p.value : '');
+    const leadLen = Math.hypot(bx - ax, by - ay);
+    let tx, ty;
+    if(leadLen > 2*half + PITCH*1.25){
+      const d = half + 13;
+      tx = mx + Math.cos(ang)*d; ty = my + Math.sin(ang)*d + 3.5;
+    }else{
+      const side = ((p.pins[0][0] + p.pins[0][1]) % 2) ? 1 : -1;
+      tx = mx + nx*off*side; ty = my + ny*off*side + 3.5;
+    }
+    labels.push('<text class="lbl" style="fill:' + tint + '" x="' + tx +
+                '" y="' + ty + '">' + esc(label) + '</text>');
+  }
+  o.push(labels.join(''));
+
+  /* grab handles on the IC being reshaped */
+  if(FOOT && SEL && SEL.type === 'ic'){
+    const si = S.ics.find(x => x.id === SEL.id);
+    if(si) for(let i = 1; i <= si.pins; i++){
+      const q = pinPos(si, i);
+      o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.26) +
+             '" fill="#00FFA3" stroke="#0B0813" stroke-width="1.5"/>');
+      o.push('<text class="pin" x="' + X(q[1]) + '" y="' + (Y(q[0]) + 3) + '">' + i + '</text>');
+    }
+  }
+
+  /* grab handles on the selected part's legs */
+  if(SEL && SEL.type === 'part'){
+    const sp = S.parts.find(x => x.id === SEL.id);
+    if(sp) for(const q of sp.pins)
+      o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.23) +
+             '" fill="#00FFA3" stroke="#0B0813" stroke-width="1.5"/>');
+  }
+
+  /* --- pads (off-board wire exits) --- */
+  for(const d of S.pads){
+    const x = X(d.at[1]), y = Y(d.at[0]);
+    if(SEL && SEL.type === 'pad' && SEL.id === d.id)
+      o.push('<circle cx="' + x + '" cy="' + y + '" r="' + (PITCH*0.5) +
+             '" fill="#00FFA3" fill-opacity="0.22" stroke="#00FFA3" stroke-width="1.8"/>');
+    const net = NET.netAt(d.at[0], d.at[1]);
+    const col = net ? net.color : '#888';
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="13" fill="none" stroke="' + col +
+           '" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="9.5" fill="none" stroke="' + col + '" stroke-width="2"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="2.6" fill="' + col + '"/>');
+    const left = d.at[1] > cols / 2;
+    o.push('<text class="pad" text-anchor="' + (left ? 'end' : 'start') + '" x="' + (x + (left ? -13 : 13)) +
+           '" y="' + (y - 10) + '" fill="' + col + '">' + esc(d.label) + '</text>');
+  }
+
+  /* --- cuts, drawn last so nothing can cover them.
+     A DIP body sits directly over its own auto-cuts, and those are the cuts
+     you have to make before the IC can go in. --- */
+  for(const k of S.cuts){
+    const p = k.split(','), r = +p[0], c = +p[1];
+    if(r >= rows || c >= cols) continue;
+    const x = X(c), y = Y(r), s = 7.5;
+    const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
+                  'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="#FF3DBE" fill-opacity="0.14"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="#050409" stroke="#FF3DBE" stroke-width="1.8"/>');
+    o.push('<path d="' + cross + '" stroke="#0B0813" stroke-width="6" stroke-linecap="round"/>');
+    o.push('<path d="' + cross + '" stroke="#FF6FD0" stroke-width="3.2" stroke-linecap="round"/>');
+  }
+
+  /* --- pending placement ghost --- */
+  if(pending && pending.length){
+    const pts = pending.map(q => [X(q[1]), Y(q[0])]);
+    if(hoverHole) pts.push([X(hoverHole[1]), Y(hoverHole[0])]);
+    o.push('<path d="' + pts.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join('') +
+           '" fill="none" stroke="#00F0FF" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round"/>');
+    for(const q of pending)
+      o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="10" fill="none" stroke="#00F0FF" stroke-width="2"/>');
+  }
+
+  /* --- DRC focus ring --- */
+  if(focusHole && focusHole[0] < rows && focusHole[1] < cols){
+    const fx = X(focusHole[1]), fy = Y(focusHole[0]);
+    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="14" fill="none" stroke="#D926A9" stroke-width="2.2"/>');
+    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="19.5" fill="none" stroke="#D926A9" stroke-width="1" stroke-opacity="0.4"/>');
+  }
+
+  /* --- hit layer --- */
+  for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++)
+    o.push('<rect class="hit" data-r="' + r + '" data-c="' + c + '" x="' + (X(c) - PITCH/2) +
+           '" y="' + (Y(r) - PITCH/2) + '" width="' + PITCH + '" height="' + PITCH + '"/>');
+
+  if(LINE && TOOL === 'line'){
+    o.push('<rect x="' + (X(0) - PITCH*0.5) + '" y="' + (Y(LINE[0]) - PITCH*0.5) + '" width="' + (cols*PITCH) +
+           '" height="' + PITCH + '" fill="#00F0FF" fill-opacity="0.10" stroke="#00F0FF" stroke-width="1.2" stroke-dasharray="6 4"/>');
+    o.push('<rect x="' + (X(LINE[1]) - PITCH*0.5) + '" y="' + (Y(0) - PITCH*0.5) + '" width="' + PITCH +
+           '" height="' + (rows*PITCH) + '" fill="#00F0FF" fill-opacity="0.10" stroke="#00F0FF" stroke-width="1.2" stroke-dasharray="6 4"/>');
+  }
+
+  if(REGION){
+    const rx = Math.min(X(REGION.c0), X(REGION.c1)) - PITCH*0.5;
+    const ry = Y(REGION.r0) - PITCH*0.5;
+    const rw = Math.abs(X(REGION.c1) - X(REGION.c0)) + PITCH;
+    const rh = Y(REGION.r1) - Y(REGION.r0) + PITCH;
+    o.push('<rect x="' + rx + '" y="' + ry + '" width="' + rw + '" height="' + rh +
+           '" rx="4" fill="#00FFA3" fill-opacity="0.07" stroke="#00FFA3" stroke-width="1.6" stroke-dasharray="7 4"/>');
+    if((RDR || RDC) && regionFits(REGION, RDR, RDC))
+      o.push('<rect x="' + (rx + RDC*PITCH) + '" y="' + (ry + RDR*PITCH) + '" width="' + rw +
+             '" height="' + rh + '" rx="4" fill="#00F0FF" fill-opacity="0.06" stroke="#00F0FF" ' +
+             'stroke-width="1.4" stroke-dasharray="3 4"/>');
+  }
+
+  if(TOOL === 'select'){
+    for(const p of S.parts)
+      o.push('<path class="phit" data-part="' + p.id + '" d="' +
+             p.pins.map((q, i) => (i ? 'L' : 'M') + X(q[1]) + ' ' + Y(q[0])).join('') +
+             '" fill="none" stroke="transparent" stroke-width="' + (PITCH*0.72) +
+             '" stroke-linecap="round" stroke-linejoin="round"/>');
+    if(FOOT && SEL && SEL.type === 'ic'){
+      const si = S.ics.find(x => x.id === SEL.id);
+      if(si) for(let i = 1; i <= si.pins; i++){
+        const q = pinPos(si, i);
+        o.push('<circle class="phit pinhit" data-ic="' + si.id + '" data-icpin="' + i +
+               '" cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.36) + '" fill="transparent"/>');
+      }
+    }
+    if(SEL && SEL.type === 'part'){
+      const sp = S.parts.find(x => x.id === SEL.id);
+      if(sp) sp.pins.forEach((q, i) =>
+        o.push('<circle class="phit pinhit" data-part="' + sp.id + '" data-pin="' + i +
+               '" cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.34) + '" fill="transparent"/>'));
+    }
+    for(const d of S.pads)
+      o.push('<circle class="phit" data-pad="' + d.id + '" cx="' + X(d.at[1]) +
+             '" cy="' + Y(d.at[0]) + '" r="' + (PITCH*0.4) + '" fill="transparent"/>');
+    for(const ic of S.ics)
+      { const ex = icExtent(ic);
+        o.push('<rect class="phit" data-ic="' + ic.id + '" x="' + (X(ex.c0) - 9) +
+               '" y="' + (Y(ex.r0) - 12) + '" width="' + (X(ex.c1) - X(ex.c0) + 18) +
+               '" height="' + (Y(ex.r1) - Y(ex.r0) + 24) + '" fill="transparent"/>'); }
+  }
+
+  o.push('<style>' +
+    '.rule{fill:#6B6580;font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.lbl{fill:#fff;font:9px ui-monospace,monospace;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:4;stroke-linejoin:round}' +
+    '.pad{font:10px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:#0B0813;stroke-width:3.5}' +
+    '.pin{fill:#0B0813;font:8.5px ui-monospace,monospace;text-anchor:middle;font-weight:700}' +
+    '.leg{fill:#00F0FF;font:9.5px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:#0B0813;stroke-width:3.5}' +
+    '.pin-in{fill:#00F0FF}.pin-out{fill:#00FFA3}.pin-pwr{fill:#FFB300}' +
+    '.icref{fill:#fff;font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
+    '.icpart{fill:#8B849E;font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.pol{fill:#fff;font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:3}' +
+    '</style></svg>');
+
+  stage.innerHTML = o.join('');
+  document.getElementById('zlvl').textContent = Math.round(Z * 100) + '%';
+  renderNets(hl);
+  renderDRC();
+  renderReadout();
+  renderStatus();
+}
+
+function renderNets(hl){
+  const o = [];
+  for(const net of NET.nets){
+    const pads = padsOnNet(net).map(d => d.label);
+    const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + p.pin);
+    const name = pads.length ? pads.join(' / ') : (pins.length ? pins.join(' ') : 'net ' + net.id);
+    o.push('<div class="net' + (net.id === hl ? ' on' : '') + '" data-net="' + net.id +
+           '" style="color:' + net.color + '"><span class="sw" style="background:' + net.color +
+           '"></span><span class="nm">' + esc(name) + '</span><span class="ct">' +
+           net.holes.length + 'h' + (net.segs.length > 1 ? ' · ' + net.segs.length + 'seg' : '') +
+           '</span></div>');
+  }
+  netlist.innerHTML = o.join('');
+  document.getElementById('nethdr').textContent = 'NETS — ' + NET.nets.length;
+}
+
+function renderReadout(){
+  const hl = highlightedNet();
+  if(!hoverHole && hl === null){
+    readout.innerHTML = '<div class="row" style="color:#6B6580">hover the board with <b style="color:#00FFA3">V</b> to light up a net.<br>click to pin it.</div>';
+    return;
+  }
+  const o = [];
+  if(hoverHole){
+    const r = hoverHole[0], c = hoverHole[1];
+    const net = NET.netAt(r, c);
+    o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">[' + r + ',' + c + ']</div>');
+    o.push('<div class="row">' + (net ? 'net ' + net.id + ' · <b>' + net.holes.length + '</b> holes · <b>' +
+           net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> — dead hole') + '</div>');
+    for(const oc of occupants(r, c)){
+      if(oc.type === 'part'){
+        const bn = oc.part.kind === 'res' ? resistorBandNames(oc.part.value) : null;
+        const lg = legLabels(oc.part);
+        o.push('<div class="row">' + (PART_LIB[oc.part.kind] || {name:oc.part.kind}).name +
+          ' <b>' + esc(oc.part.ref) + '</b> ' + esc(oc.part.device || oc.part.value || '') +
+          (lg ? ' · leg <b>' + esc(lg[oc.leg]) + '</b>' : '') +
+          (oc.part.polarized && !lg ? ' <b>' + (oc.leg === 0 ? '+' : '−') + '</b>' : '') + '</div>');
+        if(bn) o.push('<div class="row" style="color:#8B849E">' + bn.join(' · ') + '</div>');
+      }
+      if(oc.type === 'ic'){
+        const role = (IC_LIB[oc.ic.part] && IC_LIB[oc.ic.part].roles[oc.pin]) || '';
+        o.push('<div class="row"><b>' + esc(oc.ic.ref) + '</b> pin <b>' + oc.pin + '</b> ' +
+               esc(oc.ic.part) + (role ? ' · ' + role : '') + '</div>');
+      }
+      if(oc.type === 'pad') o.push('<div class="row">pad <b>' + esc(oc.pad.label) + '</b>' +
+        (oc.pad.to ? ' &rarr; ' + esc(oc.pad.to) : '') + '</div>');
+    }
+    if(net){
+      const pads = padsOnNet(net).map(d => d.label);
+      const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + p.pin);
+      if(pads.length) o.push('<div class="row">pads: <b>' + esc(pads.join(', ')) + '</b></div>');
+      if(pins.length) o.push('<div class="row">pins: <b>' + esc(pins.join(', ')) + '</b></div>');
+    }
+  }
+  if(pinnedNet !== null) o.push('<div class="row" style="color:#00FFA3">net ' + pinnedNet + ' pinned · esc to release</div>');
+  readout.innerHTML = o.join('');
+}
+
+function renderNetBadge(){
+  const el = document.getElementById('netbadge');
+  if(!el) return;
+  if(!S.netlist || !S.netlist.trim()){ el.textContent = ''; return; }
+  const r = checkNetlist(S.netlist);
+  el.innerHTML = r.findings.length
+    ? '<span style="color:#D926A9">netlist: ' + r.findings.length + '</span>'
+    : '<span style="color:#00FFA3">netlist ok</span>';
+}
+
+function renderStatus(){
+  const n = S.parts.length + S.ics.length;
+  stat.textContent = n + ' parts · ' + S.cuts.length + ' cuts · ' + S.pads.length + ' pads';
+  renderNetBadge();
+}
+
+/* ---- DRC panel ---- */
+let FINDINGS = [];
+
+function renderDRC(){
+  FINDINGS = runDRC();
+  const errs = FINDINGS.filter(f => f.sev === 'error').length;
+  const warns = FINDINGS.length - errs;
+
+  const hdr = document.getElementById('drchdr');
+  if(!FINDINGS.length){
+    hdr.innerHTML = 'DRC — <span style="color:#00FFA3">clean</span>';
+  }else{
+    const bits = [];
+    if(errs)  bits.push('<span style="color:#D926A9">' + errs + ' error' + (errs > 1 ? 's' : '') + '</span>');
+    if(warns) bits.push('<span style="color:#A46BE8">' + warns + ' warning' + (warns > 1 ? 's' : '') + '</span>');
+    hdr.innerHTML = 'DRC — ' + bits.join(' · ');
+  }
+
+  if(!FINDINGS.length){
+    drclist.innerHTML = '<div class="clean">no errors, no warnings.<br><span style="color:#6B6580">' +
+      'nothing shorted, nothing floating, nothing off the board.</span></div>';
+    return;
+  }
+  const o = [];
+  FINDINGS.forEach((f, i) => {
+    o.push('<div class="f ' + f.sev + '" data-i="' + i + '">');
+    o.push('<span class="msg">' + esc(f.msg));
+    if(f.at) o.push(' <span class="loc">[' + f.at[0] + ',' + f.at[1] + ']</span>');
+    o.push('</span>');
+    if(f.fix) o.push('<button class="fix" data-fix="' + i + '">fix</button>');
+    o.push('</div>');
+  });
+  drclist.innerHTML = o.join('');
+}
+
+function focusFinding(f){
+  focusHole = f.at;
+  pinnedNet = (f.net === null || f.net === undefined) ? null : f.net;
+  render();
+}
+
+function applyFix(f){
+  if(!f.fix) return;
+  if(f.fix.type === 'ic-cuts'){
+    const ic = S.ics.find(x => x.id === f.fix.id);
+    if(!ic) return;
+    pushUndo();
+    const want = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
+    ic.autoCuts = (ic.autoCuts || []).concat(want);
+    S.cuts = S.cuts.concat(want);
+    commit();
+  }
+}
+
+drclist.addEventListener('click', e => {
+  const fx = e.target.closest('.fix');
+  if(fx){ applyFix(FINDINGS[+fx.dataset.fix]); return; }
+  const row = e.target.closest('.f');
+  if(row) focusFinding(FINDINGS[+row.dataset.i]);
+});
+drclist.addEventListener('mouseover', e => {
+  const row = e.target.closest('.f');
+  if(!row) return;
+  const f = FINDINGS[+row.dataset.i];
+  const n = (f.net === null || f.net === undefined) ? null : f.net;
+  if(listNet !== n){ listNet = n; render(); }
+});
+drclist.addEventListener('mouseleave', () => { if(listNet !== null){ listNet = null; render(); } });
+
+
+/* ============================================================
+   EXPORT — a printable sheet at true 1:1
+   Drawn in millimetres so the SVG carries real physical size. A browser
+   printing at 100% then produces a sheet you can lay the board on.
+   ============================================================ */
+const MM = 2.54;      // 0.1in hole pitch
+const EDGE = 9;       // margin around the board
+
+function calBar(ox, oy){
+  /* A printout that lies about its scale is worse than no printout, and no
+     browser can be trusted to print at 100%. So: measure this. */
+  const o = [];
+  o.push('<line x1="' + ox + '" y1="' + oy + '" x2="' + (ox + 25.4) + '" y2="' + oy +
+         '" stroke="#000" stroke-width="0.4"/>');
+  for(let i = 0; i <= 4; i++){
+    const x = ox + i * 6.35;
+    o.push('<line x1="' + x + '" y1="' + (oy - 1.6) + '" x2="' + x + '" y2="' + (oy + 1.6) +
+           '" stroke="#000" stroke-width="0.4"/>');
+  }
+  o.push('<text x="' + (ox + 27) + '" y="' + (oy + 1) + '" font-size="2.1" font-family="monospace">' +
+         'measure me: 1 inch / 25.4 mm. If it is not, your printer scaled the page.</text>');
+  return o.join('');
+}
+
+function exportSVG(side){
+  const rows = S.board.rows, cols = S.board.cols;
+  const solder = side === 'solder';
+  const TOP = 12, BOT = 14;
+  const W = +(EDGE*2 + (cols-1)*MM).toFixed(3);
+  const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
+  const x = c => EDGE + (solder ? (cols-1-c) : c) * MM;
+  const y = r => TOP + EDGE + r * MM;
+  const cutSet = new Set(S.cuts);
+  const o = [];
+  const T = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
+        '" font-family="monospace" ' + (extra || '') + '>' + esc(s) + '</text>';
+
+  o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + 'mm" height="' + H +
+         'mm" viewBox="0 0 ' + W + ' ' + H + '">');
+  o.push('<rect width="' + W + '" height="' + H + '" fill="#fff"/>');
+  o.push('<g fill="#000" stroke="none">');
+  o.push(T(EDGE, 6, (S.name || 'untitled'), 3.4, 'font-weight="bold"'));
+  o.push(T(EDGE, 9.6, (solder ? 'SOLDER SIDE — mirrored, as you look at the back of the board'
+                              : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
+           '  ·  0.1in pitch  ·  1:1', 2.2));
+  o.push('</g>');
+
+  /* rulers keep the layout's own numbering in both views, so a coordinate
+     from the cut list is findable on either sheet */
+  for(let c = 0; c < cols; c++)
+    o.push(T(x(c), y(0) - 3.4, String(c), 1.7, 'text-anchor="middle" fill="#666"'));
+  for(let r = 0; r < rows; r++)
+    o.push(T(EDGE - 3.4, y(r) + 0.6, String(r), 1.7, 'text-anchor="middle" fill="#666"'));
+
+  /* copper runs, component side only */
+  if(!solder)
+    for(let r = 0; r < rows; r++){
+      let c = 0;
+      while(c < cols){
+        if(cutSet.has(K(r,c))){ c++; continue; }
+        let e = c;
+        while(e + 1 < cols && !cutSet.has(K(r, e+1))) e++;
+        const x0 = Math.min(x(c), x(e)) - MM*0.42, w = Math.abs(x(e) - x(c)) + MM*0.84;
+        o.push('<rect x="' + x0 + '" y="' + (y(r) - 0.95) + '" width="' + w +
+               '" height="1.9" rx="0.95" fill="none" stroke="#bbb" stroke-width="0.16"/>');
+        c = e + 1;
+      }
+    }
+
+  for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
+    if(cutSet.has(K(r,c))) continue;
+    o.push('<circle cx="' + x(c) + '" cy="' + y(r) + '" r="0.5" fill="none" stroke="#999" stroke-width="0.15"/>');
+  }
+
+  /* ---- component side: the parts ---- */
+  const late = [];
+  if(!solder){
+    for(const p of S.parts){
+      const xs = p.pins.map(q => x(q[1])), ys = p.pins.map(q => y(q[0]));
+      const lead = (i, tx, ty, w) => '<line x1="' + xs[i] + '" y1="' + ys[i] + '" x2="' + tx +
+            '" y2="' + ty + '" stroke="#000" stroke-width="' + w + '" stroke-linecap="round"/>';
+
+      if(p.pins.length >= 3){
+        const cx = xs.reduce((a,b)=>a+b,0)/xs.length, cy = ys.reduce((a,b)=>a+b,0)/ys.length;
+        const a3 = Math.atan2(ys[ys.length-1]-ys[0], xs[xs.length-1]-xs[0]) * 180 / Math.PI;
+        for(let i = 0; i < xs.length; i++) o.push(lead(i, cx, cy, 0.25));
+        const R = 2.4;
+        const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + a3 +
+                  ') translate(0,' + (-R*0.8) + ')" fill="#fff" stroke="#000" stroke-width="0.3">';
+        if(p.kind === 'trim')
+          o.push(g + '<rect x="' + (-R) + '" y="' + (-R*0.9) + '" width="' + (2*R) + '" height="' + (R*1.8) +
+                 '" rx="0.4"/><circle cx="0" cy="0" r="' + (R*0.45) + '"/></g>');
+        else
+          o.push(g + '<path d="M' + (-R*0.9075) + ' ' + (R*0.42) + 'A' + R + ' ' + R + ' 0 1 1 ' +
+                 (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
+        const ll = legLabels(p);
+        if(ll) p.pins.forEach((q, i) =>
+          late.push(T(xs[i] + 1.3, ys[i] + 0.7, ll[i] || '', 1.9, 'font-weight="bold"')));
+        late.push(T(cx, cy - R*2.1, p.ref + ' ' + (p.device || p.value || ''), 2.1, 'text-anchor="middle"'));
+        continue;
+      }
+
+      const ax = xs[0], ay = ys[0], bx = xs[1], by = ys[1];
+      const mx = (ax+bx)/2, my = (ay+by)/2;
+      const ang = Math.atan2(by-ay, bx-ax), deg = ang*180/Math.PI;
+      const nx = Math.sin(ang), ny = -Math.cos(ang);
+
+      if(p.kind === 'link'){
+        o.push('<line x1="' + ax + '" y1="' + ay + '" x2="' + bx + '" y2="' + by +
+               '" stroke="#000" stroke-width="0.75" stroke-linecap="round"/>');
+        continue;
+      }
+      o.push('<line x1="' + ax + '" y1="' + ay + '" x2="' + bx + '" y2="' + by +
+             '" stroke="#000" stroke-width="0.25"/>');
+      const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg +
+                ')" fill="#fff" stroke="#000" stroke-width="0.3">';
+      let half = 2;
+      if(p.kind === 'res'){
+        half = 2.55;
+        o.push(g + '<rect x="-2.55" y="-1.0" width="5.1" height="2.0" rx="0.7"/>' +
+               [-1.3, -0.4, 0.5].map(bx2 =>
+                 '<line x1="' + bx2 + '" y1="-1.0" x2="' + bx2 + '" y2="1.0" stroke-width="0.35"/>').join('') +
+               '</g>');
+      }else if(p.kind === 'cap'){
+        half = 2.05;
+        o.push(g + '<rect x="-2.05" y="-2.05" width="4.1" height="4.1" rx="0.5"/></g>');
+      }else if(p.kind === 'diode'){
+        half = 1.65;
+        o.push(g + '<rect x="-1.65" y="-0.8" width="3.3" height="1.6" rx="0.2"/>' +
+               '<rect x="0.75" y="-0.8" width="0.55" height="1.6" fill="#000" stroke="none"/></g>');
+      }else{
+        half = 2.2;
+        o.push(g + '<circle cx="0" cy="0" r="2.2"/>' +
+               '<path d="M1.03 -1.94A2.2 2.2 0 0 1 1.03 1.94Z" fill="#ccc"/></g>');
+        late.push(T(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'text-anchor="middle" font-weight="bold"'));
+      }
+      const label = p.ref + (p.value ? ' ' + p.value : '');
+      const len = Math.hypot(bx-ax, by-ay);
+      let tx, ty;
+      if(len > 2*half + MM*1.25){ tx = mx + Math.cos(ang)*(half+2.2); ty = my + Math.sin(ang)*(half+2.2) + 0.7; }
+      else { const s = ((p.pins[0][0] + p.pins[0][1]) % 2) ? 1 : -1;
+             tx = mx + nx*(half+2.4)*s; ty = my + ny*(half+2.4)*s + 0.7; }
+      late.push(T(tx, ty, label, 2.1, 'text-anchor="middle"'));
+    }
+  }
+
+  /* ---- ICs: full body on the component side, ghost footprint on the back ---- */
+  for(const ic of S.ics){
+    const ex = icExtent(ic);
+    const cL = x(ex.c0), cR = x(ex.c1);
+    const x0 = Math.min(cL, cR) - 0.9, x1 = Math.max(cL, cR) + 0.9;
+    const y0 = y(ex.r0) - 1.2, y1 = y(ex.r1) + 1.2;
+    o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
+           '" rx="0.6" fill="none" stroke="#000" stroke-width="0.3"' +
+           (solder ? ' stroke-dasharray="1 0.8"' : '') + '/>');
+    if(!solder){
+      if(!hasFootprint(ic))
+        o.push('<path d="M' + ((x0+x1)/2 - 1.4) + ' ' + y0 + 'a1.4 1.4 0 0 0 2.8 0" fill="none" stroke="#000" stroke-width="0.3"/>');
+      late.push(T((x0+x1)/2, (y0+y1)/2, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
+      late.push(T((x0+x1)/2, (y0+y1)/2 + 2.6, ic.part, 2.1, 'text-anchor="middle"'));
+    }
+    const p1 = pinPos(ic, 1);
+    o.push('<rect x="' + (x(p1[1]) - 0.9) + '" y="' + (y(p1[0]) - 0.9) +
+           '" width="1.8" height="1.8" fill="#000"/>');
+    late.push(T(x(p1[1]) + (solder ? -2.6 : 2.6), y(p1[0]) - 1.6, 'pin1', 1.7,
+                'text-anchor="middle" fill="#000"'));
+  }
+
+  /* ---- links show on the back too, dashed: you need to know which holes get wire ---- */
+  if(solder)
+    for(const p of S.parts){
+      if(p.kind !== 'link') continue;
+      o.push('<line x1="' + x(p.pins[0][1]) + '" y1="' + y(p.pins[0][0]) +
+             '" x2="' + x(p.pins[1][1]) + '" y2="' + y(p.pins[1][0]) +
+             '" stroke="#000" stroke-width="0.35" stroke-dasharray="1.2 1" stroke-linecap="round"/>');
+    }
+
+  /* ---- cuts, last and boldest ---- */
+  for(const k of S.cuts){
+    const p = k.split(','), r = +p[0], c = +p[1];
+    if(r >= rows || c >= cols) continue;
+    const cx = x(c), cy = y(r), s = 1.35;
+    o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.5" fill="#fff" stroke="#000" stroke-width="0.35"/>');
+    o.push('<path d="M' + (cx-s) + ' ' + (cy-s) + 'L' + (cx+s) + ' ' + (cy+s) +
+           'M' + (cx+s) + ' ' + (cy-s) + 'L' + (cx-s) + ' ' + (cy+s) +
+           '" stroke="#000" stroke-width="0.55" stroke-linecap="round"/>');
+  }
+
+  /* ---- pads ---- */
+  for(const d of S.pads){
+    const cx = x(d.at[1]), cy = y(d.at[0]);
+    o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.7" fill="none" stroke="#000" stroke-width="0.35"/>');
+    o.push('<circle cx="' + cx + '" cy="' + cy + '" r="0.45" fill="#000"/>');
+    const leftish = solder ? d.at[1] < cols/2 : d.at[1] > cols/2;
+    late.push(T(cx + (leftish ? -2.2 : 2.2), cy - 1.9, d.label, 2.1,
+                'text-anchor="' + (leftish ? 'end' : 'start') + '" font-weight="bold"'));
+  }
+
+  o.push('<g fill="#000">' + late.join('') + '</g>');
+
+  /* ---- orientation, and the ruler you check the printer against ---- */
+  const footY = H - BOT + 5;
+  if(solder){
+    const ox = x(0), oy = y(0);
+    o.push('<path d="M' + (ox + (cols > 1 ? 4.5 : 0)) + ' ' + (oy - 4.5) + 'L' + ox + ' ' + (oy - 1.4) +
+           'L' + (ox + 3.2) + ' ' + (oy - 5.6) + 'Z" fill="#000"/>');
+    late.push('');
+    o.push(T(EDGE, footY - 3.2, 'The arrow marks hole [0,0]. On the back it sits at the ' +
+             'RIGHT-hand end of row 0.', 2.1, 'font-weight="bold"'));
+  }
+  o.push(calBar(EDGE, footY + 2));
+  o.push('</svg>');
+  return o.join('');
+}
+
+/* ============================================================
+   BUILD SHEET
+   ============================================================ */
+/* Build progress is kept in memory and merely *mirrored* to localStorage.
+   Reading it back from storage on every tick meant the checklist stopped
+   counting entirely wherever storage is unavailable -- private windows,
+   sandboxed frames, some file:// setups. Ticking a box has to work even when
+   nothing can be saved. */
+let BUILT = null, BUILT_KEY = null;
+function builtKey(){ return 'stripboard.built.' + (S.name || 'untitled'); }
+function builtSet(){
+  const k = builtKey();
+  if(BUILT === null || BUILT_KEY !== k){
+    BUILT_KEY = k;
+    try{ BUILT = new Set(JSON.parse(localStorage.getItem(k) || '[]')); }
+    catch(err){ BUILT = new Set(); }
+  }
+  return BUILT;
+}
+function saveBuilt(set){
+  BUILT = set;
+  BUILT_KEY = builtKey();
+  try{ localStorage.setItem(BUILT_KEY, JSON.stringify([...set])); }catch(err){}
+}
+
+function renderSheet(){
+  const done = builtSet();
+  const cuts = cutList(), items = buildList(), wires = wireList();
+  const total = cuts.length + items.length;
+  let ticked = 0;
+  const box = (key) => {
+    const on = done.has(key);
+    if(on) ticked++;
+    return '<label class="tick"><input type="checkbox" data-key="' + esc(key) + '"' +
+           (on ? ' checked' : '') + '><span></span></label>';
+  };
+  const cutRows = cuts.map(c =>
+    '<tr><td>' + box('cut:' + c.row + ',' + c.col) + '</td><td>' + c.row + '</td><td>' + c.col +
+    '</td><td><b>' + c.back + '</b></td></tr>').join('');
+  const itemRows = items.map((it, i) =>
+    '<tr><td>' + box(it.key) + '</td><td>' + (i+1) + '</td><td><b>' + esc(it.ref) + '</b></td><td>' +
+    esc(it.name) + '</td><td>' + esc(it.what || '—') + '</td><td class="mono">' + esc(it.holes) +
+    '</td></tr>').join('');
+  const wireRows = wires.map(w =>
+    '<tr><td><b>' + esc(w.label) + '</b></td><td class="mono">[' + w.row + ',' + w.col + ']</td><td>' +
+    w.back + '</td><td class="fill">' + esc(w.to || '') + '</td></tr>').join('');
+
+  sheetdoc.innerHTML =
+    '<h1>' + esc(S.name || 'untitled') + '</h1>' +
+    '<p class="sub">' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch · ' +
+      items.length + ' parts · ' + cuts.length + ' cuts · <b id="prog">' + ticked + ' / ' + total +
+      '</b> done</p>' +
+    '<h2>Component side</h2>' +
+    '<div class="svgwrap">' + exportSVG('component') + '</div>' +
+    '<h2>Solder side — mirrored</h2>' +
+    '<p>The board as you see it with the copper facing you. Column numbers are still ' +
+      'those of the layout, so a coordinate from the cut list lands on the same hole in both views.</p>' +
+    '<div class="svgwrap">' + exportSVG('solder') + '</div>' +
+    '<h2>Cuts <span class="n">' + cuts.length + '</span></h2>' +
+    '<p>Made on the solder side. <b>from left (back)</b> counts holes from the left edge as you ' +
+      'look at the back of the board — the mirror flip is already done for you.</p>' +
+    '<table><thead><tr><th></th><th>row</th><th>col</th><th>from left (back)</th></tr></thead>' +
+      '<tbody>' + (cutRows || '<tr><td colspan="4">no cuts</td></tr>') + '</tbody></table>' +
+    '<h2>Build order <span class="n">' + items.length + '</span></h2>' +
+    '<p>Flat parts first, tall parts last, so nothing blocks the iron.</p>' +
+    '<table><thead><tr><th></th><th>#</th><th>ref</th><th>part</th><th>value</th><th>holes</th></tr></thead>' +
+      '<tbody>' + (itemRows || '<tr><td colspan="6">nothing placed</td></tr>') + '</tbody></table>' +
+    (wires.length ?
+      '<h2>Off-board wiring <span class="n">' + wires.length + '</span></h2>' +
+      '<p>Fill in the last column with what each wire actually goes to.</p>' +
+      '<table><thead><tr><th>pad</th><th>hole</th><th>from left (back)</th><th>goes to</th></tr></thead>' +
+        '<tbody>' + wireRows + '</tbody></table>' : '');
+}
+
+function openSheet(){ sheet.hidden = false; renderSheet(); }
+
+function renderNetlist(){
+  const text = S.netlist || '';
+  const r = checkNetlist(text);
+  const o = [];
+
+  if(!text.trim()){
+    nlVerdict.innerHTML = '<span class="nldim">no netlist</span>';
+    o.push('<div class="nldim">Nothing declared, so nothing to check. The board is still ' +
+           'checked by the DRC either way — a netlist only adds a second opinion about what ' +
+           '<em>should</em> be connected.</div>');
+  }else if(r.findings.length){
+    const errs = r.findings.length;
+    nlVerdict.innerHTML = '<span style="color:#D926A9">' + errs + ' problem' + (errs > 1 ? 's' : '') + '</span>';
+    o.push('<div class="grp"><h4>PROBLEMS</h4>');
+    for(const f of r.findings) o.push('<div class="nlbad">' + esc(f.msg) + '</div>');
+    o.push('</div>');
+  }else{
+    nlVerdict.innerHTML = '<span class="nlok">matches</span>';
+    o.push('<div class="grp"><h4>VERDICT</h4><div class="nlok">The board matches all ' +
+           r.declared + ' declared net' + (r.declared > 1 ? 's' : '') + '. ' + r.resolved +
+           ' connections checked.</div></div>');
+  }
+
+  if(text.trim() && r.unmentioned.length){
+    o.push('<div class="grp"><h4>ON THE BOARD, NOT IN THE NETLIST</h4>');
+    o.push('<div class="nldim" style="margin-bottom:6px">Not errors — you may be describing ' +
+           'only part of the circuit. Listed so you can see what is unchecked.</div>');
+    for(const u of r.unmentioned) o.push('<span class="nlchip">' + esc(u) + '</span>');
+    o.push('</div>');
+  }
+
+  o.push('<div class="grp"><h4>SYNTAX</h4><div class="nldim">' +
+         'One net per line: <b>name: member member</b><br>' +
+         '<b>R1.A</b> a part leg &middot; <b>IC1.7</b> an IC pin &middot; <b>@GND</b> a pad<br>' +
+         'Legs are A/B, or the real leg letters on a three-leg part (E/B/C).<br>' +
+         '# starts a comment.</div></div>');
+
+  nlOut.innerHTML = o.join('');
+}
+
+function openNetlist(){
+  netl.hidden = false;
+  nlText.value = S.netlist || '';
+  renderNetlist();
+  nlText.focus();
+}
+function closeNetlist(){ netl.hidden = true; }
+function closeSheet(){ sheet.hidden = true; }
+
+function downloadSVG(side){
+  const blob = new Blob([exportSVG(side)], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-' + side + '.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================
+   TOOLS + INTERACTION
+   ============================================================ */
+let TOOL = 'inspect';
+let listNet = null;                       // net hovered in the side panel
+const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k'};
+const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot'};
+let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
+
+const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
+                e:'ecap', d:'diode', q:'trans', w:'trim', g:'reg', u:'ic', p:'pad'};
+const HINTS = {
+  inspect:'hover a hole to light its whole net. click to pin, esc to release.',
+  select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. arrows nudge · , and . turn it · del removes.',
+  area   :'click two opposite corners to box off a block. only whole parts inside it count. , and . turn it.',
+  line   :'click any hole to pick its row and column, then add or remove one.',
+  cut    :'click a hole to cut the track there. click again to undo the cut.',
+  link   :'two clicks: start hole, end hole. links are the only thing that merges nets.',
+  res    :'two clicks: lead A, lead B.',
+  cap    :'two clicks: lead A, lead B.',
+  ecap   :'two clicks. the FIRST hole is the + end.',
+  diode  :'two clicks. the SECOND hole is the cathode, the banded end.',
+  trans  :'three clicks, in leg order. the leg names are drawn on the board.',
+  trim   :'three clicks: pin 1, wiper, pin 3.',
+  reg    :'three clicks, in leg order.',
+  ic     :'click where pin 1 goes. cuts between the pin rows are added automatically.',
+  pad    :'click a hole to mark an off-board wire exit with the label above.',
+  erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
+};
+
+function setTool(t){
+  TOOL = t;
+  pending = [];
+  focusHole = null;
+  if(t !== 'area') REGION = null;
+  if(t !== 'line') LINE = null;
+  if(t !== 'select') SEL = null;
+  FOOT = false;
+  document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  hint.textContent = HINTS[t] || '';
+  renderCtx();
+  render();
+}
+
+function renderCtx(){
+  const o = [];
+  const opts = (list, cur) => list.map(k =>
+    '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(k) + '</option>').join('');
+
+  if(TOOL === 'line'){
+    if(!LINE){
+      o.push('<div class="hint">click any hole.<br>its row and column light up, then add or remove one.</div>');
+    }else{
+      o.push('<label>PICKED</label><input value="row ' + LINE[0] + '  ·  col ' + LINE[1] + '" readonly>');
+      o.push('<button id="lnIR">insert row above ' + LINE[0] + '</button>');
+      o.push('<button id="lnDR">delete row ' + LINE[0] + '</button>');
+      o.push('<button id="lnIC">insert col left of ' + LINE[1] + '</button>');
+      o.push('<button id="lnDC">delete col ' + LINE[1] + '</button>');
+      o.push('<div class="hint">inserting stretches anything spanning the line. deleting takes ' +
+             'whatever sits on it — undo brings it back.</div>');
+    }
+  }else if(TOOL === 'area'){
+    if(!REGION){
+      o.push('<div class="hint">click two opposite corners.<br>' +
+             (pending.length ? 'now the far corner…' : '') + '</div>');
+    }else{
+      const src = regionContents(REGION);
+      const fits = regionFits(REGION, RDR, RDC);
+      o.push('<label>BLOCK</label><input value="rows ' + REGION.r0 + '–' + REGION.r1 +
+             '  cols ' + REGION.c0 + '–' + REGION.c1 + '" readonly>');
+      o.push('<div class="hint">' + src.parts.length + ' parts · ' + src.ics.length + ' ICs · ' +
+             src.cuts.length + ' cuts · ' + src.pads.length + ' pads</div>');
+      o.push('<label>OFFSET ROWS</label><input id="rgDr" type="number" value="' + RDR + '">');
+      o.push('<label>OFFSET COLS</label><input id="rgDc" type="number" value="' + RDC + '">');
+      o.push('<button id="rgDup"' + (fits && (RDR || RDC) ? '' : ' disabled') + '>duplicate</button>');
+      o.push('<button id="rgMove"' + (fits && (RDR || RDC) ? '' : ' disabled') + '>move</button>');
+      o.push('<button id="rgRotCW">turn block &#8635;</button>');
+      o.push('<button id="rgRotCCW">turn block &#8634;</button>');
+      o.push('<button id="rgDel">delete contents</button>');
+      o.push('<button id="rgClear">clear block</button>');
+      if(!fits) o.push('<div class="hint" style="color:#D926A9">that offset runs off the board.</div>');
+    }
+  }else if(TOOL === 'select'){
+    const p  = SEL && SEL.type === 'part' ? S.parts.find(x => x.id === SEL.id) : null;
+    const ic = SEL && SEL.type === 'ic'   ? S.ics.find(x => x.id === SEL.id)   : null;
+    const pd = SEL && SEL.type === 'pad'  ? S.pads.find(x => x.id === SEL.id)  : null;
+    if(p){
+      o.push('<label>REF</label><input id="edRef" value="' + esc(p.ref) + '">');
+      if(LEG_LIB[p.kind])
+        o.push('<label>DEVICE</label><select id="edDev">' + opts(Object.keys(LEG_LIB[p.kind]), p.device) + '</select>');
+      if(p.kind !== 'link')
+        o.push('<label>VALUE</label><input id="edVal" value="' + esc(p.value || '') + '">');
+      const sameLegs = Object.keys(PART_LIB).filter(k => legsOf(k) === p.pins.length);
+      o.push('<label>KIND</label><select id="edKind">' + sameLegs.map(k =>
+        '<option value="' + k + '"' + (k === p.kind ? ' selected' : '') + '>' + PART_LIB[k].name + '</option>').join('') + '</select>');
+      o.push('<label>TURN — about leg one</label>');
+      o.push('<button id="edRotCW">turn &#8635;</button><button id="edRotCCW">turn &#8634;</button>');
+    }else if(pd){
+      o.push('<label>PAD LABEL</label><input id="edPadLabel" value="' + esc(pd.label) + '">');
+      o.push('<label>GOES TO</label><input id="edPadTo" value="' + esc(pd.to || '') +
+             '" placeholder="LDR1 leg 1">');
+      o.push('<div class="hint">what the wire off this pad actually connects to. ' +
+             'it fills the last column of the wiring table on the build sheet.</div>');
+    }else if(ic){
+      o.push('<label>REF</label><input id="edRef" value="' + esc(ic.ref) + '">');
+      o.push('<label>PART</label><select id="edIc">' + opts(Object.keys(IC_LIB), ic.part) + '</select>');
+      o.push('<label>FOOTPRINT — ' + (hasFootprint(ic) ? 'custom' : 'standard DIP') + '</label>');
+      o.push('<button id="edFoot">' + (FOOT ? 'done shaping' : 'edit footprint') + '</button>');
+      if(hasFootprint(ic)) o.push('<button id="edFootReset">back to a DIP</button>');
+      if(FOOT) o.push('<div class="hint">drag any numbered pin to a new hole. a shaped chip ' +
+                      'manages its own cuts — the auto-cut column no longer applies.</div>');
+    }else{
+      o.push('<div class="hint">nothing selected.<br>click a part or an IC.</div>');
+    }
+  }else if(legsOf(TOOL) >= 3 && PART_LIB[TOOL]){
+    o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
+    if(LEG_LIB[TOOL] && Object.keys(LEG_LIB[TOOL]).length > 1)
+      o.push('<label>DEVICE</label><select id="ctxDev">' + opts(Object.keys(LEG_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
+    if(TOOL === 'trim') o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES.trim) + '">');
+    const ll = LEG_LIB[TOOL] && (LEG_LIB[TOOL][DEVICE[TOOL]] || LEG_LIB[TOOL][Object.keys(LEG_LIB[TOOL])[0]]);
+    if(ll) o.push('<div class="hint">legs in click order: <b style="color:#00F0FF">' + ll.join(' · ') + '</b></div>');
+  }else if(TOOL === 'res' || TOOL === 'cap' || TOOL === 'ecap' || TOOL === 'diode'){
+    o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
+    o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES[TOOL]) + '">');
+  }else if(TOOL === 'link'){
+    o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef('link')) + '" readonly>');
+  }else if(TOOL === 'ic'){
+    o.push('<label>PART</label><select id="ctxIc">' + opts(Object.keys(IC_LIB), IC_PART) + '</select>');
+    o.push('<label>SPAN (holes)</label><input id="ctxSpan" type="number" min="2" max="9" value="' + IC_SPAN + '">');
+  }else if(TOOL === 'pad'){
+    o.push('<label>LABEL</label><input id="ctxPad" value="' + esc(PAD_LABEL) + '">');
+  }
+  ctx.innerHTML = o.join('');
+
+  const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el[ev] = fn; };
+  on('ctxVal', 'oninput',  e => { VALUES[TOOL] = e.target.value; });
+  on('ctxPad', 'oninput',  e => { PAD_LABEL = e.target.value; });
+  on('ctxIc',  'onchange', e => { IC_PART = e.target.value; });
+  on('ctxDev', 'onchange', e => { DEVICE[TOOL] = e.target.value; renderCtx(); });
+  on('ctxSpan','oninput',  e => { IC_SPAN = Math.max(2, +e.target.value || 3); });
+  on('rgDr', 'oninput',  e => { RDR = Math.round(+e.target.value || 0); renderCtx(); render(); });
+  on('rgDc', 'oninput',  e => { RDC = Math.round(+e.target.value || 0); renderCtx(); render(); });
+  on('rgDup', 'onclick', () => {
+    if(!REGION || !regionFits(REGION, RDR, RDC)) return;
+    pushUndo();
+    const made = duplicateRegion(REGION, RDR, RDC);
+    /* walk the block along so clicking duplicate again tiles the next copy
+       instead of stacking a second one on top of the first */
+    REGION = {r0:REGION.r0 + RDR, c0:REGION.c0 + RDC, r1:REGION.r1 + RDR, c1:REGION.c1 + RDC};
+    if(!regionFits(REGION, RDR, RDC)){ RDR = 0; RDC = 0; }
+    flash('copied ' + (made.parts.length + made.ics.length) + ' parts, ' + made.cuts.length + ' cuts');
+    commit();
+  });
+  on('rgMove', 'onclick', () => {
+    if(!REGION || !regionFits(REGION, RDR, RDC)) return;
+    pushUndo();
+    moveRegion(REGION, RDR, RDC);
+    REGION = {r0:REGION.r0 + RDR, c0:REGION.c0 + RDC, r1:REGION.r1 + RDR, c1:REGION.c1 + RDC};
+    commit();
+  });
+  on('rgDel', 'onclick', () => {
+    if(!REGION) return;
+    pushUndo();
+    const gone = deleteRegion(REGION);
+    flash('removed ' + (gone.parts.length + gone.ics.length) + ' parts, ' + gone.cuts.length + ' cuts');
+    commit();
+  });
+  on('rgClear', 'onclick', () => { REGION = null; pending = []; renderCtx(); render(); });
+
+  on('edRotCW',  'onclick', () => turnPart(1));
+  on('edRotCCW', 'onclick', () => turnPart(3));
+  on('rgRotCW',  'onclick', () => turnRegion(1));
+  on('rgRotCCW', 'onclick', () => turnRegion(3));
+
+  const lineGo = (axis, delta) => {
+    if(!LINE) return;
+    const at = LINE[axis];
+    pushUndo();
+    const res = lineEdit(axis, at, delta);
+    if(!res.ok){
+      UNDO.pop();                       // nothing changed, so leave no empty step behind
+      flash(res.reason);
+      return;
+    }
+    const g = res.removed;
+    const lost = g.parts.length + g.ics.length + g.pads.length + g.cuts;
+    if(lost) flash('removed ' + g.parts.concat(g.ics, g.pads).join(', ') +
+                   (g.cuts ? (g.parts.length + g.ics.length + g.pads.length ? ' and ' : 'removed ') + g.cuts + ' cuts' : ''));
+    LINE = [Math.min(LINE[0], S.board.rows - 1), Math.min(LINE[1], S.board.cols - 1)];
+    rows.value = S.board.rows;
+    cols.value = S.board.cols;
+    REGION = null;
+    commit();
+  };
+  on('lnIR', 'onclick', () => lineGo(0, 1));
+  on('lnDR', 'onclick', () => lineGo(0, -1));
+  on('lnIC', 'onclick', () => lineGo(1, 1));
+  on('lnDC', 'onclick', () => lineGo(1, -1));
+
+  /* editing the selection */
+  const edit = fn => { pushUndo(); fn(); commit(); };
+  on('edRef',  'onchange', e => edit(() => { const t = selObj(); if(t) t.ref = e.target.value; }));
+  on('edVal',  'onchange', e => edit(() => { const t = selObj(); if(t) t.value = e.target.value; }));
+  on('edDev',  'onchange', e => edit(() => { const t = selObj(); if(t) t.device = e.target.value; }));
+  on('edKind', 'onchange', e => edit(() => { const t = selObj(); if(t) t.kind = e.target.value; }));
+  on('edFoot', 'onclick', () => {
+    const ic = selObj();
+    if(!ic) return;
+    /* Shaping a chip hands its cuts over to you rather than throwing them
+       away: they stay on the board, the chip just stops owning them. Deleting
+       them here would break a working layout for the sake of nudging one pin. */
+    if(!FOOT){ pushUndo(); editFootprint(ic); ic.autoCuts = []; FOOT = true; commit(); }
+    else { FOOT = false; renderCtx(); render(); }
+  });
+  on('edFootReset', 'onclick', () => {
+    const ic = selObj();
+    if(!ic) return;
+    pushUndo();
+    resetFootprint(ic);
+    refreshAutoCuts(ic);
+    FOOT = false;
+    commit();
+  });
+  on('edPadLabel','onchange', e => edit(() => { const d = selObj(); if(d) d.label = e.target.value; }));
+  on('edPadTo',   'onchange', e => edit(() => {
+    const d = selObj(); if(!d) return;
+    const v = e.target.value.trim();
+    if(v) d.to = v; else delete d.to;
+  }));
+  on('edIc',   'onchange', e => edit(() => {
+    const ic = selObj(); if(!ic) return;
+    ic.part = e.target.value;
+    ic.pins = IC_LIB[ic.part].pins;
+    delete ic.pinMap;                 // a different chip is a different shape
+    refreshAutoCuts(ic);
+  }));
+}
+function turnPart(turns){
+  const p = SEL && SEL.type === 'part' ? selObj() : null;
+  if(!p){ flash(SEL ? 'a DIP straddles its strips one way only' : 'nothing selected'); return; }
+  pushUndo();
+  const res = rotatePart(p, turns);
+  if(!res.ok){ UNDO.pop(); flash(res.reason); return; }
+  commit();
+}
+function turnRegion(turns){
+  if(!REGION){ flash('no block picked'); return; }
+  pushUndo();
+  const res = rotateRegion(REGION, turns);
+  if(!res.ok){ UNDO.pop(); flash(res.reason); return; }
+  REGION = res.region;
+  if(!regionFits(REGION, RDR, RDC)){ RDR = 0; RDC = 0; }
+  commit();
+}
+
+function selObj(){
+  if(!SEL) return null;
+  return SEL.type === 'part' ? S.parts.find(x => x.id === SEL.id)
+       : SEL.type === 'pad'  ? S.pads.find(x => x.id === SEL.id)
+       : S.ics.find(x => x.id === SEL.id);
+}
+
+/* ---- undo: flat snapshot stack ---- */
+const UNDO = [], REDO = [];
+/* The block marquee and the picked row/column live outside S, but an edit can
+   move them — rotating a block transposes it, duplicating walks it along. Undo
+   has to put them back too, or you are left with an outline describing a shape
+   the board no longer has. */
+function snapshot(){ return JSON.stringify({s:S, region:REGION, line:LINE}); }
+function pushUndo(){ UNDO.push(snapshot()); if(UNDO.length > 200) UNDO.shift(); REDO.length = 0; }
+function restore(str){
+  const o = JSON.parse(str);
+  S = o.s; REGION = o.region || null; LINE = o.line || null;
+  pending = []; pinnedNet = null; SEL = null; drag = null;
+  projname.value = S.name;
+  rows.value = S.board.rows; cols.value = S.board.cols;
+  renderCtx(); render(); autosave();
+}
+function undo(){ if(!UNDO.length) return; REDO.push(snapshot()); restore(UNDO.pop()); }
+function redo(){ if(!REDO.length) return; UNDO.push(snapshot()); restore(REDO.pop()); }
+
+/* ---- board clicks ---- */
+function onHole(r, c){
+  const key = K(r,c);
+  if(TOOL === 'select') return;   // handled on pointerdown
+
+  if(TOOL === 'line'){
+    LINE = [r, c];
+    renderCtx(); render();
+    return;
+  }
+
+  if(TOOL === 'area'){
+    pending.push([r, c]);
+    if(pending.length < 2){ REGION = null; render(); return; }
+    REGION = normRegion(pending[0], pending[1]);
+    pending = [];
+    /* default to stacking the copy directly below the block, which is what
+       you want for another voice of the same circuit */
+    RDR = REGION.r1 - REGION.r0 + 1;
+    RDC = 0;
+    if(!regionFits(REGION, RDR, RDC)) RDR = 0;
+    renderCtx(); render();
+    return;
+  }
+
+  if(TOOL === 'inspect'){
+    const net = NET.netAt(r, c);
+    pinnedNet = (net && pinnedNet === net.id) ? null : (net ? net.id : null);
+    render(); return;
+  }
+
+  if(TOOL === 'cut'){
+    pushUndo();
+    const i = S.cuts.indexOf(key);
+    if(i >= 0) S.cuts.splice(i, 1); else S.cuts.push(key);
+    commit(); return;
+  }
+
+  if(TOOL === 'erase'){
+    const occ = occupants(r, c);
+    const part = occ.find(o => o.type === 'part');
+    const ic   = occ.find(o => o.type === 'ic');
+    const pad  = occ.find(o => o.type === 'pad');
+    const cut  = occ.find(o => o.type === 'cut');
+    if(part){ pushUndo(); S.parts = S.parts.filter(p => p !== part.part); }
+    else if(ic){
+      pushUndo();
+      S.ics = S.ics.filter(x => x !== ic.ic);
+      const auto = new Set(ic.ic.autoCuts || []);
+      S.cuts = S.cuts.filter(k => !auto.has(k));
+    }
+    else if(pad){ pushUndo(); S.pads = S.pads.filter(d => d !== pad.pad); }
+    else if(cut){ pushUndo(); S.cuts = S.cuts.filter(k => k !== key); }
+    else return;
+    commit(); return;
+  }
+
+  if(TOOL === 'pad'){
+    if(!PAD_LABEL.trim()) return;
+    pushUndo();
+    S.pads.push({id:uid(), label:PAD_LABEL.trim(), at:[r,c]});
+    commit(); return;
+  }
+
+  if(TOOL === 'ic'){
+    const def = IC_LIB[IC_PART];
+    const half = def.pins / 2;
+    if(r + half - 1 >= S.board.rows || c + IC_SPAN >= S.board.cols){ flash('IC would run off the board'); return; }
+    pushUndo();
+    const pin1 = [r,c];
+    const auto = icCutKeys(pin1, IC_SPAN, def.pins).filter(k => S.cuts.indexOf(k) < 0);
+    S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:def.pins, pin1:pin1, span:IC_SPAN, autoCuts:auto});
+    S.cuts = S.cuts.concat(auto);
+    commit(); return;
+  }
+
+  /* parts: one click per leg */
+  const legs = legsOf(TOOL);
+  if(pending.some(q => q[0] === r && q[1] === c)){ pending = []; render(); return; }
+  pending.push([r, c]);
+  if(pending.length < legs){ render(); return; }
+
+  pushUndo();
+  const part = {id:uid(), kind:TOOL, ref:nextRef(TOOL), pins:pending};
+  if(TOOL !== 'link') part.value = VALUES[TOOL] || '';
+  if(LEG_LIB[TOOL]) part.device = DEVICE[TOOL];
+  if(PART_LIB[TOOL].polarized) part.polarized = true;
+  S.parts.push(part);
+  pending = [];
+  commit();
+}
+
+/* Board coordinates straight from the pointer, so a drag keeps working even
+   when the cursor is over a part rather than a hole. */
+function holeFromEvent(e){
+  const svg = document.getElementById('board');
+  if(!svg || !svg.getScreenCTM) return null;
+  const m = svg.getScreenCTM();
+  if(!m) return null;
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  const q = pt.matrixTransform(m.inverse());
+  const r = Math.round((q.y - MARGIN) / PITCH), c = Math.round((q.x - MARGIN) / PITCH);
+  return [r, c];
+}
+
+function moveSel(dr, dc, basePins, basePin1, basePadAt){
+  const t = selObj();
+  if(!t) return;
+  if(SEL.type === 'part'){
+    t.pins = (basePins || t.pins).map(q => [q[0] + dr, q[1] + dc]);
+  }else if(SEL.type === 'pad'){
+    const base = basePadAt || t.at;
+    t.at = [base[0] + dr, base[1] + dc];
+  }else{
+    /* an IC carries its own cuts with it */
+    t.pin1 = [(basePin1 || t.pin1)[0] + dr, (basePin1 || t.pin1)[1] + dc];
+    refreshAutoCuts(t);
+  }
+}
+
+function deleteSel(){
+  if(!SEL) return;
+  pushUndo();
+  if(SEL.type === 'part'){
+    S.parts = S.parts.filter(p => p.id !== SEL.id);
+  }else if(SEL.type === 'pad'){
+    S.pads = S.pads.filter(d => d.id !== SEL.id);
+  }else{
+    const ic = S.ics.find(x => x.id === SEL.id);
+    if(ic){
+      const auto = new Set(ic.autoCuts || []);
+      S.cuts = S.cuts.filter(k => !auto.has(k));
+      S.ics = S.ics.filter(x => x.id !== SEL.id);
+    }
+  }
+  SEL = null;
+  commit();
+}
+
+function commit(){ renderCtx(); render(); autosave(); }
+function flash(msg){
+  saved.textContent = msg;
+  saved.style.color = '#D926A9';
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => { saved.style.color = ''; autosave(); }, 1800);
+}
+
+/* ---- event wiring ---- */
+stage.addEventListener('pointermove', e => {
+  if(drag) return;
+  const q = holeFromEvent(e);
+  const next = (q && q[0] >= 0 && q[1] >= 0 && q[0] < S.board.rows && q[1] < S.board.cols) ? q : null;
+  const same = (!next && !hoverHole) ||
+    (next && hoverHole && next[0] === hoverHole[0] && next[1] === hoverHole[1]);
+  if(same) return;
+  hoverHole = next;
+  render();
+});
+stage.addEventListener('pointerleave', () => { if(hoverHole){ hoverHole = null; render(); } });
+stage.addEventListener('click', e => {
+  const t = e.target;
+  if(t && t.classList && t.classList.contains('hit')) onHole(+t.dataset.r, +t.dataset.c);
+});
+stage.addEventListener('pointerdown', e => {
+  if(TOOL !== 'select') return;
+  const t = e.target.closest ? e.target.closest('[data-part],[data-ic],[data-pad]') : null;
+  if(!t){ if(SEL){ SEL = null; renderCtx(); render(); } return; }
+  e.preventDefault();
+  const wasIc = SEL && SEL.type === 'ic' ? SEL.id : null;
+  SEL = t.dataset.part ? {type:'part', id:t.dataset.part}
+      : t.dataset.pad  ? {type:'pad',  id:t.dataset.pad}
+      : {type:'ic', id:t.dataset.ic};
+  if(!(SEL.type === 'ic' && SEL.id === wasIc)) FOOT = false;
+  const obj = selObj();
+  drag = {from:holeFromEvent(e), moved:false,
+          icPin:t.dataset.icpin === undefined ? null : +t.dataset.icpin,
+          pin:t.dataset.pin === undefined ? null : +t.dataset.pin,
+          pins:obj && obj.pins && SEL.type === 'part' ? obj.pins.map(q => q.slice()) : null,
+          pin1:obj && obj.pin1 ? obj.pin1.slice() : null,
+          at:obj && obj.at ? obj.at.slice() : null};
+  renderCtx();
+  render();
+});
+window.addEventListener('pointermove', e => {
+  if(!drag || !drag.from) return;
+  const q = holeFromEvent(e);
+  if(!q) return;
+  const dr = q[0] - drag.from[0], dc = q[1] - drag.from[1];
+  if(!drag.moved){
+    if(dr === 0 && dc === 0) return;
+    drag.moved = true;
+    pushUndo();
+  }
+  if(drag.icPin){
+    const ic = selObj();
+    if(ic){
+      if(!drag.icBase) drag.icBase = pinPos(ic, drag.icPin);
+      setIcPin(ic, drag.icPin, [drag.icBase[0] + dr, drag.icBase[1] + dc]);
+    }
+  }else if(drag.pin === null || drag.pin === undefined){
+    moveSel(dr, dc, drag.pins, drag.pin1, drag.at);
+  }else{
+    const base = drag.pins && drag.pins[drag.pin];
+    if(base) movePartPin(selObj(), drag.pin, [base[0] + dr, base[1] + dc]);
+  }
+  render();
+});
+window.addEventListener('pointerup', () => {
+  if(!drag) return;
+  const moved = drag.moved;
+  drag = null;
+  if(moved) commit();
+});
+
+document.querySelectorAll('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+
+netlist.addEventListener('mouseover', e => {
+  const el = e.target.closest('.net'); if(!el) return;
+  listNet = +el.dataset.net; render();
+});
+netlist.addEventListener('mouseleave', () => { if(listNet !== null){ listNet = null; render(); } });
+netlist.addEventListener('click', e => {
+  const el = e.target.closest('.net'); if(!el) return;
+  const id = +el.dataset.net;
+  pinnedNet = pinnedNet === id ? null : id;
+  render();
+});
+
+document.addEventListener('keydown', e => {
+  if(!netl.hidden){
+    if(e.key === 'Escape') closeNetlist();
+    return;
+  }
+  if(!sheet.hidden){
+    if(e.key === 'Escape') closeSheet();
+    return;
+  }
+  const tag = (e.target.tagName || '').toLowerCase();
+  if(tag === 'input' || tag === 'select' || tag === 'textarea'){
+    if(e.key === 'Escape') e.target.blur();
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if((e.ctrlKey || e.metaKey) && k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if((e.ctrlKey || e.metaKey) && k === 'y'){ e.preventDefault(); redo(); return; }
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.key === 'Escape'){ pending = []; pinnedNet = null; focusHole = null; SEL = null; FOOT = false; REGION = null; LINE = null; renderCtx(); render(); return; }
+  if(TOOL === 'select' && SEL && e.key.indexOf('Arrow') === 0){
+    e.preventDefault();
+    const d = {ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1]}[e.key];
+    pushUndo(); moveSel(d[0], d[1]); commit();
+    return;
+  }
+  if(e.key === 'Delete' || e.key === 'Backspace'){
+    e.preventDefault();
+    if(TOOL === 'select' && SEL) deleteSel(); else setTool('erase');
+    return;
+  }
+  if(k === ',' || k === '.'){
+    const turns = k === '.' ? 1 : 3;
+    if(TOOL === 'area' && REGION){ e.preventDefault(); turnRegion(turns); return; }
+    if(SEL){ e.preventDefault(); turnPart(turns); return; }
+    return;
+  }
+  if(k === 'n'){ tnet.click(); return; }
+  if(k === '[' ){ zoom(-1); return; }
+  if(k === ']' ){ zoom(1);  return; }
+  if(KEYMAP[k]){ e.preventDefault(); setTool(KEYMAP[k]); }
+});
+
+function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
+tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net colour' : 'copper'; render(); };
+zin.onclick  = () => zoom(1);
+zout.onclick = () => zoom(-1);
+
+projname.oninput = () => { S.name = projname.value; autosave(); };
+function resize(){
+  const r = Math.max(2, Math.min(60, +rows.value || 13));
+  const c = Math.max(2, Math.min(80, +cols.value || 20));
+  if(r === S.board.rows && c === S.board.cols) return;
+  pushUndo();
+  S.board = {rows:r, cols:c};
+  commit();
+}
+rows.onchange = resize;
+cols.onchange = resize;
+
+/* ---- persistence ---- */
+const LS = 'stripboard.autosave.v1';
+let _sv;
+function autosave(){
+  clearTimeout(_sv);
+  _sv = setTimeout(() => {
+    try{ localStorage.setItem(LS, JSON.stringify(S)); saved.textContent = 'saved'; }
+    catch(err){ saved.textContent = 'autosave failed'; }
+  }, 250);
+}
+function load(obj){
+  pushUndo();
+  S = migrate(obj);
+  projname.value = S.name;
+  rows.value = S.board.rows;
+  cols.value = S.board.cols;
+  pending = []; pinnedNet = null; SEL = null;
+  commit();
+}
+btnDemo.onclick = () => load(demoProject());
+btnNew.onclick  = () => load({name:'untitled', board:{rows:13, cols:20}});
+btnExport.onclick = () => {
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+btnNet.onclick     = openNetlist;
+nlClose.onclick    = closeNetlist;
+nlText.oninput     = () => {
+  const v = nlText.value;
+  if(v.trim()) S.netlist = v; else delete S.netlist;
+  renderNetlist();
+  renderNetBadge();   // the footer must not wait for the next board render
+  autosave();
+};
+btnSheet.onclick   = openSheet;
+sheetClose.onclick = closeSheet;
+btnPrint.onclick   = () => window.print();
+btnSvgC.onclick    = () => downloadSVG('component');
+btnSvgS.onclick    = () => downloadSVG('solder');
+btnMd.onclick      = () => {
+  const md = buildMarkdown();
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(md).then(
+      () => { btnMd.textContent = 'copied'; setTimeout(() => { btnMd.textContent = 'copy markdown'; }, 1400); },
+      () => { btnMd.textContent = 'copy failed'; setTimeout(() => { btnMd.textContent = 'copy markdown'; }, 1400); });
+};
+sheetdoc.addEventListener('change', e => {
+  const cb = e.target.closest ? e.target.closest('input[type=checkbox]') : null;
+  if(!cb) return;
+  const set = builtSet();
+  if(cb.checked) set.add(cb.dataset.key); else set.delete(cb.dataset.key);
+  saveBuilt(set);
+  const prog = document.getElementById('prog');
+  if(prog) prog.textContent = set.size + ' / ' + (cutList().length + buildList().length);
+});
+
+btnImport.onclick = () => file.click();
+file.onchange = () => {
+  const f = file.files[0]; if(!f) return;
+  const fr = new FileReader();
+  fr.onload = () => { try{ load(JSON.parse(fr.result)); }catch(err){ flash('bad json'); } };
+  fr.readAsText(f);
+  file.value = '';
+};
+
+/* ---- boot ---- */
+(function boot(){
+  let stored = null;
+  try{ stored = JSON.parse(localStorage.getItem(LS) || 'null'); }catch(err){}
+  S = stored ? migrate(stored) : demoProject();
+  projname.value = S.name;
+  rows.value = S.board.rows;
+  cols.value = S.board.cols;
+  setTool('inspect');
+})();
+</script>
+</body>
+</html>

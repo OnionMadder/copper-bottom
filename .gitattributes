@@ -1,0 +1,4 @@
+# The app is a single HTML file people download and open by double-click, and
+# the test suite parses that same file. Keep line endings LF everywhere so a
+# clone on Windows doesn't silently differ from what build-site.js produced.
+* text=auto eol=lf
