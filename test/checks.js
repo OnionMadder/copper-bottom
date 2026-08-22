@@ -781,7 +781,20 @@ nlR = checkNetlist('A: IC1.1 C1.A\nB: C1.B @GND');       // fine, genuinely sepa
 ok(nlR.findings.length === 0, 'two genuinely separate nets are fine');
 nlR = checkNetlist('A: IC1.7\nB: @GND');                  // both on the ground rail
 ok(nlR.findings.some(f => f.rule === 'netlist-short'), 'two nets that are actually one is an error');
-ok(nlR.findings[0].msg.indexOf('declared them separately') >= 0, 'phrased from the netlist point of view');
+ok(nlR.findings[0].msg.indexOf('declared them apart') >= 0, 'phrased from the netlist point of view');
+ok(nlR.findings[0].msg.indexOf('share copper') >= 0,
+   'and says they share copper rather than that they are joined — joined is not always true');
+
+/* A part fitted backwards puts each leg on the other's strip, so the same pair
+   of declared names collides on two different strips. That is one mistake and
+   should read as one finding. */
+console.log('-- netlist: a reversed part is one finding, not one per strip --');
+S = demoProject(); computeNets();
+let d1 = S.parts.find(q => q.kind === 'ecap');
+let flipped = checkNetlist(['P: ' + d1.ref + '.A', 'Q: ' + d1.ref + '.B'].join(String.fromCharCode(10)));
+ok(flipped.findings.filter(f => f.rule === 'netlist-short').length <= 1,
+   'never more than one netlist-short for the same pair of names');
+
 
 console.log('-- netlist: the layout is guilty, not the netlist --');
 S = demoProject();

@@ -12,7 +12,7 @@ Single self-contained HTML file. No build step, no install, no server — double
 node test/fixture.test.js
 ```
 
-506 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+508 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -175,7 +175,10 @@ It reports two kinds of disagreement, which are the two ways a layout goes wrong
 
 - **declared together, actually apart** — "GND is broken into 2 pieces on the board", and
   it lists which members ended up in which piece
-- **declared apart, actually together** — two of your nets that the copper has joined
+- **declared apart, actually together** — two of your nets that ended up sharing copper.
+  Reported once per pair of names, however many strips it happens on: a part fitted the wrong
+  way round collides on two strips at once, and both sightings naming the same component is
+  the clue that the part is reversed rather than the wiring wrong
 
 Anything on the board the netlist never mentions is listed but not flagged; you are often
 describing only part of a circuit.

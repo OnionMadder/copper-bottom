@@ -1931,13 +1931,34 @@ function checkNetlist(text){
     if(!g.has(m.net)) g.set(m.net, []);
     g.get(m.net).push(m.token);
   }
+  /* One finding per set of declared names, not one per strip.
+
+     A part fitted the wrong way round puts each of its legs on the other leg's
+     strip, so the same pair of names collides twice. Reported per strip that
+     reads as a stutter, and worse, it buries the useful part: both sightings
+     name the same component, which is what tells you the part is reversed
+     rather than the wiring being wrong.
+
+     "share copper" rather than "are joined", because joined is not always
+     true. When a leg is simply on the wrong strip the two nets remain quite
+     separate — it is only the membership that crossed over. Listing which
+     tokens landed together says what actually happened either way. */
+  const shared = new Map();
   for(const [netId, g] of byActual){
     if(g.size < 2) continue;
-    const names = [...g.keys()];
-    findings.push({sev:'error', rule:'netlist-short',
-                   msg:names.join(' and ') + ' are joined on the board but you declared them separately',
-                   net:names[0], at:placed.find(m => m.netId === netId).at});
+    const names = [...g.keys()].sort();
+    const key = names.join('\u0000');
+    if(!shared.has(key))
+      shared.set(key, {names:names, places:[], at:placed.find(m => m.netId === netId).at});
+    /* ordered by the sorted names so the two halves read the same way each time */
+    shared.get(key).places.push(names.map(nm => g.get(nm).join('+')).join(' with '));
   }
+  for(const sh of shared.values())
+    findings.push({sev:'error', rule:'netlist-short',
+                   msg:sh.names.join(' and ') + ' share copper though you declared them apart' +
+                       (sh.places.length > 1 ? ', in ' + sh.places.length + ' places: ' : ': ') +
+                       sh.places.join('; '),
+                   net:sh.names[0], at:sh.at});
 
   /* what the netlist never mentioned — worth knowing, not worth failing over */
   const named = new Set(placed.map(m => m.token.toUpperCase()));
