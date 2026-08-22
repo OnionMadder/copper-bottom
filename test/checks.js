@@ -1317,5 +1317,36 @@ ok(Object.values(IC_LIB).filter(d => d.volts).every(d => d.volts.min < d.volts.m
 
 S = demoProject(); computeNets();
 
+/* The decoupling line is worked out from the pin table rather than typed in,
+   so it cannot drift from the pinout and it covers parts added later. */
+console.log('-- decoupling: derived from the rails, not hand-copied --');
+ok(decoupling('CD40106').indexOf('pins 14 and 7') >= 0, 'a 14-pin CMOS gate decouples across 14 and 7');
+ok(decoupling('CD4040').indexOf('pins 16 and 8') >= 0, 'a 16-pin one across 16 and 8');
+ok(decoupling('TL072').indexOf('pins 8 and 4') >= 0, 'a dual op-amp across 8 and 4');
+ok(decoupling('TL074').indexOf('pins 4 and 11') >= 0, 'a quad across 4 and 11 — different pins entirely');
+ok(decoupling('CD4049').indexOf('pins 1 and 8') >= 0,
+   "the 4049's odd rails come out right, which is the point of deriving it");
+ok(decoupling('LM13700').indexOf('pins 16 and 8') >= 0, 'and the OTA across 16 and 8');
+ok(decoupling('DIP-14') === null, 'a package with no known rails gets no advice');
+ok(decoupling('NE555').indexOf('current spike') >= 0,
+   'a part with something extra to say gets it appended');
+
+console.log('-- explain: the chip-wide lines are said once, not on every pin --');
+S = demoProject(); computeNets();
+const ic1 = S.ics[0];
+const linesAt = (pin) => explainHole.apply(null, pinPos(ic1, pin));
+const mentions = (pin, txt) => linesAt(pin).some(l => l.indexOf(txt) >= 0);
+ok(IC_LIB.CD40106.about, 'the 40106 carries a description');
+ok(mentions(1, 'Lunetta'), 'pin 1 carries the chip description');
+ok(!mentions(2, 'Lunetta'), 'pin 2 does not repeat it');
+ok(!mentions(14, 'Lunetta'), 'nor does the supply pin');
+ok(mentions(14, '100n between pins 14 and 7'),
+   'but the supply pin does carry the decoupling advice, because that is where the cap goes');
+ok(!mentions(2, '100n between'), 'and a signal pin does not');
+ok(linesAt(3).some(l => l.indexOf('pin 3') >= 0),
+   'every pin still says what that pin itself is');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

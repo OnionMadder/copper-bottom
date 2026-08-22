@@ -609,41 +609,41 @@ const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
 
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
-  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
+  CD40106:{pins:14, about:"six Schmitt inverters. One inverter, a resistor and a capacitor is an oscillator — the standard Lunetta voice, and six of them come in the one chip", name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
     note:'The inputs are Schmitt triggers: they snap over rather than drift, which is why a ' +
          'resistor and capacitor on one input turns an inverter into an oscillator.'},
-  CD4069 :{pins:14, name:'hex inverter',         cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX},
+  CD4069 :{pins:14, about:"six plain inverters. Without the Schmitt trigger they will not oscillate as reliably as a 40106, so use them for logic rather than for voices", name:'hex inverter',         cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX},
   CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
   CD4050 :{pins:16, name:'hex buffer',           cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
 
-  CD4011 :{pins:14, name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
+  CD4011 :{pins:14, about:"four plain NAND gates, for logic rather than oscillators — no Schmitt trigger on the inputs", name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4093 :{pins:14, about:"four Schmitt NAND gates. Like a 40106 voice, but each gate has a second input, so you can gate the oscillator on and off without extra parts", name:'quad Schmitt NAND',    cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
     note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does — ' +
          'with the second input left as a gate to switch the whole thing on and off.'},
-  CD4001 :{pins:14, name:'quad NOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4001 :{pins:14, about:"four NOR gates. Two of them cross-coupled makes a latch, which is the usual way to build a set-reset from logic", name:'quad NOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4071 :{pins:14, name:'quad OR',              cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4081 :{pins:14, name:'quad AND',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4070 :{pins:14, name:'quad XOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4077 :{pins:14, name:'quad XNOR',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
-  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4013,
+  CD4013 :{pins:14, about:"two flip-flops. Wire D back to /Q and each one halves the clock, which is how you get sub-octaves", name:'dual D flip-flop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4013,
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
-  CD4017 :{pins:16, name:'decade counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4017,
+  CD4017 :{pins:16, about:"counts 0 to 9 with one output high at a time. The basis of nearly every simple step sequencer", name:'decade counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4017,
     roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
-  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4040,
+  CD4040 :{pins:16, about:"twelve flip-flops in a chain. Feed an audio-rate square wave in and every output is another octave down", name:'12-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4040,
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
-  CD4046 :{pins:16, name:'phase-locked loop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4046,
+  CD4046 :{pins:16, about:"a VCO with a phase comparator attached. Most synth builds use only the VCO half and ignore the rest", name:'phase-locked loop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4046,
     /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
     roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
            13:'out',14:'in',16:'vdd'}},
 
   /* Analog switches: the switched pins carry signal either way, so the tool
      claims a direction only for the control pins and the rails. */
-  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4051,
+  CD4051 :{pins:16, about:"passes one of eight signals through to a common pin, chosen by three logic inputs. The switch at the heart of a sequencer", name:'8-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4051,
     roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
-  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
+  CD4066 :{pins:14, about:"four switches you open and close with logic instead of your fingers — voltage-controlled routing", name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
 
   /* ---- timers ---- */
@@ -652,7 +652,7 @@ const IC_LIB = {
      exactly like a short to the pin-short rule, and on a 555 build they are the
      normal case rather than the exception -- without this the tool calls a
      correct board broken four times over, which is worse than not checking. */
-  NE555  :{pins:8, name:'timer', cmos:false,
+  NE555  :{pins:8, decoupleNote:'a 555 throws a current spike into the rail every time it switches, and this is the cap that keeps that out of everything else', about:"the timer everything gets built from. Two of them and a handful of parts is an Atari Punk Console", name:'timer', cmos:false,
     note:'Trigger (2) starts the pulse, threshold (6) ends it, and discharge (7) empties the ' +
          'timing cap between the two. Tying 2 to 6 makes it run continuously.',
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
@@ -665,10 +665,10 @@ const IC_LIB = {
   NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
-  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL072  :{pins:8, about:"the default audio op-amp — quiet, cheap, and in more pedals than any other part",  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  JRC4558:{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   LM358  :{pins:8,  name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
@@ -678,22 +678,22 @@ const IC_LIB = {
   TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  LM324  :{pins:14, name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM324  :{pins:14, about:"four op-amps in one package, and it will run from a single low rail — handy when board space matters more than noise", name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
   /* ---- the odd-shaped ones ---- */
-  LM386  :{pins:8, name:'audio power amp', cmos:false,
+  LM386  :{pins:8, about:"a small speaker amplifier. Half a watt or so, happy on a battery", name:'audio power amp', cmos:false,
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
-  LM13700:{pins:16, name:'dual OTA', cmos:false,
+  LM13700:{pins:16, about:"two OTAs — amplifiers whose gain is set by a current rather than a resistor. This is the chip a voltage-controlled filter or amplifier is built around", name:'dual OTA', cmos:false,
     volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
     roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'vee',
            9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}, pinInfo:PINS_LM13700},
   /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
      open on most delay builds, and the floating-input rule would cry wolf on
      every one of them. That rule is aimed at unbuffered logic inputs. */
-  PT2399 :{pins:16, name:'echo processor', cmos:false,
+  PT2399 :{pins:16, about:"an entire delay line on one chip. Good from about 30ms to 600ms; past that it turns to mud, which some people want", name:'echo processor', cmos:false,
     volts:{min:4.5, max:5.5, note:'5V only - it needs its own regulator on a 9V pedal or a 12V rack'},
     roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'in',8:'in',
            9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
@@ -1339,6 +1339,24 @@ function icSupply(ic){
   return {pos:pos, neg:neg, total:+(pos - neg).toFixed(2)};
 }
 
+/* Where the decoupling cap goes, worked out from the pinout instead of written
+   down forty times. The cap bridges the chip's positive rail and its negative
+   one, and the library already knows which pins those are — deriving it means
+   it cannot drift from the pin table the way a hand-copied note would, and it
+   covers every part in the library including ones added later. */
+function decoupling(part){
+  const def = IC_LIB[part];
+  if(!def || !def.roles) return null;
+  const find = (role) => {
+    for(const pin of Object.keys(def.roles)) if(def.roles[pin] === role) return +pin;
+    return null;
+  };
+  const pos = find('vdd'), neg = find('vee') !== null ? find('vee') : find('gnd');
+  if(pos === null || neg === null) return null;
+  return '100n between pins ' + pos + ' and ' + neg +
+         ', as close to the chip as it will go' + (def.decoupleNote ? ' — ' + def.decoupleNote : '') + '.';
+}
+
 /* ============================================================
    EXPLAIN
    The panel already said what a hole IS. This says what it is FOR.
@@ -1438,6 +1456,25 @@ function explainHole(r, c){
 
   for(const oc of occupants(r, c)){
     if(oc.type === 'ic'){
+      const def = IC_LIB[oc.ic.part] || {};
+      /* Said once per chip rather than on all sixteen pins. Pin 1 is where you
+         look to work out which way round the chip goes, so it is where the
+         description belongs; the decoupling note belongs on the supply pins,
+         which is where the cap actually lands. */
+      /* `about` is what the part is for, `note` is how it works. Both are
+         about the whole chip rather than this pin, so both are said once, on
+         pin 1 — the pin you look at anyway to work out which way round it goes.
+         Repeating them on all sixteen pins buried the line that was actually
+         about the pin under the cursor. */
+      if(oc.pin === 1){
+        if(def.about) lines.push(oc.ic.part + ' — ' + def.about + '.');
+        if(def.note)  lines.push(def.note);
+      }
+      const role = pinRoleOf(oc.ic, oc.pin);
+      if(role === 'vdd' || role === 'vee' || role === 'gnd'){
+        const dec = decoupling(oc.ic.part);
+        if(dec) lines.push(dec);
+      }
       const info = pinInfoOf(oc.ic, oc.pin);
       if(info)
         lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is ' + info.n +
@@ -1460,15 +1497,6 @@ function explainHole(r, c){
         .map(oc => oc.ic.ref + '.' + oc.pin);
   const net = explainNet(NET.netAt(r, c), selfPins);
   if(net) lines.push(net);
-
-  /* The chip-wide note goes last. It is the same paragraph on all fourteen
-     pins, so leading with it would bury the one line that is about the pin
-     actually under the cursor. */
-  for(const oc of occupants(r, c)){
-    if(oc.type !== 'ic') continue;
-    const chip = IC_LIB[oc.ic.part];
-    if(chip && chip.note) lines.push(oc.ic.part + ' — ' + chip.note);
-  }
 
   const n = NET.netAt(r, c);
   if(n && n.segs.length > 1)
