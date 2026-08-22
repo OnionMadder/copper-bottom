@@ -103,6 +103,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .readout .big{font-size:14px; font-weight:700; letter-spacing:.08em}
 .readout .row{color:var(--gray); margin-top:3px}
 .readout .row b{color:#fff; font-weight:400}
+.readout .why{
+  color:#C9C3DC; margin-top:7px; padding-top:6px; line-height:1.55;
+  border-top:1px dashed var(--line2);
+}
+.readout .why + .why{border-top:0; margin-top:4px; padding-top:0}
 .netwrap{flex:1; overflow-y:auto; min-height:0}
 .drcwrap{flex:1.3; overflow-y:auto; min-height:54px; border-bottom:1px solid var(--line)}
 .f{display:flex; align-items:flex-start; gap:6px; padding:5px 9px 5px 8px; cursor:pointer;
@@ -359,6 +364,110 @@ function migrate(obj){
 
 /* IC library. `roles` drives pin labelling now and the floating-input DRC later.
    in = logic input, out = output, vdd/gnd = supply. */
+/* Pin names and what each pin is for, in words a builder can act on.
+
+   Shared per family exactly as `roles` is, and for the same reason: a name
+   that drifts from its twin is a lie told confidently. A pin absent from these
+   tables falls back to showing its role, which is what the panel did before —
+   missing detail degrades to less detail, never to wrong detail.
+
+   `n` is the datasheet's name for the pin. `d` is optional, and only earns its
+   place where knowing the name still leaves you stuck. */
+const PINS_NE555 = {
+  1: {n:'GND',  d:'the negative supply, and the reference everything else is measured against'},
+  2: {n:'TRIG', d:'starts the pulse — fires when this pin falls below a third of the supply'},
+  3: {n:'OUT',  d:'the output, swinging nearly rail to rail; it can drive a small load directly'},
+  4: {n:'RESET',d:'holds the timer off while it is low, so tie it to the supply when unused'},
+  5: {n:'CTRL', d:'sets the comparator threshold; normally left open, or 10n to ground if the supply is noisy'},
+  6: {n:'THR',  d:'ends the pulse — fires when this pin rises above two thirds of the supply'},
+  7: {n:'DIS',  d:'dumps the timing capacitor to ground; it can only pull down, never up'},
+  8: {n:'V+',   d:'the positive supply'},
+};
+const inA = (g, out) => ({n:g + 'A', d:'input of inverter ' + g + '; its output is pin ' + out});
+const inY = (g, inp) => ({n:g + 'Y', d:'output of inverter ' + g + ' — it goes high when pin ' + inp + ' goes low'});
+const PINS_INV_HEX = {
+  1:inA(1,2),  2:inY(1,1),  3:inA(2,4),  4:inY(2,3),  5:inA(3,6),  6:inY(3,5),
+  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:inY(4,9),  9:inA(4,8),  10:inY(5,11), 11:inA(5,10), 12:inY(6,13), 13:inA(6,12),
+  14:{n:'VDD', d:'the positive supply'},
+};
+const gIn  = (g, leg, mate, out) =>
+  ({n:g + leg, d:'input of gate ' + g + ', paired with pin ' + mate + '; they drive pin ' + out});
+const gOut = (g, a, b) =>
+  ({n:g + 'Y', d:'output of gate ' + g + ', decided by pins ' + a + ' and ' + b});
+const PINS_GATE_QUAD2 = {
+  1:gIn(1,'A',2,3), 2:gIn(1,'B',1,3), 3:gOut(1,1,2),
+  4:gOut(2,5,6),    5:gIn(2,'A',6,4), 6:gIn(2,'B',5,4),
+  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:gIn(3,'A',9,10), 9:gIn(3,'B',8,10), 10:gOut(3,8,9),
+  11:gOut(4,12,13), 12:gIn(4,'A',13,11), 13:gIn(4,'B',12,11),
+  14:{n:'VDD', d:'the positive supply'},
+};
+const PINS_BUF_HEX = {
+  1:{n:'VDD', d:'the positive supply — note it is pin 1 here, not the usual top corner'},
+  2:{n:'1Y'}, 3:{n:'1A'}, 4:{n:'2Y'}, 5:{n:'2A'}, 6:{n:'3Y'}, 7:{n:'3A'},
+  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  9:{n:'4A'}, 10:{n:'4Y'}, 11:{n:'5A'}, 12:{n:'5Y'},
+  13:{n:'NC', d:'not connected inside the chip; nothing you do to this pin matters'},
+  14:{n:'6Y'}, 15:{n:'6A'},
+  16:{n:'NC', d:'not connected inside the chip; nothing you do to this pin matters'},
+};
+const PINS_OPAMP_DUAL = {
+  1:{n:'OUT A'}, 2:{n:'IN\u2212 A'}, 3:{n:'IN+ A'},
+  4:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  5:{n:'IN+ B'}, 6:{n:'IN\u2212 B'}, 7:{n:'OUT B'},
+  8:{n:'V+', d:'the positive supply'},
+};
+const PINS_OPAMP_SINGLE = {
+  1:{n:'OFFSET', d:'offset null; left open on almost every audio build'},
+  2:{n:'IN\u2212'}, 3:{n:'IN+'},
+  4:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  5:{n:'OFFSET', d:'offset null; left open on almost every audio build'},
+  6:{n:'OUT'},
+  7:{n:'V+', d:'the positive supply'},
+  8:{n:'NC', d:'not connected inside the chip'},
+};
+const PINS_OPAMP_QUAD = {
+  1:{n:'OUT A'}, 2:{n:'IN\u2212 A'}, 3:{n:'IN+ A'},
+  4:{n:'V+', d:'the positive supply'},
+  5:{n:'IN+ B'}, 6:{n:'IN\u2212 B'}, 7:{n:'OUT B'},
+  8:{n:'OUT C'}, 9:{n:'IN\u2212 C'}, 10:{n:'IN+ C'},
+  11:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  12:{n:'IN+ D'}, 13:{n:'IN\u2212 D'}, 14:{n:'OUT D'},
+};
+const PINS_LM386 = {
+  1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
+  2:{n:'IN\u2212'}, 3:{n:'IN+'},
+  4:{n:'GND', d:'the negative supply'},
+  5:{n:'OUT', d:'the speaker output; it sits at half the supply, so it needs a coupling cap'},
+  6:{n:'V+', d:'the positive supply'},
+  7:{n:'BYPASS', d:'internal reference; 10u to ground quietens it, or leave it open'},
+  8:{n:'GAIN', d:'the other end of the gain network — see pin 1'},
+};
+const PINS_LM13700 = {
+  1:{n:'IABC A', d:'amplifier bias current for A — this is the control input; the chip does what this current tells it'},
+  2:{n:'DIODE A'}, 3:{n:'IN+ A'}, 4:{n:'IN\u2212 A'},
+  5:{n:'OUT A', d:'a current output, not a voltage — it wants a resistor to ground to become a signal'},
+  6:{n:'BUF IN A'}, 7:{n:'BUF OUT A'},
+  8:{n:'V\u2212', d:'the negative supply'},
+  9:{n:'BUF OUT B'}, 10:{n:'BUF IN B'},
+  11:{n:'OUT B', d:'a current output, not a voltage — see pin 5'},
+  12:{n:'IN\u2212 B'}, 13:{n:'IN+ B'}, 14:{n:'DIODE B'},
+  15:{n:'IABC B', d:'amplifier bias current for B — the control input for the second half'},
+  16:{n:'V+', d:'the positive supply'},
+};
+const PINS_PT2399 = {
+  1:{n:'VCC', d:'5V only — this chip does not take 9V, so it needs its own regulator'},
+  2:{n:'REF', d:'half-supply reference the audio swings around'},
+  3:{n:'AGND', d:'analog ground'}, 4:{n:'DGND', d:'digital ground'},
+  5:{n:'CLK OUT'},
+  6:{n:'VCO', d:'sets the delay time — this is the pin the delay pot works on'},
+  7:{n:'CC1', d:'clock capacitor; normally left open'},
+  8:{n:'CC0', d:'clock capacitor; normally left open'},
+  9:{n:'OP1 OUT'}, 10:{n:'OP1 IN'}, 11:{n:'OP2 IN'}, 12:{n:'OP2 OUT'},
+  13:{n:'LPF2 IN'}, 14:{n:'LPF2 OUT'}, 15:{n:'LPF1 OUT'}, 16:{n:'LPF1 IN'},
+};
+
 /* Pin roles by family. A family's pinout is written once and shared, because
    the alternative is what this replaces: CD4011 and CD4093 are the same
    silicon arrangement, one entry drifted from the other, and pins 8 and 10 sat
@@ -388,18 +497,22 @@ const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gn
    floating is normal. */
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
-  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, roles:INV_HEX},
-  CD4069 :{pins:14, name:'hex inverter',         cmos:true, roles:INV_HEX},
-  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, roles:BUF_HEX},
-  CD4050 :{pins:16, name:'hex buffer',           cmos:true, roles:BUF_HEX},
+  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, roles:INV_HEX, pinInfo:PINS_INV_HEX,
+    note:'The inputs are Schmitt triggers: they snap over rather than drift, which is why a ' +
+         'resistor and capacitor on one input turns an inverter into an oscillator.'},
+  CD4069 :{pins:14, name:'hex inverter',         cmos:true, roles:INV_HEX, pinInfo:PINS_INV_HEX},
+  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
+  CD4050 :{pins:16, name:'hex buffer',           cmos:true, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
 
-  CD4011 :{pins:14, name:'quad NAND',            cmos:true, roles:GATE_QUAD2},
-  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, roles:GATE_QUAD2},
-  CD4001 :{pins:14, name:'quad NOR',             cmos:true, roles:GATE_QUAD2},
-  CD4071 :{pins:14, name:'quad OR',              cmos:true, roles:GATE_QUAD2},
-  CD4081 :{pins:14, name:'quad AND',             cmos:true, roles:GATE_QUAD2},
-  CD4070 :{pins:14, name:'quad XOR',             cmos:true, roles:GATE_QUAD2},
-  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, roles:GATE_QUAD2},
+  CD4011 :{pins:14, name:'quad NAND',            cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
+    note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does — ' +
+         'with the second input left as a gate to switch the whole thing on and off.'},
+  CD4001 :{pins:14, name:'quad NOR',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4071 :{pins:14, name:'quad OR',              cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4081 :{pins:14, name:'quad AND',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4070 :{pins:14, name:'quad XOR',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
   CD4013 :{pins:14, name:'dual D flip-flop', cmos:true,
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
@@ -428,45 +541,47 @@ const IC_LIB = {
      normal case rather than the exception -- without this the tool calls a
      correct board broken four times over, which is worse than not checking. */
   NE555  :{pins:8, name:'timer', cmos:false,
+    note:'Trigger (2) starts the pulse, threshold (6) ends it, and discharge (7) empties the ' +
+         'timing cap between the two. Tying 2 to 6 makes it run continuously.',
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
-    ties:[[2,6],[6,7],[2,6,7]]},
+    ties:[[2,6],[6,7],[2,6,7]], pinInfo:PINS_NE555},
 
   /* ---- op-amps ---- */
-  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE},
-  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE},
-  LM741  :{pins:8,  name:'op-amp',                cmos:false, roles:OPAMP_SINGLE},
-  NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE},
-  OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE},
+  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  LM741  :{pins:8,  name:'op-amp',                cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
-  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL},
-  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL},
-  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, roles:OPAMP_DUAL},
-  JRC4558:{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL},
-  JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL},
-  NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL},
-  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL},
-  LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL},
-  OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL},
+  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4558:{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
-  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD},
-  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD},
-  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, roles:OPAMP_QUAD},
-  LM324  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD},
-  LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD},
+  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM324  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
   /* ---- the odd-shaped ones ---- */
   LM386  :{pins:8, name:'audio power amp', cmos:false,
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
-    roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}},
+    roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
   LM13700:{pins:16, name:'dual OTA', cmos:false,
     roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'gnd',
-           9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}},
+           9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}, pinInfo:PINS_LM13700},
   /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
      open on most delay builds, and the floating-input rule would cry wolf on
      every one of them. That rule is aimed at unbuffered logic inputs. */
   PT2399 :{pins:16, name:'echo processor', cmos:false,
     roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'in',8:'in',
-           9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}},
+           9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
 
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
   'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
@@ -1050,6 +1165,143 @@ function buildList(){
   items.sort((a, b) => a.rank - b.rank ||
     a.ref.localeCompare(b.ref, undefined, {numeric:true}));
   return items;
+}
+
+/* ============================================================
+   EXPLAIN
+   The panel already said what a hole IS. This says what it is FOR.
+
+   "IC1 pin 2 - in" is true and useless to anyone who does not already know
+   that pin 2 of a 555 is the trigger. If they knew that, they were not stuck.
+
+   Every sentence below is assembled from something the model already knows:
+   the pin tables, the net's own membership, which chip owns a cut. Nothing is
+   generated, nothing is guessed, and a fact the tool does not hold produces no
+   sentence rather than a vague one. That is what keeps this safe to put in
+   front of somebody who cannot check it.
+   ============================================================ */
+
+function pinRoleOf(ic, pin){
+  const d = IC_LIB[ic.part];
+  return (d && d.roles && d.roles[pin]) || '';
+}
+function pinInfoOf(ic, pin){
+  const d = IC_LIB[ic.part];
+  return (d && d.pinInfo && d.pinInfo[pin]) || null;
+}
+/* "IC1 pin 3 (OUT)" — the shortest phrase that is still unambiguous */
+function pinPhrase(ic, pin){
+  const info = pinInfoOf(ic, pin);
+  return ic.ref + ' pin ' + pin + (info ? ' (' + info.n + ')' : '');
+}
+
+function explainCut(r, c){
+  const key = K(r, c);
+  if(S.cuts.indexOf(key) < 0) return null;
+  const owner = S.ics.find(ic => (ic.autoCuts || []).indexOf(key) >= 0);
+  if(owner){
+    const n = owner.pins;
+    return 'This cut belongs to ' + owner.ref + '. A chip sits astride its strips, so without ' +
+           'the cut each pin would be joined straight to the one facing it — pin 1 to pin ' + n + '.';
+  }
+  return 'The strip is cut here, so the holes on either side are no longer the same net.';
+}
+
+function explainNet(net, self){
+  if(!net) return null;
+  /* `self` is the pins in the hole under the cursor. Naming them back is noise:
+     the line above already said what this pin is, and a panel that repeats
+     itself reads as though it has nothing to add. */
+  const here = new Set(self || []);
+  const other = q => !here.has(q.ic.ref + '.' + q.pin);
+  const pads = padsOnNet(net);
+  const pins = pinsOnNet(net);
+  const legs = connections().filter(x => x.kind === 'lead' &&
+    NET.netAt(x.at[0], x.at[1]) && NET.netAt(x.at[0], x.at[1]).id === net.id);
+  const members = pads.length + pins.length + legs.length;
+
+  const railPad = pads.map(d => ({pad:d, cls:powerClass(d.label)})).filter(x => x.cls)[0];
+  if(railPad){
+    if(railPad.cls.cls === 'gnd')
+      return 'This is the ground rail — the side every part returns to.';
+    return 'This is the ' + railPad.pad.label + ' supply rail, feeding ' +
+           (members - 1) + ' thing' + (members - 1 === 1 ? '' : 's') + ' on the board.';
+  }
+
+  if(members <= 1)
+    return 'Nothing else is on this run of copper yet, so anything landing here connects to nothing.';
+
+  const drivers = pins.filter(q => pinRoleOf(q.ic, q.pin) === 'out');
+  const listeners = pins.filter(q => pinRoleOf(q.ic, q.pin) === 'in');
+  const list = qs => qs.map(q => pinPhrase(q.ic, q.pin)).join(' and ');
+
+  if(drivers.length > 1)
+    return 'Careful: ' + list(drivers) +
+           ' are both outputs on this net, and two outputs fighting is not a circuit.';
+
+  const otherDrivers   = drivers.filter(other);
+  const otherListeners = listeners.filter(other);
+
+  if(drivers.length === 1 && !otherDrivers.length)
+    return otherListeners.length
+      ? 'This pin drives the strip. ' + list(otherListeners) + ' listens to it.'
+      : 'This pin drives the strip; everything else here is listening to it.';
+  if(otherDrivers.length === 1)
+    return 'Driven by ' + pinPhrase(otherDrivers[0].ic, otherDrivers[0].pin) +
+           '. Everything else here is listening to it.';
+  if(!drivers.length && otherListeners.length)
+    return 'It shares this strip with ' + list(otherListeners) +
+           '. Nothing here drives it but the parts sitting on it.';
+  if(!drivers.length && listeners.length)
+    return 'Nothing on this strip drives it — it is fed by the parts sitting on it.';
+  return members + ' things share this run of copper.';
+}
+
+/* Everything worth saying about one hole, in order of what a stuck builder
+   would ask: what is this, what is it for, and what else is it touching. */
+function explainHole(r, c){
+  const lines = [];
+  const cut = explainCut(r, c);
+  if(cut){ lines.push(cut); return lines; }
+
+  for(const oc of occupants(r, c)){
+    if(oc.type === 'ic'){
+      const info = pinInfoOf(oc.ic, oc.pin);
+      if(info)
+        lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is ' + info.n +
+                   (info.d ? ' — ' + info.d : '') + '.');
+      else {
+        const role = pinRoleOf(oc.ic, oc.pin);
+        if(role) lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is an ' + role + ' pin.');
+      }
+    }
+    if(oc.type === 'pad' && oc.pad.to)
+      lines.push('This pad is where ' + oc.pad.to + ' joins the board.');
+    if(oc.type === 'part' && oc.part.polarized){
+      const lg = legLabels(oc.part);
+      if(!lg) lines.push(oc.part.ref + ' is polarised, and this is its ' +
+        (oc.leg === 0 ? 'positive' : 'negative') + ' end — backwards it will not work.');
+    }
+  }
+
+  const selfPins = occupants(r, c).filter(oc => oc.type === 'ic')
+        .map(oc => oc.ic.ref + '.' + oc.pin);
+  const net = explainNet(NET.netAt(r, c), selfPins);
+  if(net) lines.push(net);
+
+  /* The chip-wide note goes last. It is the same paragraph on all fourteen
+     pins, so leading with it would bury the one line that is about the pin
+     actually under the cursor. */
+  for(const oc of occupants(r, c)){
+    if(oc.type !== 'ic') continue;
+    const chip = IC_LIB[oc.ic.part];
+    if(chip && chip.note) lines.push(oc.ic.part + ' — ' + chip.note);
+  }
+
+  const n = NET.netAt(r, c);
+  if(n && n.segs.length > 1)
+    lines.push('This net is ' + n.segs.length + ' separate runs of copper, joined by links.');
+  return lines;
 }
 
 /* Bill of materials — the build order collapsed into what you actually buy.
@@ -2231,6 +2483,9 @@ function renderReadout(){
       if(pins.length) o.push('<div class="row">pins: <b>' + esc(pins.join(', ')) + '</b></div>');
     }
   }
+  if(hoverHole)
+    for(const line of explainHole(hoverHole[0], hoverHole[1]))
+      o.push('<div class="why">' + esc(line) + '</div>');
   if(pinnedNet !== null) o.push('<div class="row" style="color:#00FFA3">net ' + pinnedNet + ' pinned · esc to release</div>');
   readout.innerHTML = o.join('');
 }

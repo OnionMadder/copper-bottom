@@ -1113,5 +1113,68 @@ ok(IC_LIB.PT2399.cmos === false,
 
 S = demoProject(); computeNets();
 
+console.log('-- explain: pin names come from the library, never from guesswork --');
+S = demoProject(); computeNets();
+const why = (r, c) => explainHole(r, c).join(' ');
+ok(why(3, 7).indexOf('1A') >= 0, 'IC1 pin 1 on the demo is named 1A');
+ok(why(3, 7).indexOf('its output is pin 2') >= 0,
+   'and it says which pin the gate drives, which is the part a name alone leaves out');
+ok(why(4, 7).indexOf('1Y') >= 0, 'pin 2 is the matching output');
+ok(why(3, 7).indexOf('Schmitt') >= 0, 'the CD40106 note explains why an RC makes it oscillate');
+
+console.log('-- explain: it says nothing rather than something vague --');
+S = {name:'bare', board:{rows:4, cols:6}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(why(1, 1).indexOf('Nothing else is on this run of copper') >= 0,
+   'a bare strip says so plainly rather than staying silent or padding');
+S = demoProject(); computeNets();
+let noInfo = IC_LIB.CD4017;
+ok(!noInfo.pinInfo, 'the CD4017 carries no pin table yet');
+ok(pinInfoOf({part:'CD4017'}, 3) === null,
+   'so pinInfoOf returns nothing for it rather than inventing a name');
+
+console.log('-- explain: a cut says whose it is and what it prevents --');
+const cutWhy = why(3, 8);
+ok(cutWhy.indexOf('belongs to IC1') >= 0, 'an auto-cut names the chip that owns it');
+ok(cutWhy.indexOf('pin 1 to pin 14') >= 0,
+   'and names the two pins it keeps apart, counted from the real pin count');
+
+console.log('-- explain: rails are called rails --');
+ok(why(0, 0).indexOf('supply rail') >= 0, 'the +12V pad reads as a supply rail');
+let gndHole = S.pads.find(d => d.label === 'GND').at;
+ok(why(gndHole[0], gndHole[1]).indexOf('ground rail') >= 0, 'and GND as the ground rail');
+
+console.log('-- explain: who drives whom --');
+/* Pin 2 of the demo 40106 is an output with the coupling cap on its strip. */
+ok(why(4, 7).indexOf('drives the strip') >= 0,
+   'standing on an output says this pin drives the strip');
+ok(why(4, 7).indexOf('Driven by IC1 pin 2') < 0,
+   'and does not name back the pin you are already standing on');
+
+console.log('-- explain: it never claims a direction the library does not hold --');
+let claims = [];
+for(const [name, def] of Object.entries(IC_LIB)){
+  for(const k of Object.keys(def.pinInfo || {})){
+    if(!(+k >= 1 && +k <= def.pins)) claims.push(name + ' pin ' + k);
+  }
+}
+ok(claims.length === 0, 'no pin table names a pin the package does not have: ' + claims.join(', '));
+
+let mismatched = [];
+for(const [name, def] of Object.entries(IC_LIB)){
+  if(!def.pinInfo) continue;
+  for(const [k, info] of Object.entries(def.pinInfo)){
+    const role = (def.roles || {})[k];
+    const nm = info.n.toUpperCase();
+    if(role === 'vdd' && !/V\+|VDD|VCC/.test(nm)) mismatched.push(name + ' ' + k + ' ' + nm);
+    if(role === 'gnd' && !/GND|VSS|V\u2212|V-/.test(nm)) mismatched.push(name + ' ' + k + ' ' + nm);
+  }
+}
+ok(mismatched.length === 0,
+   'every supply pin is named like a supply pin, so the role and the words agree: ' +
+   mismatched.join(', '));
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
