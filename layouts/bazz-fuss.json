@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "name": "Bazz Fuss",
+  "board": { "rows": 10, "cols": 10 },
+  "cuts": [],
+  "ics": [],
+  "parts": [
+    { "id": "q1", "kind": "trans", "ref": "Q1", "device": "2N3904", "pins": [[3, 3], [4, 3], [5, 3]] },
+    { "id": "d1", "kind": "diode", "ref": "D1", "value": "1N914", "polarized": true, "pins": [[5, 8], [4, 6]] },
+    { "id": "r1", "kind": "res",  "ref": "R1", "value": "100k", "pins": [[0, 5], [5, 5]] },
+    { "id": "c1", "kind": "cap",  "ref": "C1", "value": "1u",   "pins": [[1, 4], [4, 4]] },
+    { "id": "c2", "kind": "ecap", "ref": "C2", "value": "4u7",  "polarized": true, "pins": [[5, 9], [7, 9]] },
+    { "id": "c3", "kind": "ecap", "ref": "C3", "value": "100u", "polarized": true, "pins": [[0, 8], [2, 8]] },
+    { "id": "j1", "kind": "link", "ref": "J1", "value": "",     "pins": [[3, 2], [2, 2]] }
+  ],
+  "pads": [
+    { "id": "p1", "label": "+9V",   "at": [0, 0], "to": "battery + / DC jack centre pin" },
+    { "id": "p2", "label": "IN",    "at": [1, 0], "to": "input jack tip" },
+    { "id": "p3", "label": "GND",   "at": [2, 0], "to": "battery - / both jack sleeves" },
+    { "id": "p4", "label": "VOL_3", "at": [2, 6], "to": "volume pot lug 3" },
+    { "id": "p5", "label": "VOL_1", "at": [7, 0], "to": "volume pot lug 1 (from C2)" }
+  ],
+  "netlist": "# Bazz Fuss - Mess o' Pedals breadboard build, moved to stripboard\n# 1u film input cap (the fuller-sounding option), 2N3904, 1N914.\n# The volume pot's wiper goes straight to the output jack tip, so it\n# never touches the board.\n#\n# D1 band (cathode, leg B) goes on the BASE. Backwards and there is no\n# sound at all - it is the fault almost every time.\n\nV+:     @+9V R1.A C3.A\nIN:     @IN C1.A\nGND:    @GND @VOL_3 Q1.E C3.B\n\nBASE:   Q1.B C1.B D1.B\nCOLL:   Q1.C R1.B D1.A C2.A\nVOL:    C2.B @VOL_1"
+}
