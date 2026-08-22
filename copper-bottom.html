@@ -957,6 +957,75 @@ function buildList(){
   return items;
 }
 
+/* Bill of materials — the build order collapsed into what you actually buy.
+   The build order answers "what do I solder next"; this answers "do I own all
+   of this", which is the question you want settled the night before, not with
+   an iron already hot. */
+
+/* Engineering notation to a number, so a parts list sorts 10n before 100n
+   rather than putting 100n first because '1' precedes '9'. Handles both
+   4.7k and the European 4k7, where the multiplier stands in for the point.
+   Anything unparseable sorts last rather than pretending to be zero — a
+   value we cannot read is not a value of nothing. */
+function engMult(ch){
+  switch(ch){
+    case 'p':           return 1e-12;
+    case 'n':           return 1e-9;
+    case 'u': case '\u00B5': return 1e-6;
+    case 'm':           return 1e-3;   // lower case milli, upper case mega
+    case 'R': case 'r': return 1;
+    case 'k': case 'K': return 1e3;
+    case 'M':           return 1e6;
+  }
+  return 1;
+}
+function engValue(v){
+  const str = String(v == null ? '' : v).trim();
+  if(!str) return Infinity;
+  const infix = /^(\d+)([pnu\u00B5mrRkKM])(\d+)$/.exec(str);            // 4k7
+  if(infix) return parseFloat(infix[1] + '.' + infix[3]) * engMult(infix[2]);
+  const plain = /^(\d+(?:\.\d+)?)\s*([pnu\u00B5mrRkKM])?/.exec(str);     // 4.7k, 100n, 10
+  if(plain) return parseFloat(plain[1]) * (plain[2] ? engMult(plain[2]) : 1);
+  return Infinity;
+}
+
+function bom(){
+  const rows = new Map();
+  const add = (kind, name, what, note) => {
+    const key = [kind, what || '', note || ''].join('\u0000');
+    if(!rows.has(key)) rows.set(key, {kind:kind, name:name, what:what || '', note:note || '', qty:0, refs:[]});
+    return rows.get(key);
+  };
+
+  for(const q of S.parts){
+    const lib = PART_LIB[q.kind] || {};
+    /* A diode's package changes the part you order, so DO-35 and DO-41 are
+       separate lines. How a part is MOUNTED does not — a resistor standing on
+       end is the same resistor, so mount:'vertical' deliberately does not
+       split the row. */
+    const note = q.kind === 'diode' ? diodePkg(q) : '';
+    const r = add(q.kind, lib.name || q.kind, q.device || q.value || '', note);
+    r.qty++; r.refs.push(q.ref);
+  }
+  for(const ic of S.ics){
+    const r = add('ic', 'IC', ic.part, ic.pins + '-pin DIP');
+    r.qty++; r.refs.push(ic.ref);
+  }
+
+  const out = [...rows.values()];
+  const byRef = (a, b) => a.localeCompare(b, undefined, {numeric:true});
+  for(const r of out) r.refs.sort(byRef);
+  /* Ordered by BUILD_ORDER rather than a second hand-written kind order.
+     One canonical sequence in the file is worth more than a BOM that happens
+     to read conventionally, and the two drifting apart would be its own bug. */
+  out.sort((a, b) =>
+    (BUILD_ORDER[a.kind] || 99) - (BUILD_ORDER[b.kind] || 99) ||
+    engValue(a.what) - engValue(b.what) ||
+    a.what.localeCompare(b.what) ||
+    a.note.localeCompare(b.note));
+  return out;
+}
+
 /* Off-board wiring: the step that turns a working board into a working pedal,
    and the one no other tool writes down. */
 function wireList(){
@@ -987,6 +1056,17 @@ function buildMarkdown(){
   L.push('');
   table(['row', 'col', 'from left (back)'],
         cuts.map(c => [c.row, c.col, c.back]));
+
+  const parts = bom();
+  const totalParts = parts.reduce((n, r) => n + r.qty, 0);
+  L.push('## Parts (' + totalParts + ')');
+  L.push('');
+  L.push('What to pull from the drawer before you start.');
+  L.push('');
+  table(['qty', 'part', 'value', 'refs'],
+        parts.map(r => [r.qty, r.name,
+                        (r.what || '-') + (r.note ? ' (' + r.note + ')' : ''),
+                        r.refs.join(' ')]));
 
   const items = buildList();
   L.push('## Build order (' + items.length + ')');
@@ -2389,6 +2469,7 @@ function saveBuilt(set){
 function renderSheet(){
   const done = builtSet();
   const cuts = cutList(), items = buildList(), wires = wireList();
+  const parts = bom(), totalParts = parts.reduce((n, r) => n + r.qty, 0);
   const total = cuts.length + items.length;
   let ticked = 0;
   const box = (key) => {
@@ -2400,6 +2481,10 @@ function renderSheet(){
   const cutRows = cuts.map(c =>
     '<tr><td>' + box('cut:' + c.row + ',' + c.col) + '</td><td>' + c.row + '</td><td>' + c.col +
     '</td><td><b>' + c.back + '</b></td></tr>').join('');
+  const partRows = parts.map(r =>
+    '<tr><td><b>' + r.qty + '</b></td><td>' + esc(r.name) + '</td><td>' +
+    esc(r.what || '-') + (r.note ? ' <span class="n">' + esc(r.note) + '</span>' : '') +
+    '</td><td>' + esc(r.refs.join(' ')) + '</td></tr>').join('');
   const itemRows = items.map((it, i) =>
     '<tr><td>' + box(it.key) + '</td><td>' + (i+1) + '</td><td><b>' + esc(it.ref) + '</b></td><td>' +
     esc(it.name) + '</td><td>' + esc(it.what || '—') + '</td><td class="mono">' + esc(it.holes) +
@@ -2424,6 +2509,11 @@ function renderSheet(){
       'look at the back of the board — the mirror flip is already done for you.</p>' +
     '<table><thead><tr><th></th><th>row</th><th>col</th><th>from left (back)</th></tr></thead>' +
       '<tbody>' + (cutRows || '<tr><td colspan="4">no cuts</td></tr>') + '</tbody></table>' +
+    '<h2>Parts <span class="n">' + totalParts + '</span></h2>' +
+    '<p>What to pull from the drawer before you start. Counted by what you buy, so a ' +
+      'resistor standing on end is still the same resistor, but a DO-41 diode is not a DO-35.</p>' +
+    '<table><thead><tr><th>qty</th><th>part</th><th>value</th><th>refs</th></tr></thead>' +
+      '<tbody>' + (partRows || '<tr><td colspan="4">nothing placed</td></tr>') + '</tbody></table>' +
     '<h2>Build order <span class="n">' + items.length + '</span></h2>' +
     '<p>Flat parts first, tall parts last, so nothing blocks the iron.</p>' +
     '<table><thead><tr><th></th><th>#</th><th>ref</th><th>part</th><th>value</th><th>holes</th></tr></thead>' +

@@ -12,7 +12,7 @@ Single self-contained HTML file. No build step, no install, no server — double
 node test/fixture.test.js
 ```
 
-395 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+416 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -52,6 +52,8 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | netlist check (optional) | done |
 | body collision DRC | done |
 | footprint editor | done |
+| lead-span DRC + diode packages | done |
+| bill of materials | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -200,6 +202,13 @@ It is white on paper whatever the app's theme, and everything on it is printable
 - **The cut list does the flip for you.** Alongside each cut's `[row, col]` it gives the
   hole number counting from the left edge *as seen from the back*. That mental flip is
   where builds die. Cuts are ordered row by row, left to right across the back.
+- **Parts** is the same set collapsed into what you buy: quantities, values and the refs
+  on each line. The build order answers *what do I solder next*; this answers *do I own
+  all of this*, which is a question you want settled the night before rather than with an
+  iron already hot. It counts by the part you order, so a resistor marked
+  `mount:"vertical"` is still the same resistor and shares a line, while a DO-41 diode
+  gets its own row because it is not a DO-35. Values sort by magnitude rather than
+  alphabetically — 10n before 100n — and `4k7` reads the same as `4.7k`.
 - **Build order** puts flat parts first and tall ones last — links, resistors, diodes, the
   IC, film caps, transistors, electrolytics, trimpots — so nothing blocks the iron.
 - **Every row has a checkbox**, kept in memory and mirrored to localStorage. You are

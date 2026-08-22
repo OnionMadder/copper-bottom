@@ -931,5 +931,71 @@ ok(Object.keys(FOOTPRINT).every(k => FOOTPRINT[k] === null || FOOTPRINT[k].leads
 
 S = demoProject(); computeNets();
 
+console.log('-- bom: engineering values sort by magnitude, not alphabet --');
+ok(engValue('10n') < engValue('100n'), '10n comes before 100n');
+ok(engValue('100R') < engValue('1k'), '100R comes before 1k');
+ok(engValue('4k7') === 4700, 'the European 4k7 reads as 4.7k');
+ok(engValue('4.7k') === 4700, 'and 4.7k agrees with it');
+ok(engValue('1M') > engValue('1m'), 'mega beats milli — case is not decoration');
+ok(engValue('') === Infinity, 'a missing value sorts last');
+ok(engValue('BC547') === Infinity,
+   'and so does one we cannot read, rather than pretending to be zero');
+
+console.log('-- bom: identical parts collapse, different ones do not --');
+S = demoProject(); computeNets();
+let b = bom();
+let res = b.filter(r => r.kind === 'res');
+ok(res.length === 1, 'the three 10k resistors are one line');
+ok(res[0].qty === 3, 'with a quantity of three');
+ok(res[0].refs.join(' ') === 'R1 R2 R3', 'and every ref listed, naturally sorted');
+ok(b.reduce((n, r) => n + r.qty, 0) === S.parts.length + S.ics.length,
+   'every part and chip is accounted for exactly once');
+
+console.log('-- bom: value splits a row, mounting does not --');
+S = demoProject();
+S.parts.find(q => q.ref === 'R3').value = '22k';
+computeNets();
+ok(bom().filter(r => r.kind === 'res').length === 2, 'a different value is a different line');
+S = demoProject();
+S.parts.find(q => q.ref === 'R1').mount = 'vertical';
+computeNets();
+ok(bom().filter(r => r.kind === 'res').length === 1,
+   'a resistor standing on end is still the same resistor to buy');
+
+console.log('-- bom: a diode package splits the row, because it is a different part --');
+S = demoProject();
+S.parts.push({id:'b1', kind:'diode', ref:'DA', value:'1N4148', pins:[[1,14],[4,14]]});
+S.parts.push({id:'b2', kind:'diode', ref:'DB', value:'1N5817', pins:[[2,14],[5,14]]});
+computeNets();
+let dio = bom().filter(r => r.kind === 'diode');
+ok(dio.length === 2, 'a DO-35 and a DO-41 are two lines');
+ok(dio.every(r => r.note === 'DO-35' || r.note === 'DO-41'), 'each naming its package');
+S.parts[S.parts.length-1].value = '1N4148';
+computeNets();
+ok(bom().filter(r => r.kind === 'diode').length === 1,
+   'make them the same part and they collapse to one');
+
+console.log('-- bom: chips carry their pin count --');
+S = demoProject(); computeNets();
+let chip = bom().find(r => r.kind === 'ic');
+ok(chip && chip.what === 'CD40106', 'the chip is listed by part number');
+ok(chip.note === '14-pin DIP', 'with the package you have to order');
+
+console.log('-- bom: ordering follows BUILD_ORDER, not a second hand-written list --');
+S = demoProject(); computeNets();
+b = bom();
+let ranks = b.map(r => BUILD_ORDER[r.kind] || 99);
+ok(ranks.every((v, i2) => i2 === 0 || ranks[i2-1] <= v), 'kinds come out in BUILD_ORDER sequence');
+let caps = b.filter(r => r.kind === 'cap').map(r => r.what);
+ok(caps.length < 2 || engValue(caps[0]) <= engValue(caps[1]),
+   'and within a kind, by value ascending');
+
+console.log('-- bom: an empty board says nothing rather than breaking --');
+S = {name:'empty', board:{rows:5, cols:5}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(bom().length === 0, 'no parts, no lines');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

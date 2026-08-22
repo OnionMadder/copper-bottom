@@ -25,6 +25,7 @@ out.nets = NET.nets.length;
 out.findings = runDRC();
 out.cuts = cutList();
 out.build = buildList();
+out.bom = bom();
 out.wires = wireList();
 out.md = buildMarkdown();
 out.netlist = S.netlist ? checkNetlist(S.netlist) : null;
@@ -51,6 +52,12 @@ for(const n of o.netTable){
   console.log('  ' + String(n.id).padStart(2) + '  ' + String(n.holes).padStart(2) + 'h  ' +
               members.join('  '));
 }
+
+console.log('\nPARTS');
+for(const r of o.bom)
+  console.log('  ' + String(r.qty).padStart(2) + ' x  ' + r.name.padEnd(13) +
+              (r.what || '-').padEnd(9) + (r.note ? '(' + r.note + ')' : '').padEnd(14) +
+              r.refs.join(' '));
 
 console.log('\nDRC');
 if(!o.findings.length){
