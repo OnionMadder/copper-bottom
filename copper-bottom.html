@@ -53,7 +53,7 @@ input,select,button{
 input:focus,select:focus{outline:1px solid var(--cyan); border-color:var(--cyan)}
 button{cursor:pointer}
 button:hover{border-color:var(--cyan); color:var(--cyan)}
-.main{flex:1; display:flex; min-height:0}
+.main{flex:1; display:flex; min-height:0; position:relative}
 
 /* ---- tool rail ---- */
 .rail{
@@ -138,7 +138,31 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .foot .sp{flex:1}
 .foot input{width:44px; padding:1px 4px; text-align:center}
 #saved{color:var(--mint)}
-@media (max-width:900px){ .side{display:none} .rail{width:52px} .rail .lbl,.ctx,.hint{display:none} }
+/* Narrow layout. The rail keeps its tool icons and loses its text labels, and
+   the net/DRC side panel goes away — both are readable losses.
+
+   The context panel must NOT go away with them, though it used to. It is the
+   only place in the whole app you can name a pad, type a value, pick a chip,
+   set a span or rotate a part, so hiding it to reclaim 130px left an editor
+   that could not edit: every pad silently kept the default label of GND with
+   no field anywhere to change it, and no hint that a field existed at all.
+   Anyone running Windows at 125% scaling met this on a 1000px window.
+
+   It now floats over the bottom-left corner of the board instead. That costs
+   no board width, and it disappears by itself when the current tool has
+   nothing to configure. */
+@media (max-width:900px){
+  .side{display:none}
+  .rail{width:52px}
+  .rail .lbl,.hint{display:none}
+  .ctx{
+    position:absolute; left:60px; bottom:10px; z-index:6;
+    width:200px; max-height:62%; overflow-y:auto;
+    border:1px solid var(--line2); border-radius:4px; border-top:1px solid var(--line2);
+    background:var(--panel); box-shadow:0 8px 22px rgba(0,0,0,.6);
+  }
+  .ctx:empty{display:none}
+}
 
 /* ---- build sheet: a document, so it is white whatever the app is ---- */
 .sheet{position:fixed; inset:0; z-index:50; background:#0B0813; display:flex; flex-direction:column}
