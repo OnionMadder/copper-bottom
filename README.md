@@ -12,7 +12,7 @@ Single self-contained HTML file. No build step, no install, no server — double
 node test/fixture.test.js
 ```
 
-416 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+467 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -54,6 +54,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | footprint editor | done |
 | lead-span DRC + diode packages | done |
 | bill of materials | done |
+| chip library — ~40 parts, shared family pinouts | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -392,7 +393,30 @@ additions beyond the original plan:
   takes exactly those with it and leaves any hand-cut holes alone.
 - `IC_LIB` and `LEG_LIB` in the source — pin counts, per-pin roles (`in` / `out` / `vdd` /
   `gnd`) and three-leg pinouts. Roles colour the pin numbers, and the floating-input rule
-  can't exist without them.
+  can't exist without them. The part picker is built straight from
+  `Object.keys(IC_LIB)`, so adding a chip is one entry and nothing else.
+
+## The chip library
+
+Around forty parts: the CMOS 4000 series a noise box reaches for (hex inverters and
+buffers, the quad gate family, 4013, 4017, 4040, 4046, 4051, 4066), the op-amps a pedal
+reaches for (TL07x/TL08x singles, duals and quads, 4558, 4580, 5532, 5534, LM358, LM324,
+LM833, OPA134/2134), the NE555, and the odd-shaped ones — LM386, LM13700, PT2399.
+
+Pinouts inside a family are written **once** and shared by reference — `GATE_QUAD2`,
+`OPAMP_DUAL`, `OPAMP_QUAD`, `INV_HEX`, `BUF_HEX`. That is not tidiness. `CD4011` and
+`CD4093` are the same arrangement, one entry had drifted from the other, and pins 8 and
+10 sat swapped in both: a NAND input labelled as an output, which is exactly the pin the
+floating-input rule is there to catch and exactly the pin it stayed silent on. Sharing
+the table makes that class of drift impossible, and the test suite asserts the family
+arrangements pin by pin.
+
+**A pin left out of `roles` is deliberate.** It means the tool does not claim to know that
+pin's direction — an analog switch throw on a 4066, a timing cap leg, an offset-null pin.
+Saying nothing is honest, and it keeps the floating-input rule off pins where floating is
+the normal case. For the same reason the PT2399 is marked `cmos:false` despite being CMOS
+silicon: its `CC0`/`CC1` pins are meant to be left open on most delay builds, and the rule
+is aimed at unbuffered logic inputs, not at every chip made on a CMOS process.
 
 Two optional per-part fields say things the geometry cannot work out on its own. Both are
 plain properties on the part, so `export .json` carries them and `import` returns them

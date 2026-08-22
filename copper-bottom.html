@@ -359,29 +359,115 @@ function migrate(obj){
 
 /* IC library. `roles` drives pin labelling now and the floating-input DRC later.
    in = logic input, out = output, vdd/gnd = supply. */
+/* Pin roles by family. A family's pinout is written once and shared, because
+   the alternative is what this replaces: CD4011 and CD4093 are the same
+   silicon arrangement, one entry drifted from the other, and pins 8 and 10 sat
+   swapped in both. That mislabels a NAND input as an output, which means the
+   floating-input rule -- the one that exists to catch exactly this -- stayed
+   silent on a genuinely floating pin 8. Verified against the datasheets:
+   inputs 1,2,5,6,8,9,12,13 and outputs 3,4,10,11.
+
+   'gnd' does duty for a negative supply too. Nothing here runs split rails, and
+   inventing a 'vee' the DRC never reads would be vocabulary for its own sake. */
+const OPAMP_DUAL   = {1:'out',2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'vdd'};
+const OPAMP_SINGLE = {2:'in',3:'in',4:'gnd',6:'out',7:'vdd'};   // 1,5 offset null; 8 nc
+const OPAMP_QUAD   = {1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',
+                      8:'out',9:'in',10:'in',11:'gnd',12:'in',13:'in',14:'out'};
+const GATE_QUAD2   = {1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',
+                      8:'in',9:'in',10:'out',11:'out',12:'in',13:'in',14:'vdd'};
+const INV_HEX      = {1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',
+                      8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'};
+const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gnd',
+                      9:'in',10:'out',11:'in',12:'out',14:'out',15:'in'};  // 13,16 nc
+
+/* IC library. `roles` drives pin labelling and the floating-input DRC.
+   `ties` lists pin groups the datasheet itself joins -- see NE555.
+   A pin left out of `roles` is one whose direction the tool does not claim to
+   know: an analog switch throw, a timing cap leg, a trim pin. Saying nothing is
+   the honest answer there, and it keeps the floating-input rule off pins where
+   floating is normal. */
 const IC_LIB = {
-  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true,
-    roles:{1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'}},
-  CD4069 :{pins:14, name:'hex inverter', cmos:true,
-    roles:{1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'}},
-  CD4093 :{pins:14, name:'quad Schmitt NAND', cmos:true,
-    roles:{1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'}},
-  CD4011 :{pins:14, name:'quad NAND', cmos:true,
-    roles:{1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'}},
+  /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
+  CD40106:{pins:14, name:'hex Schmitt inverter', cmos:true, roles:INV_HEX},
+  CD4069 :{pins:14, name:'hex inverter',         cmos:true, roles:INV_HEX},
+  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, roles:BUF_HEX},
+  CD4050 :{pins:16, name:'hex buffer',           cmos:true, roles:BUF_HEX},
+
+  CD4011 :{pins:14, name:'quad NAND',            cmos:true, roles:GATE_QUAD2},
+  CD4093 :{pins:14, name:'quad Schmitt NAND',    cmos:true, roles:GATE_QUAD2},
+  CD4001 :{pins:14, name:'quad NOR',             cmos:true, roles:GATE_QUAD2},
+  CD4071 :{pins:14, name:'quad OR',              cmos:true, roles:GATE_QUAD2},
+  CD4081 :{pins:14, name:'quad AND',             cmos:true, roles:GATE_QUAD2},
+  CD4070 :{pins:14, name:'quad XOR',             cmos:true, roles:GATE_QUAD2},
+  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, roles:GATE_QUAD2},
+
+  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true,
+    roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
+           8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
   CD4017 :{pins:16, name:'decade counter', cmos:true,
     roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
-  TL072  :{pins:8, name:'dual FET op-amp', cmos:false,
-    roles:{1:'out',2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'vdd'}},
-  TL074  :{pins:14, name:'quad FET op-amp', cmos:false,
-    roles:{1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',8:'out',9:'in',10:'in',11:'gnd',12:'out',13:'in',14:'in'}},
+  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true,
+    roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
+           9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
+  CD4046 :{pins:16, name:'phase-locked loop', cmos:true,
+    /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
+    roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
+           13:'out',14:'in',16:'vdd'}},
+
+  /* Analog switches: the switched pins carry signal either way, so the tool
+     claims a direction only for the control pins and the rails. */
+  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true,
+    roles:{6:'in',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
+  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true,
+    roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
+
+  /* ---- timers ---- */
   /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties
      trigger to threshold; a monostable ties threshold to discharge. Both look
      exactly like a short to the pin-short rule, and on a 555 build they are the
-     normal case rather than the exception — without this the tool calls a
+     normal case rather than the exception -- without this the tool calls a
      correct board broken four times over, which is worse than not checking. */
   NE555  :{pins:8, name:'timer', cmos:false,
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
     ties:[[2,6],[6,7],[2,6,7]]},
+
+  /* ---- op-amps ---- */
+  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE},
+  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, roles:OPAMP_SINGLE},
+  LM741  :{pins:8,  name:'op-amp',                cmos:false, roles:OPAMP_SINGLE},
+  NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE},
+  OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE},
+
+  TL072  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL},
+  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, roles:OPAMP_DUAL},
+  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, roles:OPAMP_DUAL},
+  JRC4558:{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL},
+  JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL},
+  NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL},
+  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL},
+  LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL},
+  OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL},
+
+  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD},
+  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, roles:OPAMP_QUAD},
+  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, roles:OPAMP_QUAD},
+  LM324  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD},
+  LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD},
+
+  /* ---- the odd-shaped ones ---- */
+  LM386  :{pins:8, name:'audio power amp', cmos:false,
+    /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
+    roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}},
+  LM13700:{pins:16, name:'dual OTA', cmos:false,
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'gnd',
+           9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}},
+  /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
+     open on most delay builds, and the floating-input rule would cry wolf on
+     every one of them. That rule is aimed at unbuffered logic inputs. */
+  PT2399 :{pins:16, name:'echo processor', cmos:false,
+    roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'in',8:'in',
+           9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}},
+
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
   'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
   'DIP-16':{pins:16, name:'generic 16-pin', cmos:false, roles:{}},

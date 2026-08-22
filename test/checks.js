@@ -1043,5 +1043,75 @@ ok(!IC_LIB.CD40106.ties,
 
 S = demoProject(); computeNets();
 
+console.log('-- IC library: every entry is structurally sound --');
+let libBad = [];
+for(const [name, def] of Object.entries(IC_LIB)){
+  if(!def.pins || !def.name) { libBad.push(name + ' missing pins/name'); continue; }
+  for(const k of Object.keys(def.roles || {})){
+    const n = +k;
+    if(!(n >= 1 && n <= def.pins)) libBad.push(name + ' role on pin ' + k + ' of ' + def.pins);
+  }
+  for(const g of def.ties || [])
+    for(const n of g)
+      if(!(n >= 1 && n <= def.pins)) libBad.push(name + ' tie on pin ' + n + ' of ' + def.pins);
+}
+ok(libBad.length === 0, 'no role or tie names a pin the package does not have: ' + libBad.join('; '));
+
+let vddBad = [];
+for(const [name, def] of Object.entries(IC_LIB)){
+  const vdd = Object.values(def.roles || {}).filter(r => r === 'vdd').length;
+  if(vdd > 1) vddBad.push(name + ' has ' + vdd + ' supply pins');
+}
+ok(vddBad.length === 0, 'no chip declares two positive supply pins: ' + vddBad.join('; '));
+
+/* The bug this guards: CD4011 and CD4093 are one arrangement, one entry drifted
+   from the other, and pins 8 and 10 sat swapped in both. A NAND input labelled
+   as an output is invisible to the floating-input rule, which is the whole
+   reason that rule exists. */
+console.log('-- IC library: the quad 2-input gate arrangement --');
+for(const g of ['CD4011','CD4093','CD4001','CD4071','CD4081','CD4070','CD4077']){
+  const r = IC_LIB[g].roles;
+  const ins  = [1,2,5,6,8,9,12,13].every(n => r[n] === 'in');
+  const outs = [3,4,10,11].every(n => r[n] === 'out');
+  ok(ins && outs, g + ': inputs 1,2,5,6,8,9,12,13 and outputs 3,4,10,11');
+}
+ok(IC_LIB.CD4011.roles[8] === 'in' && IC_LIB.CD4011.roles[10] === 'out',
+   'pin 8 is an input and pin 10 an output — the pair that used to be swapped');
+ok(IC_LIB.CD4011.roles === IC_LIB.CD4093.roles,
+   'and the twins share one table, so neither can drift from the other again');
+
+console.log('-- IC library: op-amps --');
+for(const q of ['TL074','TL084','TL064','LM324','LM348']){
+  const r = IC_LIB[q].roles;
+  ok(r[12] === 'in' && r[13] === 'in' && r[14] === 'out',
+     q + ': the fourth amp is IN+ 12, IN- 13, OUT 14');
+}
+ok(IC_LIB.TL074.roles[4] === 'vdd' && IC_LIB.TL074.roles[11] === 'gnd',
+   'quad op-amp rails are 4 and 11');
+for(const d of ['TL072','TL082','JRC4558','NE5532','LM358','OPA2134']){
+  const r = IC_LIB[d].roles;
+  ok(r[1] === 'out' && r[7] === 'out' && r[4] === 'gnd' && r[8] === 'vdd',
+     d + ': outputs 1 and 7, rails 4 and 8');
+}
+
+console.log('-- IC library: hex inverters alternate in, out --');
+for(const h of ['CD40106','CD4069']){
+  const r = IC_LIB[h].roles;
+  ok([1,3,5,9,11,13].every(n => r[n] === 'in') && [2,4,6,8,10,12].every(n => r[n] === 'out'),
+     h + ': six inverters, each input beside its output');
+}
+
+console.log('-- IC library: the chips actually on the shelf are in it --');
+for(const c of ['NE555','CD4093','CD40106','TL072','LM13700','PT2399','LM386','CD4040','CD4051','CD4066']){
+  ok(!!IC_LIB[c], c + ' is in the library');
+}
+ok(Object.keys(IC_LIB).length >= 40, 'the library holds at least 40 parts');
+ok(IC_LIB.LM13700.roles[8] === 'gnd' && IC_LIB.LM13700.roles[16] === 'vdd',
+   'LM13700 rails are 8 and 16, not the 7/14 an op-amp habit would guess');
+ok(IC_LIB.PT2399.cmos === false,
+   'the PT2399 is marked non-CMOS on purpose — CC0/CC1 are meant to float');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
