@@ -83,6 +83,28 @@ button:hover{border-color:var(--cyan); color:var(--cyan)}
 .ctx input,.ctx select{width:100%}
 .hint{color:var(--dim); font-size:10.5px; line-height:1.5; padding:0 2px}
 
+/* ---- reference pane ---- */
+.ref{
+  flex:0 0 auto; display:flex; flex-direction:column; min-width:180px;
+  border-left:1px solid var(--line); background:var(--panel);
+}
+.ref .bar{
+  display:flex; align-items:center; gap:5px; padding:6px 7px; flex:0 0 auto;
+  border-bottom:1px solid var(--line);
+}
+.ref .bar .sp{flex:1}
+.ref .bar .pct{color:var(--dim); font-size:10.5px; min-width:34px; text-align:center}
+.ref .view{flex:1; overflow:hidden; position:relative; background:var(--void); cursor:grab}
+.ref .view.drag{cursor:grabbing}
+.ref img{position:absolute; left:0; top:0; transform-origin:0 0; max-width:none; -webkit-user-drag:none}
+.ref .empty{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:var(--dim); font-size:10.5px; line-height:1.7; text-align:center; padding:0 20px;
+}
+/* the grab strip that sets how much room the pane takes */
+.refgrip{flex:0 0 auto; width:5px; cursor:col-resize; background:var(--line)}
+.refgrip:hover{background:var(--mint)}
+
 /* ---- board ---- */
 .stage{flex:1; min-width:0; overflow:auto; padding:22px; background:var(--void)}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
@@ -235,10 +257,12 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
   <button id="btnNew">new</button>
   <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
+  <button id="btnRef" title="keep a schematic or layout photo beside the board while you work">reference</button>
   <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
   <button id="btnExport">export .json</button>
   <button id="btnImport">import</button>
   <input type="file" id="file" accept=".json,application/json" style="display:none">
+  <input type="file" id="refFile" accept="image/*" style="display:none">
 </div>
 
 <div class="main">
@@ -271,6 +295,27 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 
   <div class="stage" id="stage"></div>
 
+  <div class="refgrip" id="refGrip" hidden></div>
+  <div class="ref" id="ref" hidden>
+    <div class="bar">
+      <button id="refOpen">open image</button>
+      <div class="sp"></div>
+      <button id="refOut" title="zoom out">&minus;</button>
+      <span class="pct" id="refPct">100%</span>
+      <button id="refIn" title="zoom in">+</button>
+      <button id="refFit" title="fit the whole image in the pane">fit</button>
+      <button id="refClear" title="forget this image">clear</button>
+    </div>
+    <div class="view" id="refView">
+      <img id="refImg" alt="reference image" hidden>
+      <div class="empty" id="refEmpty">
+        Open a schematic, or a photo of somebody else&rsquo;s layout, and it stays here
+        beside the board while you place parts.<br><br>
+        It is a reference only. It never becomes part of the circuit, and it is not
+        written into your exported .json.
+      </div>
+    </div>
+  </div>
   <div class="side">
     <h2>INSPECTOR</h2>
     <div class="readout" id="readout"></div>
@@ -3778,6 +3823,158 @@ btnExport.onclick = () => {
   a.click();
   URL.revokeObjectURL(a.href);
 };
+
+/* ============================================================
+   REFERENCE PANE
+   A schematic or a photo of someone else's layout, kept beside the board.
+
+   Deliberately NOT part of the layout. It lives under its own storage key and
+   is never written into the exported .json, because it is a thing you read
+   while building rather than a thing the board is made of — and because a
+   1MB photo baked into every export would make layouts unshareable.
+
+   The board's own autosave is protected from it: the image is capped well
+   under the storage quota, and if writing it ever fails the key is dropped
+   immediately rather than left to fill the quota and take the layout with it.
+   Losing a reference picture is a nuisance. Losing the layout is not.
+   ============================================================ */
+const REF_KEY = 'copper-bottom.reference.v1';
+const REF_MAX = 2 * 1024 * 1024;     // biggest data URL we will try to remember
+let REF = {src:null, x:0, y:0, z:1, w:38};
+
+function refShown(){ return !ref.hidden; }
+
+function refApply(){
+  if(REF.src){
+    refImg.hidden = false; refEmpty.hidden = true;
+    refImg.style.transform = 'translate(' + REF.x + 'px,' + REF.y + 'px) scale(' + REF.z + ')';
+  }else{
+    refImg.hidden = true; refEmpty.hidden = false;
+  }
+  refPct.textContent = Math.round(REF.z * 100) + '%';
+  ref.style.width = REF.w + '%';
+}
+
+function refFitNow(){
+  if(!REF.src || !refImg.naturalWidth) return;
+  const box = refView.getBoundingClientRect();
+  const z = Math.min((box.width - 16) / refImg.naturalWidth,
+                     (box.height - 16) / refImg.naturalHeight);
+  REF.z = Math.max(0.02, Math.min(z, 1));
+  REF.x = (box.width  - refImg.naturalWidth  * REF.z) / 2;
+  REF.y = (box.height - refImg.naturalHeight * REF.z) / 2;
+  refApply();
+}
+
+function refZoom(mult, cx, cy){
+  if(!REF.src) return;
+  const box = refView.getBoundingClientRect();
+  if(cx === undefined){ cx = box.width / 2; cy = box.height / 2; }
+  const z2 = Math.max(0.02, Math.min(REF.z * mult, 12));
+  /* keep whatever is under the cursor under the cursor */
+  REF.x = cx - (cx - REF.x) * (z2 / REF.z);
+  REF.y = cy - (cy - REF.y) * (z2 / REF.z);
+  REF.z = z2;
+  refApply();
+}
+
+function refSave(){
+  try{
+    if(REF.src && REF.src.length <= REF_MAX)
+      localStorage.setItem(REF_KEY, JSON.stringify({src:REF.src, w:REF.w}));
+    else
+      localStorage.removeItem(REF_KEY);
+  }catch(err){
+    /* out of room: drop the picture rather than let it crowd out the layout */
+    try{ localStorage.removeItem(REF_KEY); }catch(err2){}
+  }
+}
+
+function refSet(src){
+  REF.src = src || null;
+  if(!src){ refApply(); refSave(); return; }
+  refImg.onload = () => { refFitNow(); };
+  refImg.src = src;
+  refApply();
+  refSave();
+}
+
+function refToggle(on){
+  const show = on === undefined ? !refShown() : on;
+  ref.hidden = !show; refGrip.hidden = !show;
+  btnRef.classList.toggle('on', show);
+  if(show){ refApply(); if(REF.src && refImg.naturalWidth && REF.z === 1) refFitNow(); }
+}
+
+btnRef.onclick    = () => refToggle();
+refOpen.onclick   = () => refFile.click();
+refClear.onclick  = () => refSet(null);
+refIn.onclick     = () => refZoom(1.25);
+refOut.onclick    = () => refZoom(0.8);
+refFit.onclick    = refFitNow;
+
+refFile.onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { refSet(String(rd.result)); };
+  rd.readAsDataURL(f);
+  refFile.value = '';
+};
+
+/* drag to pan */
+(function(){
+  let on = false, px = 0, py = 0;
+  refView.addEventListener('pointerdown', e => {
+    if(!REF.src) return;
+    on = true; px = e.clientX; py = e.clientY;
+    refView.classList.add('drag'); refView.setPointerCapture(e.pointerId);
+  });
+  refView.addEventListener('pointermove', e => {
+    if(!on) return;
+    REF.x += e.clientX - px; REF.y += e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    refApply();
+  });
+  const stop = (e) => { on = false; refView.classList.remove('drag'); };
+  refView.addEventListener('pointerup', stop);
+  refView.addEventListener('pointercancel', stop);
+  refView.addEventListener('wheel', e => {
+    if(!REF.src) return;
+    e.preventDefault();
+    const box = refView.getBoundingClientRect();
+    refZoom(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - box.left, e.clientY - box.top);
+  }, {passive:false});
+})();
+
+/* drag the grip to set how much room the pane takes */
+(function(){
+  let on = false;
+  refGrip.addEventListener('pointerdown', e => {
+    on = true; refGrip.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  window.addEventListener('pointermove', e => {
+    if(!on) return;
+    const main = document.querySelector('.main').getBoundingClientRect();
+    const pct = ((main.right - e.clientX) / main.width) * 100;
+    REF.w = Math.max(15, Math.min(pct, 72));
+    refApply();
+  });
+  window.addEventListener('pointerup', () => { if(on){ on = false; refSave(); } });
+})();
+
+/* bring back last session's picture */
+(function(){
+  let stored = null;
+  try{ stored = JSON.parse(localStorage.getItem(REF_KEY) || 'null'); }catch(err){}
+  if(stored && stored.src){
+    if(stored.w) REF.w = stored.w;
+    refImg.onload = () => { if(refShown()) refFitNow(); };
+    REF.src = stored.src; refImg.src = stored.src;
+  }
+  refApply();
+})();
+
 btnNet.onclick     = openNetlist;
 nlClose.onclick    = closeNetlist;
 nlText.oninput     = () => {
