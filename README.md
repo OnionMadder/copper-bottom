@@ -12,7 +12,7 @@ Single self-contained HTML file. No build step, no install, no server — double
 node test/fixture.test.js
 ```
 
-482 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+506 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -56,6 +56,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | bill of materials | done |
 | chip library — ~40 parts, shared family pinouts | done |
 | explain layer — what a hole is FOR, not just what it is | done |
+| pin descriptions for all 40 parts | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.

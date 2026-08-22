@@ -435,6 +435,103 @@ const PINS_OPAMP_QUAD = {
   11:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
   12:{n:'IN+ D'}, 13:{n:'IN\u2212 D'}, 14:{n:'OUT D'},
 };
+/* --- counters, dividers and switches ---
+   Pinouts below were checked against datasheets rather than recalled, because
+   these are the parts whose pin order has no pattern to fall back on: a 4017's
+   outputs are not in counting order and a 4066's control pins are nowhere near
+   the switches they close. */
+
+const q4017 = n => ({n:'Q' + n, d:'goes high on count ' + n + ' and low again on the next clock'});
+const PINS_CD4017 = {
+  1:q4017(5), 2:q4017(1), 3:q4017(0), 4:q4017(2), 5:q4017(6), 6:q4017(7), 7:q4017(3),
+  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  9:q4017(8), 10:q4017(4), 11:q4017(9),
+  12:{n:'CARRY', d:'high for counts 0 to 4, so it can clock a second 4017 and count past ten'},
+  13:{n:'CLK INH', d:'freezes the count while it is high; tie it to ground when you are not using it'},
+  14:{n:'CLK', d:'advances the count one step on each rising edge'},
+  15:{n:'RESET', d:'sends the count back to Q0 while high — wire it to a Q output and the ' +
+        'sequence stops there, which is how you count fewer than ten'},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
+/* Qn divides the clock by 2^n, which is the only thing most builds want from it. */
+const q4040 = n => ({n:'Q' + n, d:'the clock divided by ' + Math.pow(2, n)});
+const PINS_CD4040 = {
+  1:q4040(12), 2:q4040(6), 3:q4040(5), 4:q4040(7), 5:q4040(4), 6:q4040(3), 7:q4040(2),
+  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  9:q4040(1),
+  10:{n:'CLK', d:'counts on each falling edge'},
+  11:{n:'RESET', d:'clears every output while high; tie it to ground when unused'},
+  12:q4040(9), 13:q4040(8), 14:q4040(10), 15:q4040(11),
+  16:{n:'VDD', d:'the positive supply'},
+};
+
+const ff = (n, half) => ({n:n + half, d:null});
+const PINS_CD4013 = {
+  1:{n:'Q1', d:'output of the first flip-flop'},
+  2:{n:'/Q1', d:'the opposite of pin 1, always'},
+  3:{n:'CLK1', d:'on each rising edge the flip-flop takes whatever is sitting on D (pin 5)'},
+  4:{n:'RESET1', d:'forces Q low while high; tie it to ground when unused'},
+  5:{n:'D1', d:'data in — wire it back to /Q (pin 2) and the flip-flop halves the clock'},
+  6:{n:'SET1', d:'forces Q high while high; tie it to ground when unused'},
+  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:{n:'SET2', d:'forces Q high while high; tie it to ground when unused'},
+  9:{n:'D2', d:'data in — wire it back to /Q (pin 12) to halve the clock'},
+  10:{n:'RESET2', d:'forces Q low while high; tie it to ground when unused'},
+  11:{n:'CLK2', d:'on each rising edge the second flip-flop takes D (pin 9)'},
+  12:{n:'/Q2', d:'the opposite of pin 13, always'},
+  13:{n:'Q2', d:'output of the second flip-flop'},
+  14:{n:'VDD', d:'the positive supply'},
+};
+
+const PINS_CD4046 = {
+  1:{n:'PHASE PULSES', d:'high while the loop is locked'},
+  2:{n:'PC1 OUT', d:'output of the XOR phase comparator'},
+  3:{n:'COMP IN', d:'the feedback going back into the comparator'},
+  4:{n:'VCO OUT', d:'the oscillator itself — a square wave whose pitch follows pin 9'},
+  5:{n:'INHIBIT', d:'stops the VCO while high; tie it to ground to leave it running'},
+  6:{n:'C1A', d:'the VCO timing capacitor goes between here and pin 7 — bigger means lower'},
+  7:{n:'C1B', d:'the other end of the timing capacitor'},
+  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  9:{n:'VCO IN', d:'the control voltage; this is the pin that sets the pitch'},
+  10:{n:'DEMOD OUT', d:'a buffered copy of pin 9, for reading the control voltage back'},
+  11:{n:'R1', d:'to ground; sets how far the VCO sweeps'},
+  12:{n:'R2', d:'to ground, or left open; sets the lowest frequency it will reach'},
+  13:{n:'PC2 OUT', d:'output of the edge-triggered phase comparator'},
+  14:{n:'SIGNAL IN', d:'the signal the loop is trying to lock to'},
+  15:{n:'ZENER', d:'an internal regulator, unused in most builds'},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
+const ch4051 = n => ({n:'CH' + n, d:'channel ' + n + ' — joined to the common pin 3 when A, B and C read ' + n});
+const PINS_CD4051 = {
+  1:ch4051(4), 2:ch4051(6),
+  3:{n:'COM', d:'the common end; whichever channel is selected joins here, and signal flows either way'},
+  4:ch4051(7), 5:ch4051(5),
+  6:{n:'INH', d:'disconnects every channel while high; tie it to ground when unused'},
+  7:{n:'VEE', d:'the negative supply for the signal itself — tie it to ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  9:{n:'C', d:'select bit worth 4'},
+  10:{n:'B', d:'select bit worth 2'},
+  11:{n:'A', d:'select bit worth 1 — A, B and C read together as a number from 0 to 7'},
+  12:ch4051(3), 13:ch4051(0), 14:ch4051(1), 15:ch4051(2),
+  16:{n:'VDD', d:'the positive supply'},
+};
+
+const sw = (letter, other) =>
+  ({n:'SW' + letter, d:'one end of switch ' + letter + '; it conducts both ways, so either end can be the input'});
+const ctl = (letter, a, b) =>
+  ({n:'CTRL ' + letter, d:'closes switch ' + letter + ' (pins ' + a + ' and ' + b + ') while high — ' +
+      'note the control pin sits nowhere near the switch it works'});
+const PINS_CD4066 = {
+  1:sw('A'), 2:sw('A'), 3:sw('B'), 4:sw('B'),
+  5:ctl('B', 3, 4), 6:ctl('C', 8, 9),
+  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:sw('C'), 9:sw('C'), 10:sw('D'), 11:sw('D'),
+  12:ctl('D', 10, 11), 13:ctl('A', 1, 2),
+  14:{n:'VDD', d:'the positive supply'},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -514,24 +611,24 @@ const IC_LIB = {
   CD4070 :{pins:14, name:'quad XOR',             cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4077 :{pins:14, name:'quad XNOR',            cmos:true, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
-  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true,
+  CD4013 :{pins:14, name:'dual D flip-flop', cmos:true, pinInfo:PINS_CD4013,
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
-  CD4017 :{pins:16, name:'decade counter', cmos:true,
+  CD4017 :{pins:16, name:'decade counter', cmos:true, pinInfo:PINS_CD4017,
     roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
-  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true,
+  CD4040 :{pins:16, name:'12-stage binary counter', cmos:true, pinInfo:PINS_CD4040,
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
-  CD4046 :{pins:16, name:'phase-locked loop', cmos:true,
+  CD4046 :{pins:16, name:'phase-locked loop', cmos:true, pinInfo:PINS_CD4046,
     /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
     roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
            13:'out',14:'in',16:'vdd'}},
 
   /* Analog switches: the switched pins carry signal either way, so the tool
      claims a direction only for the control pins and the rails. */
-  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true,
+  CD4051 :{pins:16, name:'8-channel analog mux', cmos:true, pinInfo:PINS_CD4051,
     roles:{6:'in',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
-  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true,
+  CD4066 :{pins:14, name:'quad bilateral switch', cmos:true, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
 
   /* ---- timers ---- */

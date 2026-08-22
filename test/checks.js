@@ -1128,10 +1128,13 @@ computeNets();
 ok(why(1, 1).indexOf('Nothing else is on this run of copper') >= 0,
    'a bare strip says so plainly rather than staying silent or padding');
 S = demoProject(); computeNets();
-let noInfo = IC_LIB.CD4017;
-ok(!noInfo.pinInfo, 'the CD4017 carries no pin table yet');
-ok(pinInfoOf({part:'CD4017'}, 3) === null,
-   'so pinInfoOf returns nothing for it rather than inventing a name');
+/* The generic packages are the permanent example of a chip the library knows
+   nothing about: you reach for DIP-14 precisely when your part is not in here. */
+ok(!IC_LIB['DIP-14'].pinInfo, 'a generic DIP carries no pin table, and never will');
+ok(pinInfoOf({part:'DIP-14'}, 3) === null,
+   'so pinInfoOf returns nothing rather than inventing a name');
+ok(pinInfoOf({part:'NOT-A-REAL-CHIP'}, 1) === null,
+   'and an unknown part number does the same instead of throwing');
 
 console.log('-- explain: a cut says whose it is and what it prevents --');
 const cutWhy = why(3, 8);
@@ -1173,6 +1176,64 @@ for(const [name, def] of Object.entries(IC_LIB)){
 ok(mismatched.length === 0,
    'every supply pin is named like a supply pin, so the role and the words agree: ' +
    mismatched.join(', '));
+
+S = demoProject(); computeNets();
+
+/* These are the parts with no pattern to fall back on, so the pin order is
+   pinned down here rather than trusted. Every number below was read off a
+   datasheet, not recalled. */
+console.log('-- counters: the 4017 outputs are not in counting order --');
+const nm = (chip, pin) => IC_LIB[chip].pinInfo[pin].n;
+ok(nm('CD4017', 3) === 'Q0', 'Q0 is pin 3');
+ok(nm('CD4017', 2) === 'Q1', 'Q1 is pin 2');
+ok(nm('CD4017', 4) === 'Q2', 'Q2 is pin 4');
+ok(nm('CD4017', 7) === 'Q3', 'Q3 is pin 7 — nowhere near the others');
+ok(nm('CD4017', 14) === 'CLK' && nm('CD4017', 15) === 'RESET' && nm('CD4017', 13) === 'CLK INH',
+   'clock 14, reset 15, inhibit 13');
+let seen4017 = [1,2,3,4,5,6,7,9,10,11].map(n => nm('CD4017', n)).sort();
+ok(new Set(seen4017).size === 10, 'all ten outputs are present exactly once');
+
+console.log('-- counters: the 4040 says what each output divides by --');
+ok(nm('CD4040', 9) === 'Q1' && IC_LIB.CD4040.pinInfo[9].d.indexOf('divided by 2') >= 0,
+   'Q1 on pin 9 halves the clock');
+ok(nm('CD4040', 1) === 'Q12' && IC_LIB.CD4040.pinInfo[1].d.indexOf('4096') >= 0,
+   'Q12 on pin 1 divides by 4096');
+ok(nm('CD4040', 10) === 'CLK' && nm('CD4040', 11) === 'RESET', 'clock 10, reset 11');
+
+console.log('-- muxes: the 4051 channels are scattered, and the select bits are weighted --');
+ok(nm('CD4051', 13) === 'CH0', 'channel 0 is pin 13');
+ok(nm('CD4051', 1) === 'CH4', 'channel 4 is pin 1');
+ok(nm('CD4051', 3) === 'COM', 'the common pin is 3');
+ok(IC_LIB.CD4051.pinInfo[11].d.indexOf('worth 1') >= 0 &&
+   IC_LIB.CD4051.pinInfo[10].d.indexOf('worth 2') >= 0 &&
+   IC_LIB.CD4051.pinInfo[9].d.indexOf('worth 4') >= 0,
+   'A is worth 1, B is 2, C is 4 — the part you cannot guess from the letters');
+ok(nm('CD4051', 7) === 'VEE', 'pin 7 is VEE, not ground, and says to tie it down on one rail');
+
+console.log('-- switches: the 4066 control pins sit away from their switches --');
+ok(nm('CD4066', 13).indexOf('A') >= 0 && IC_LIB.CD4066.pinInfo[13].d.indexOf('1 and 2') >= 0,
+   'switch A is pins 1 and 2 but its control is pin 13');
+ok(nm('CD4066', 5).indexOf('B') >= 0 && IC_LIB.CD4066.pinInfo[5].d.indexOf('3 and 4') >= 0,
+   'switch B is pins 3 and 4, control on pin 5');
+ok(IC_LIB.CD4066.pinInfo[13].d.indexOf('nowhere near') >= 0,
+   'and it warns that they are nowhere near each other');
+
+console.log('-- flip-flops: the 4013 divide-by-two trick is written down --');
+ok(nm('CD4013', 1) === 'Q1' && nm('CD4013', 2) === '/Q1', 'Q and /Q are pins 1 and 2');
+ok(IC_LIB.CD4013.pinInfo[5].d.indexOf('halves the clock') >= 0,
+   'D wired back to /Q halves the clock — the reason most synth builds reach for it');
+
+console.log('-- the PLL names the pin that actually sets the pitch --');
+ok(nm('CD4046', 9) === 'VCO IN' && IC_LIB.CD4046.pinInfo[9].d.indexOf('pitch') >= 0,
+   'pin 9 is the control voltage');
+ok(nm('CD4046', 4) === 'VCO OUT', 'pin 4 is the oscillator output');
+ok(nm('CD4046', 6) === 'C1A' && nm('CD4046', 7) === 'C1B', 'the timing cap goes across 6 and 7');
+
+console.log('-- every chip in the library now explains itself --');
+let bare = Object.entries(IC_LIB)
+  .filter(([k, v]) => !v.pinInfo && k.indexOf('DIP-') !== 0)
+  .map(([k]) => k);
+ok(bare.length === 0, 'no real part is left without a pin table: ' + bare.join(', '));
 
 S = demoProject(); computeNets();
 
