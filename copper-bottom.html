@@ -374,8 +374,14 @@ const IC_LIB = {
     roles:{1:'out',2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'vdd'}},
   TL074  :{pins:14, name:'quad FET op-amp', cmos:false,
     roles:{1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',8:'out',9:'in',10:'in',11:'gnd',12:'out',13:'in',14:'in'}},
+  /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties
+     trigger to threshold; a monostable ties threshold to discharge. Both look
+     exactly like a short to the pin-short rule, and on a 555 build they are the
+     normal case rather than the exception — without this the tool calls a
+     correct board broken four times over, which is worse than not checking. */
   NE555  :{pins:8, name:'timer', cmos:false,
-    roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'}},
+    roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
+    ties:[[2,6],[6,7],[2,6,7]]},
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
   'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
   'DIP-16':{pins:16, name:'generic 16-pin', cmos:false, roles:{}},
@@ -628,7 +634,7 @@ function powerClass(label){
     const v = parseFloat(m[2].replace(',', '.'));
     return m[1] === '-' ? {cls:'neg', volts:-v} : {cls:'pos', volts:v};
   }
-  if(/^(VCC|VDD|B\+|V\+|\+V|\+)$/.test(s)) return {cls:'pos', volts:null};
+  if(/^(VCC|VDD|VIN|VBAT|PWR|B\+|V\+|\+V|\+)$/.test(s)) return {cls:'pos', volts:null};
   if(/^(VEE|V-|-V|-)$/.test(s))            return {cls:'neg', volts:null};
   return null;
 }
@@ -725,6 +731,9 @@ function runDRC(){
     for(const [id, pins] of pinsByNet){
       if(pins.length < 2) continue;
       if(padsOnNet(NET.nets[id]).some(d => powerClass(d.label))) continue;   // it's a rail
+      /* a grouping the chip's own datasheet calls for is not a short */
+      const ties = (IC_LIB[ic.part] || {}).ties || [];
+      if(ties.some(g => pins.every(n => g.indexOf(n) >= 0))) continue;
       add('error', 'pin-short',
           ic.ref + ' pins ' + pins.join(', ') + ' are all on one net',
           pinPos(ic, pins[0]), id);

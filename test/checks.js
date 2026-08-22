@@ -997,5 +997,51 @@ ok(bom().length === 0, 'no parts, no lines');
 
 S = demoProject(); computeNets();
 
+console.log('-- supply labels: the ones people actually write --');
+ok(powerClass('VIN') && powerClass('VIN').cls === 'pos',
+   "VIN is a supply rail — it is what Paul's APC schematic calls it");
+ok(powerClass('VBAT') && powerClass('VBAT').cls === 'pos', 'so is VBAT');
+ok(powerClass('VCC') && powerClass('VCC').cls === 'pos', 'and VCC still is');
+ok(powerClass('+9V') && powerClass('+9V').volts === 9, '+9V still reads its voltage');
+ok(powerClass('GND') && powerClass('GND').cls === 'gnd', 'GND is still ground');
+ok(powerClass('VINE') === null, 'but VINE is not a rail — the match is anchored, not a prefix');
+ok(powerClass('IN') === null, 'and a bare IN is a signal, not a supply');
+
+/* A 555 astable ties trigger to threshold and a monostable ties threshold to
+   discharge. Both are the datasheet's own wiring, and both look identical to a
+   short unless the library says otherwise. */
+console.log('-- pin ties: a grouping the datasheet calls for is not a short --');
+const NE555_BOARD = (linkPins) => ({
+  name:'t', board:{rows:5, cols:10},
+  cuts:['0,3','1,3','2,3','3,3'],
+  parts:[{id:'k', kind:'link', ref:'J1', value:'', pins:linkPins}],
+  ics:[{id:'u', ref:'IC1', part:'NE555', pins:8, pin1:[0,2], span:3,
+        autoCuts:['0,3','1,3','2,3','3,3']}],
+  pads:[],
+});
+const shorts = () => runDRC().filter(f => f.rule === 'pin-short');
+
+S = NE555_BOARD([[1,0],[2,4]]);        // joins pin 2 (trigger) to pin 6 (threshold)
+computeNets();
+ok(shorts().length === 0, 'tying 555 pins 2 and 6 is the astable, not a fault');
+
+S = NE555_BOARD([[2,4],[1,4]]);        // joins pin 6 (threshold) to pin 7 (discharge)
+computeNets();
+ok(shorts().length === 0, 'tying pins 6 and 7 is the monostable timing node');
+
+S = NE555_BOARD([[2,0],[0,4]]);        // joins pin 3 (output) to pin 8 (Vcc)
+computeNets();
+ok(shorts().length === 1, 'but output shorted to the supply is still an error');
+ok(shorts()[0].msg.indexOf('3') >= 0 && shorts()[0].msg.indexOf('8') >= 0,
+   'and it names the two pins involved');
+
+console.log('-- pin ties: only the chips that declare them --');
+ok((IC_LIB.NE555.ties || []).some(g => g.indexOf(2) >= 0 && g.indexOf(6) >= 0),
+   'the NE555 declares its 2-6 tie');
+ok(!IC_LIB.CD40106.ties,
+   'the CD40106 declares none — an inverter has no business tying its own pins');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

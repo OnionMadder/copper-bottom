@@ -1,0 +1,388 @@
+{
+  "version": 2,
+  "name": "Atari Punk Console",
+  "board": {
+    "rows": 15,
+    "cols": 30
+  },
+  "cuts": [
+    "2,7",
+    "3,7",
+    "4,7",
+    "5,7",
+    "8,7",
+    "9,7",
+    "10,7",
+    "11,7"
+  ],
+  "ics": [
+    {
+      "id": "u1",
+      "ref": "IC1",
+      "part": "NE555",
+      "pins": 8,
+      "pin1": [
+        2,
+        6
+      ],
+      "span": 3,
+      "autoCuts": [
+        "2,7",
+        "3,7",
+        "4,7",
+        "5,7"
+      ]
+    },
+    {
+      "id": "u2",
+      "ref": "IC2",
+      "part": "NE555",
+      "pins": 8,
+      "pin1": [
+        8,
+        6
+      ],
+      "span": 3,
+      "autoCuts": [
+        "8,7",
+        "9,7",
+        "10,7",
+        "11,7"
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "r1",
+      "kind": "res",
+      "ref": "R1",
+      "value": "1k",
+      "pins": [
+        [
+          3,
+          13
+        ],
+        [
+          6,
+          13
+        ]
+      ]
+    },
+    {
+      "id": "c1",
+      "kind": "cap",
+      "ref": "C1",
+      "value": "10n",
+      "pins": [
+        [
+          6,
+          18
+        ],
+        [
+          7,
+          18
+        ]
+      ]
+    },
+    {
+      "id": "c2",
+      "kind": "cap",
+      "ref": "C2",
+      "value": "100n",
+      "pins": [
+        [
+          12,
+          15
+        ],
+        [
+          7,
+          15
+        ]
+      ]
+    },
+    {
+      "id": "c3",
+      "kind": "ecap",
+      "ref": "C3",
+      "value": "10u",
+      "polarized": true,
+      "pins": [
+        [
+          14,
+          7
+        ],
+        [
+          13,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "j1",
+      "kind": "link",
+      "ref": "J1",
+      "value": "",
+      "pins": [
+        [
+          2,
+          0
+        ],
+        [
+          7,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "j2",
+      "kind": "link",
+      "ref": "J2",
+      "value": "",
+      "pins": [
+        [
+          0,
+          1
+        ],
+        [
+          5,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "j3",
+      "kind": "link",
+      "ref": "J3",
+      "value": "",
+      "pins": [
+        [
+          0,
+          2
+        ],
+        [
+          11,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "j4",
+      "kind": "link",
+      "ref": "J4",
+      "value": "",
+      "pins": [
+        [
+          3,
+          3
+        ],
+        [
+          6,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "j5",
+      "kind": "link",
+      "ref": "J5",
+      "value": "",
+      "pins": [
+        [
+          4,
+          4
+        ],
+        [
+          9,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "j6",
+      "kind": "link",
+      "ref": "J6",
+      "value": "",
+      "pins": [
+        [
+          8,
+          5
+        ],
+        [
+          7,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "j7",
+      "kind": "link",
+      "ref": "J7",
+      "value": "",
+      "pins": [
+        [
+          0,
+          11
+        ],
+        [
+          2,
+          11
+        ]
+      ]
+    },
+    {
+      "id": "j8",
+      "kind": "link",
+      "ref": "J8",
+      "value": "",
+      "pins": [
+        [
+          0,
+          12
+        ],
+        [
+          8,
+          12
+        ]
+      ]
+    },
+    {
+      "id": "j9",
+      "kind": "link",
+      "ref": "J9",
+      "value": "",
+      "pins": [
+        [
+          4,
+          10
+        ],
+        [
+          6,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "j10",
+      "kind": "link",
+      "ref": "J10",
+      "value": "",
+      "pins": [
+        [
+          9,
+          10
+        ],
+        [
+          12,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "j11",
+      "kind": "link",
+      "ref": "J11",
+      "value": "",
+      "pins": [
+        [
+          10,
+          11
+        ],
+        [
+          12,
+          11
+        ]
+      ]
+    },
+    {
+      "id": "j12",
+      "kind": "link",
+      "ref": "J12",
+      "value": "",
+      "pins": [
+        [
+          10,
+          3
+        ],
+        [
+          13,
+          3
+        ]
+      ]
+    }
+  ],
+  "pads": [
+    {
+      "id": "p1",
+      "label": "VIN",
+      "at": [
+        0,
+        0
+      ],
+      "to": "DC jack centre pin / battery +"
+    },
+    {
+      "id": "p2",
+      "label": "GND",
+      "at": [
+        7,
+        1
+      ],
+      "to": "DC jack sleeve / battery -"
+    },
+    {
+      "id": "p3",
+      "label": "R2_A",
+      "at": [
+        0,
+        20
+      ],
+      "to": "R2 470K lug 1 + wiper (tied)"
+    },
+    {
+      "id": "p4",
+      "label": "R2_B",
+      "at": [
+        3,
+        14
+      ],
+      "to": "R2 470K lug 3"
+    },
+    {
+      "id": "p5",
+      "label": "R3_A",
+      "at": [
+        0,
+        22
+      ],
+      "to": "R3 470K lug 1 + wiper (tied)"
+    },
+    {
+      "id": "p6",
+      "label": "R3_B",
+      "at": [
+        12,
+        17
+      ],
+      "to": "R3 470K lug 3"
+    },
+    {
+      "id": "p7",
+      "label": "R4_1",
+      "at": [
+        14,
+        6
+      ],
+      "to": "R4 470K volume lug 1"
+    },
+    {
+      "id": "p8",
+      "label": "R4_3",
+      "at": [
+        7,
+        20
+      ],
+      "to": "R4 470K volume lug 3 (ground)"
+    }
+  ],
+  "netlist": "# Atari Punk Console - Paul in the Lab\n# R2/R3 wired as rheostats: wiper tied to lug 1.\n# R4 is the off-board volume pot; its wiper goes straight to the output jack,\n# so OUT never appears on the board.\n\nVIN:      @VIN @R2_A @R3_A IC1.4 IC1.8 IC2.4 IC2.8\nGND:      @GND @R4_3 IC1.1 IC2.1 C1.B C2.B\n\nIC1_DIS:  IC1.7 R1.A @R2_B\nIC1_TIM:  IC1.2 IC1.6 R1.B C1.A\nIC1_OUT:  IC1.3 IC2.2\n\nIC2_TIM:  IC2.6 IC2.7 C2.A @R3_B\nIC2_OUT:  IC2.3 C3.B\n\nVOL:      C3.A @R4_1"
+}
