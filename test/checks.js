@@ -294,7 +294,24 @@ ok(rankOf('C1') < rankOf('C3'), 'film caps before electrolytics');
 ok(bl[bl.length-1].kind === 'ecap', 'the tall electrolytics go in last');
 ok(bl.filter(i => i.kind === 'link').every((_, i, a) => a.length === 6), 'all six links present');
 ok(bl.find(i => i.ref === 'IC1').what === 'CD40106', 'the IC carries its part number');
-ok(bl.find(i => i.ref === 'R1').holes === '[2,4] [10,4]', 'holes are listed in pin order');
+ok(bl.find(i => i.ref === 'R1').holes === 'r3 c5  r11 c5',
+   'holes are listed in pin order, 1-indexed and labelled');
+
+/* The model counts from 0; every number a person reads counts from 1. This is a
+   display layer and nothing else — a .json saved before the change still means
+   what it meant, which is why the stored pins are asserted here too. */
+console.log('-- 1-indexed display, 0-indexed model --');
+ok(dRow(0) === 1 && dCol(0) === 1, 'the first hole is row 1, col 1 — not row 0');
+ok(dRow(9) === 10 && dCol(19) === 20, 'and a 10x20 board ends at row 10, col 20');
+ok(holeText(2, 4) === 'row 3 · col 5', 'the long form names both axes');
+ok(holeShort(2, 4) === 'r3 c5', 'and the short form still labels them');
+S = demoProject(); computeNets();
+ok(JSON.stringify(S.parts.find(q => q.ref === 'R1').pins) === '[[2,4],[10,4]]',
+   'the stored pins are untouched, so old files still mean what they meant');
+ok(S.cuts.every(k => /^\d+,\d+$/.test(k)), 'and cut keys stay 0-indexed in the model');
+const cutsRaw = cutList();
+ok(cutsRaw.length && cutsRaw[0].row === 3 && cutsRaw[0].col === 8,
+   'cutList still reports raw positions — the tables add one when they draw it');
 
 console.log('-- M4: off-board wiring --');
 const wl = wireList();

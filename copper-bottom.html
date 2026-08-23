@@ -1451,7 +1451,8 @@ function runDRC(){
   }
   for(const [k, who] of holes)
     if(who.length > 1)
-      add('warn', 'shared-hole', who.join(' and ') + ' share hole [' + k + ']', k.split(',').map(Number));
+      add('warn', 'shared-hole', who.join(' and ') + ' share ' +
+          holeText(+k.split(',')[0], +k.split(',')[1]), k.split(',').map(Number));
 
   /* --- floating CMOS input --- */
   const floatingNets = new Set();
@@ -1561,6 +1562,22 @@ function cutList(){
   }).sort((a, b) => a.row - b.row || a.back - b.back);
 }
 
+/* Rows and columns count from 0 in the model because that is what array indices
+   do, and from 1 everywhere a person reads them because that is what fingers do.
+   Nothing stored ever changes — this is a display layer and only a display layer,
+   so a saved .json from before this still means exactly what it meant.
+
+   It matters at the bench. Told "column 3", you cut the fourth hole along and the
+   board is wrong in a way that looks right. The cut list had the inconsistency in
+   a single row already: `back` was 1-based while `row` and `col` beside it were
+   0-based, so one table was speaking both dialects at once. */
+function dRow(r){ return r + 1; }
+function dCol(c){ return c + 1; }
+/* the long form, for anywhere there is room to be unambiguous */
+function holeText(r, c){ return 'row ' + dRow(r) + ' \u00b7 col ' + dCol(c); }
+/* the short form, still labelled, for table cells and lists */
+function holeShort(r, c){ return 'r' + dRow(r) + ' c' + dCol(c); }
+
 /* Solder the flat things first or you will not be able to reach them later. */
 const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9};
 
@@ -1571,14 +1588,14 @@ function buildList(){
       key:'part:' + p.id, ref:p.ref, kind:p.kind,
       name:(PART_LIB[p.kind] || {}).name || p.kind,
       what:p.device || p.value || '',
-      holes:p.pins.map(q => '[' + q[0] + ',' + q[1] + ']').join(' '),
+      holes:p.pins.map(q => holeShort(q[0], q[1])).join('  '),
       rank:BUILD_ORDER[p.kind] || 5,
     });
   for(const ic of S.ics)
     items.push({
       key:'ic:' + ic.id, ref:ic.ref, kind:'ic', name:'IC',
       what:ic.part,
-      holes:'pin 1 at [' + ic.pin1[0] + ',' + ic.pin1[1] + ']',
+      holes:'pin 1 at ' + holeShort(ic.pin1[0], ic.pin1[1]),
       rank:BUILD_ORDER.ic,
     });
   items.sort((a, b) => a.rank - b.rank ||
@@ -1917,7 +1934,7 @@ function buildMarkdown(){
     L.push('## Off-board wiring (' + wires.length + ')');
     L.push('');
     table(['pad', 'hole', 'from left (back)', 'goes to'],
-          wires.map(w => [w.label, '[' + w.row + ',' + w.col + ']', w.back, w.to || '-']));
+          wires.map(w => [w.label, holeShort(w.row, w.col), w.back, w.to || '-']));
   }
   return L.join('\n');
 }
@@ -2594,9 +2611,9 @@ function render(){
 
   /* --- rulers --- */
   for(let c = 0; c < cols; c++)
-    o.push('<text class="rule" x="' + X(c) + '" y="' + (MARGIN - 17) + '">' + c + '</text>');
+    o.push('<text class="rule" x="' + X(c) + '" y="' + (MARGIN - 17) + '">' + dCol(c) + '</text>');
   for(let r = 0; r < rows; r++)
-    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + r + '</text>');
+    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
 
   /* --- copper: one rounded bar per uncut run.
      Quiet by default, so parts and cuts are what your eye lands on. The lit net
@@ -3009,7 +3026,12 @@ function renderReadout(){
   if(hoverHole){
     const r = hoverHole[0], c = hoverHole[1];
     const net = NET.netAt(r, c);
-    o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">[' + r + ',' + c + ']</div>');
+    /* "[3,3]" tells you nothing about which number is the row. Everyone reads a
+       coordinate pair as across-then-down, and the column ruler across the top
+       reinforces it — so a walkthrough saying [3,3] then [4,3] gets built along
+       one strip instead of across three. Name the axes and the trap is gone. */
+    o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">row ' + dRow(r) +
+           ' <span style="color:#6B6580">·</span> col ' + dCol(c) + '</div>');
     o.push('<div class="row">' + (net ? 'net ' + net.id + ' · <b>' + net.holes.length + '</b> holes · <b>' +
            net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> — dead hole') + '</div>');
     for(const oc of occupants(r, c)){
@@ -3087,7 +3109,7 @@ function renderDRC(){
   FINDINGS.forEach((f, i) => {
     o.push('<div class="f ' + f.sev + '" data-i="' + i + '">');
     o.push('<span class="msg">' + esc(f.msg));
-    if(f.at) o.push(' <span class="loc">[' + f.at[0] + ',' + f.at[1] + ']</span>');
+    if(f.at) o.push(' <span class="loc">' + holeShort(f.at[0], f.at[1]) + '</span>');
     o.push('</span>');
     if(f.fix) o.push('<button class="fix" data-fix="' + i + '">fix</button>');
     if(f.why) o.push('<div class="why">' + esc(f.why) + '</div>');
@@ -3182,9 +3204,9 @@ function exportSVG(side){
   /* rulers keep the layout's own numbering in both views, so a coordinate
      from the cut list is findable on either sheet */
   for(let c = 0; c < cols; c++)
-    o.push(T(x(c), y(0) - 3.4, String(c), 1.7, 'text-anchor="middle" fill="#666"'));
+    o.push(T(x(c), y(0) - 3.4, String(dCol(c)), 1.7, 'text-anchor="middle" fill="#666"'));
   for(let r = 0; r < rows; r++)
-    o.push(T(EDGE - 3.4, y(r) + 0.6, String(r), 1.7, 'text-anchor="middle" fill="#666"'));
+    o.push(T(EDGE - 3.4, y(r) + 0.6, String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
 
   /* copper runs, component side only */
   if(!solder)
