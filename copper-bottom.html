@@ -42,7 +42,13 @@ body{
 .hdr{
   display:flex; align-items:center; gap:14px; padding:0 12px; height:38px;
   border-bottom:1px solid var(--line); background:var(--panel); flex:0 0 auto;
+  /* nowrap plus scroll, so a narrow window swipes the toolbar instead of
+     hiding whatever did not fit. Every button stays reachable. */
+  flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
 }
+.hdr::-webkit-scrollbar{display:none}
+.hdr > *{flex:0 0 auto}
+.hdr .sp{flex:1 1 auto; min-width:8px}
 .brand{font-weight:700; letter-spacing:.28em; font-size:12px; color:#fff}
 .brand span{color:var(--mint)}
 .hdr .sp{flex:1}
@@ -281,6 +287,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
   <button id="btnNew">new</button>
   <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
+  <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
   <button id="btnRef" title="keep a schematic or layout photo beside the board while you work">reference</button>
   <button id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough</button>
   <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
@@ -348,6 +355,22 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <div class="drcwrap" id="drclist"></div>
     <h2 id="nethdr">NETS</h2>
     <div class="netwrap" id="netlist"></div>
+  </div>
+</div>
+
+<div class="sheet" id="parts" hidden>
+  <div class="sheetbar">
+    <b>PARTS</b>
+    <span class="nlnote">optional — paste the list the build came with</span>
+    <span class="sp"></span>
+    <span id="partsVerdict"></span>
+    <button id="partsClose">close</button>
+  </div>
+  <div class="nlbody">
+    <div class="nlleft">
+      <textarea id="partsText" spellcheck="false" placeholder="1 x 100k&#10;2 x 10n&#10;1 x 4.7uF electrolytic&#10;1 x 2N3904&#10;&#10;# a quantity and a value per line&#10;# the rest of the line is ignored&#10;# 0.1uF and 100n count as the same part"></textarea>
+    </div>
+    <div class="nlright" id="partsOut"></div>
   </div>
 </div>
 
@@ -4419,6 +4442,7 @@ document.addEventListener('keydown', e => {
   }
   const k = e.key.toLowerCase();
   if(k === 'escape' && !walk.hidden){ closeWalk(); return; }
+  if(k === 'escape' && !parts.hidden){ closeParts(); return; }
   if((e.ctrlKey || e.metaKey) && k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if((e.ctrlKey || e.metaKey) && k === 'y'){ e.preventDefault(); redo(); return; }
   if(e.ctrlKey || e.metaKey || e.altKey) return;
@@ -4664,6 +4688,82 @@ window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syn
    converts the coordinates the same way the board draws them. That is the
    whole reason this exists: handing somebody positions read off the JSON gave
    them 0-indexed numbers against a 1-indexed screen, twice. */
+function renderParts(){
+  const text = partsText.value;
+  const o = [];
+  if(!text.trim()){
+    o.push('<div class="grp nldim">Paste the parts list the build came with. ' +
+           'A quantity and a value on each line is enough — everything else on the ' +
+           'line is ignored, so "R1 - 100k 1/4W resistor 5%" reads as one 100k.</div>');
+    partsVerdict.textContent = '';
+    partsOut.innerHTML = o.join('');
+    return;
+  }
+  const r = checkBom(text);
+  partsVerdict.textContent = r.clean ? 'all present'
+    : r.problems + ' difference' + (r.problems === 1 ? '' : 's');
+  partsVerdict.style.color = r.clean ? 'var(--mint)' : '#F2C8E4';
+
+  o.push('<div class="grp"><h4>VERDICT</h4>');
+  if(r.clean)
+    o.push('<div class="nlok">The board has every part on the list, in the right numbers. ' +
+           r.declared + ' kind' + (r.declared === 1 ? '' : 's') + ' checked.</div>');
+  else
+    o.push('<div class="nlbad">' + r.problems + ' difference' + (r.problems === 1 ? '' : 's') +
+           ' between the list and the board.</div>');
+  o.push('</div>');
+
+  const bad = r.rows.filter(x => x.status !== 'match');
+  if(bad.length){
+    o.push('<div class="grp"><h4>DIFFERENCES</h4>');
+    for(const x of bad){
+      let says;
+      if(x.status === 'missing') says = 'the list wants ' + x.want + ', the board has none';
+      else if(x.status === 'short') says = 'the list wants ' + x.want + ', the board has ' + x.got;
+      else if(x.status === 'over')  says = 'the board has ' + x.got + ', the list only wants ' + x.want;
+      else says = 'on the board (' + x.got + '), never mentioned in the list';
+      o.push('<div class="nlbad"><b>' + esc(x.value) + '</b> — ' + says +
+             (x.refs && x.refs.length ? ' <span class="nldim">' + esc(x.refs.join(' ')) + '</span>' : '') +
+             '</div>');
+    }
+    o.push('</div>');
+  }
+
+  const good = r.rows.filter(x => x.status === 'match');
+  if(good.length){
+    o.push('<div class="grp"><h4>AGREED</h4>');
+    for(const x of good)
+      o.push('<span class="nlchip">' + x.got + ' &times; ' + esc(x.value) + '</span>');
+    o.push('</div>');
+  }
+
+  if(r.unread.length){
+    o.push('<div class="grp"><h4>COULD NOT READ</h4>');
+    o.push('<div class="nldim">No value on these lines, so nothing was assumed about them.</div>');
+    for(const line of r.unread) o.push('<div class="nlchip">' + esc(line) + '</div>');
+    o.push('</div>');
+  }
+
+  /* the limit, said where it cannot be missed */
+  o.push('<div class="grp"><h4>WHAT THIS DOES NOT CHECK</h4>' +
+         '<div class="nldim">Only that the right parts are on the board. Nothing here ' +
+         'says they are in the right places — a board with every correct component wired ' +
+         'wrongly passes this perfectly. The netlist is the check that answers that.</div></div>');
+
+  partsOut.innerHTML = o.join('');
+}
+
+function openParts(){ partsText.value = S.bom || ''; renderParts(); parts.hidden = false; }
+function closeParts(){ parts.hidden = true; }
+btnParts.onclick   = openParts;
+partsClose.onclick = closeParts;
+partsText.oninput  = () => {
+  const v = partsText.value;
+  if(v.trim()) S.bom = v; else delete S.bom;
+  renderParts();
+  autosave();
+};
+
 function openWalk(){
   walkText.textContent = walkthrough();
   walk.hidden = false;
