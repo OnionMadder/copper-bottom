@@ -4827,7 +4827,7 @@ function refSet(src){
   /* clearing the picture clears what was behind the board with it, transform
      and all -- a transform kept for a picture that is gone would silently
      mis-place the next one */
-  if(!src && OV.on){ OV.on = false; ALIGN = null; }
+  if(!src && OV.on){ OV.on = false; ALIGN = null; ovSync(); render(); }
   if(!src) OV.T = null;
   if(!src){ refApply(); refSave(); return; }
   refImg.onload = () => { refFitNow(); };
