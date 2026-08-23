@@ -1556,5 +1556,103 @@ ok(typeof walkthrough() === 'string', 'an empty board still writes a walkthrough
 
 S = demoProject(); computeNets();
 
+/* ---------------------------------------------------------------
+   OVERLAY GEOMETRY
+   The transform that puts somebody else's layout behind the grid. Every
+   refusal gets a test that it fires AND a test that it stays quiet, because
+   a refusal that never lets anything through is the same bug as one that
+   lets everything through.
+   --------------------------------------------------------------- */
+console.log('-- overlay: two picks make a fit --');
+const near = (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 1e-9 : tol);
+const nearPt = (p, r, c, tol) => p && near(p[0], r, tol) && near(p[1], c, tol);
+
+/* the plain case: a picture whose holes are 40px apart, square on */
+let T = overlayFrom([100,100], [2,2], [500,100], [2,12]);
+ok(!T.why, 'a square-on picture fits without complaint');
+ok(near(overlayScale(T), 10/400), 'scale comes out as holes per pixel: 40px to the hole');
+ok(near(overlayTurn(T), 0), 'and no turn');
+ok(nearPt(overlayAt(T, 100, 100), 2, 2), 'the first pick lands on its hole');
+ok(nearPt(overlayAt(T, 500, 100), 2, 12), 'the second pick lands on its hole');
+ok(nearPt(overlayAt(T, 300, 100), 2, 7), 'and halfway between is halfway between');
+
+console.log('-- overlay: the mapping is reversible --');
+let bk = overlayImageAt(T, 2, 12);
+ok(nearPt(bk, 500, 100, 1e-6), 'a hole carries back to the pixel it came from');
+let fwd = overlayAt(T, 137, 219);
+let rt = overlayImageAt(T, fwd[0], fwd[1]);
+ok(nearPt(rt, 137, 219, 1e-6), 'an arbitrary pixel survives the round trip');
+
+console.log('-- overlay: a turned photo is a turned photo --');
+/* the photo was shot a quarter turn round: going right across the picture
+   goes DOWN the board */
+let ROT = overlayFrom([0,0], [0,0], [400,0], [10,0]);
+ok(!ROT.why, 'a quarter-turned picture fits');
+ok(near(overlayTurn(ROT), 90), 'the turn is reported as 90 degrees, not swallowed');
+ok(nearPt(overlayAt(ROT, 400, 0), 10, 0, 1e-9), 'and the far pick still lands on its hole');
+ok(near(overlayScale(ROT), 10/400), 'a turn does not disturb the scale');
+
+console.log('-- overlay: the scale is uniform, and stays uniform --');
+/* Two picks that a stretch would fit differently in x and y. A similarity
+   cannot stretch, so the second pick lands exactly and nothing in between is
+   quietly distorted to make it. */
+let U = overlayFrom([0,0], [0,0], [400,200], [4,8]);
+ok(!U.why, 'a diagonal pair fits');
+ok(nearPt(overlayAt(U, 400, 200), 4, 8, 1e-9), 'the diagonal pick lands on its hole');
+ok(near(Math.hypot(U.a, U.b), overlayScale(U)), 'one scale, both axes');
+
+console.log('-- overlay: picks too close together are refused --');
+ok(!!overlayFrom([100,100], [2,2], [110,100], [2,12]).why,
+   'two spots 10px apart on the picture cannot set a scale');
+ok(!!overlayFrom([100,100], [2,2], [500,100], [2,4]).why,
+   'two holes 2 apart cannot set a scale either');
+ok(!overlayFrom([100,100], [2,2], [124,100], [2,5]).why,
+   'and the floor is a floor, not a wall: 24px and 3 holes is allowed');
+ok(!!overlayFrom([100,100], [2,2], [NaN,100], [2,12]).why,
+   'a pick that is not a number is refused rather than fitted');
+ok(!!overlayFrom(null, [2,2], [500,100], [2,12]).why,
+   'a missing pick is refused rather than fitted');
+ok(overlayFrom([100,100], [2,2], [110,100], [2,12]).a === undefined,
+   'a refusal carries no transform to accidentally use');
+
+console.log('-- overlay: first placement is visible, not clever --');
+let F = overlayFitBox(800, 400, 13, 21);
+ok(!!F, 'a picture gets a starting place on the board');
+ok(F.b === 0, 'square on, because nothing yet says it is turned');
+let c0 = overlayAt(F, 0, 0), c1 = overlayAt(F, 800, 400);
+ok(c0[0] >= 0 && c0[1] >= 0 && c1[0] <= 12 && c1[1] <= 20, 'the whole picture is inside the grid');
+ok(near(c0[1] + c1[1], 20, 1e-9) && near(c0[0] + c1[0], 12, 1e-9), 'and centred on it');
+ok(near((c1[1]-c0[1]) / (c1[0]-c0[0]), 800/400, 1e-9), 'with its proportions intact');
+ok(overlayFitBox(0, 400, 13, 21) === null, 'a picture with no width gets no transform');
+ok(overlayFitBox(800, 400, NaN, 21) === null, 'and neither does a board with no size');
+
+console.log('-- overlay: nudge, scale and turn move the picture, not the board --');
+let N = overlayNudge(T, 0.25, -0.5);
+ok(nearPt(overlayAt(N, 100, 100), 2.25, 1.5, 1e-9), 'a nudge is in holes, exactly');
+ok(near(overlayScale(N), overlayScale(T)), 'a nudge does not change the scale');
+
+let S2 = overlayScaleBy(T, 2, 6, 10);
+ok(near(overlayScale(S2), overlayScale(T) * 2), 'scaling doubles the scale');
+ok(nearPt(overlayImageAt(S2, 6, 10), overlayImageAt(T, 6, 10)[0], overlayImageAt(T, 6, 10)[1], 1e-6),
+   'and the hole it was scaled about does not move');
+ok(overlayScaleBy(T, 0, 6, 10) === T, 'a zero scale is refused, not applied');
+
+let T2 = overlayTurnBy(T, 15, 6, 10);
+ok(near(overlayTurn(T2), overlayTurn(T) + 15, 1e-9), 'turning adds degrees');
+ok(near(overlayScale(T2), overlayScale(T), 1e-12), 'and leaves the scale alone');
+ok(nearPt(overlayImageAt(T2, 6, 10), overlayImageAt(T, 6, 10)[0], overlayImageAt(T, 6, 10)[1], 1e-6),
+   'about the same fixed hole');
+ok(overlayTurnBy(T, NaN, 6, 10) === T, 'a turn that is not a number is refused, not applied');
+
+console.log('-- overlay: a broken saved transform is dropped, not repaired --');
+ok(overlayOk({a:1, b:0, tx:0, ty:0}), 'a sound transform is kept');
+ok(!overlayOk(null), 'nothing is not a transform');
+ok(!overlayOk({a:NaN, b:0, tx:0, ty:0}), 'a NaN transform is dropped');
+ok(!overlayOk({a:0, b:0, tx:5, ty:5}), 'a collapsed transform is dropped');
+ok(!overlayOk({b:0, tx:0, ty:0}), 'a transform missing a field is dropped');
+ok(overlayImageAt({a:0, b:0, tx:0, ty:0}, 1, 1) === null,
+   'and a collapsed transform maps nothing back rather than returning infinity');
+
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

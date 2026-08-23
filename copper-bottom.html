@@ -115,8 +115,37 @@ button:hover{border-color:var(--cyan); color:var(--cyan)}
 .refgrip{flex:0 0 auto; width:5px; cursor:col-resize; background:var(--line)}
 .refgrip:hover{background:var(--mint)}
 
+/* ---- overlay bar ---- */
+/* Docked above the board, not floating over it. During transcription every
+   hole matters, and a strip that covers the top ruler covers the very numbers
+   being counted from. It wraps rather than overflows -- the header's ninth
+   button was unreachable for want of exactly that. And .ovbar[hidden] is
+   spelled out because an author display:flex beats the hidden attribute,
+   which is how the reference pane kept 38% of the board while invisible. */
+.stagecol{flex:1; min-width:0; min-height:0; display:flex; flex-direction:column}
+.ovbar[hidden]{display:none}
+.ovbar{
+  display:flex; align-items:center; gap:9px; flex-wrap:wrap; flex:0 0 auto;
+  padding:5px 9px; background:var(--panel); border-bottom:1px solid var(--line);
+  font-size:11px; color:var(--dim);
+}
+.ovbar b{letter-spacing:.2em; font-size:10px; color:var(--mint)}
+.ovbar .grp{display:flex; align-items:center; gap:3px}
+/* tighter than the app's other buttons on purpose: the whole set has to fit
+   one line above the board, and a second line is 26px of board gone */
+.ovbar button{padding:2px 6px}
+.ovbar input[type=range]{width:82px; vertical-align:middle}
+.ovbar .rd{color:var(--gray)}
+/* The message takes a whole row of its own rather than competing with the
+   controls for the end of theirs: at 1100px the bar wrapped to three lines
+   and took 72px of board with it. An empty one leaves no gap at all. */
+.ovbar .say{color:var(--mint); flex:1 0 100%; line-height:1.4}
+.ovbar .say:empty{display:none}
+.ovbar .say.no{color:var(--mag)}
+
 /* ---- board ---- */
-.stage{flex:1; min-width:0; overflow:auto; padding:22px; background:var(--void)}
+.stage{flex:1; min-width:0; min-height:0; overflow:auto; padding:22px; background:var(--void)}
+.stage.aligning{cursor:crosshair}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
 .phit{cursor:move}
@@ -190,6 +219,12 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    no board width, and it disappears by itself when the current tool has
    nothing to configure. */
 @media (max-width:900px){
+  /* The overlay bar keeps every control and loses its label and its readout.
+     Vertical space is the scarce thing at the bench, and a bar that wrapped
+     to four rows would take the board's place to save a number you can also
+     see by looking at the grid. */
+  .ovbar b,.ovbar .rd{display:none}
+
   /* The side panel used to be display:none here, which took the DRC, the net
      list and the inspector with it — on a tool whose whole point is telling you
      what is wrong, that is the last thing to hide. It becomes a sheet you pull
@@ -325,7 +360,30 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <div class="ctx"><div class="hint" id="hint"></div></div>
   </div>
 
-  <div class="stage" id="stage"></div>
+  <div class="stagecol">
+    <div class="ovbar" id="ovbar" hidden>
+      <b>OVERLAY</b>
+      <button id="ovAlign" title="two clicks on the picture, two on the board, and it lands where it belongs">align</button>
+      <span class="grp">
+        <button id="ovLeft"  title="nudge left (shift + arrow keys)">&#9664;</button>
+        <button id="ovUp"    title="nudge up (shift + arrow keys)">&#9650;</button>
+        <button id="ovDown"  title="nudge down (shift + arrow keys)">&#9660;</button>
+        <button id="ovRight" title="nudge right (shift + arrow keys)">&#9654;</button>
+      </span>
+      <span class="grp">
+        <button id="ovSmall" title="a little smaller">&minus;</button>
+        <button id="ovBig"   title="a little bigger">+</button>
+        <button id="ovCCW"   title="turn anticlockwise">&#8634;</button>
+        <button id="ovCW"    title="turn clockwise">&#8635;</button>
+      </span>
+      <span class="grp">fade <input id="ovFade" type="range" min="10" max="100" value="55"></span>
+      <span class="rd" id="ovRead"></span>
+      <button id="ovOpen">picture</button>
+      <button id="ovOff" title="stop showing the picture behind the board; it stays under reference">off</button>
+      <span class="say" id="ovSay"></span>
+    </div>
+    <div class="stage" id="stage"></div>
+  </div>
 
   <div class="refgrip" id="refGrip" hidden></div>
   <div class="ref" id="ref" hidden>
@@ -336,6 +394,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <span class="pct" id="refPct">100%</span>
       <button id="refIn" title="zoom in">+</button>
       <button id="refFit" title="fit the whole image in the pane">fit</button>
+      <button id="refOverlay" title="put this picture behind the board and trace it hole by hole">behind board</button>
       <button id="refClear" title="forget this image">clear</button>
     </div>
     <div class="view" id="refView">
@@ -2920,6 +2979,124 @@ function checkBodies(){
     }
   return out;
 }
+
+/* ============================================================
+   OVERLAY GEOMETRY
+   Somebody else's layout, photographed or screenshotted, sat BEHIND the grid
+   so it can be transcribed hole for hole. Nothing here reads the picture; it
+   only decides where the picture goes, and the person decides the rest.
+
+   The transform maps image pixels to board holes and is a SIMILARITY: one
+   scale, one turn, one shift. Deliberately not independent x and y scale.
+   A stretch can be made to agree exactly at both calibration points while
+   being wrong at every hole between them, and being wrong in the middle of a
+   board is precisely the failure this tool is not allowed to have. A uniform
+   scale cannot hide that way -- if the photo does not fit, you can see that
+   it does not fit.
+
+   Board points are [row, col] like everywhere else. Image points are [u, v]
+   in the picture's own pixels, which is the one frame that survives being
+   re-fitted: a click can always be carried back into it and stays meaningful
+   however wrong the current alignment is.
+   ============================================================ */
+
+/* Two picks close together turn a small misjudgement into a large error in
+   scale and turn, so there is a floor on both frames. These are not tuning
+   knobs; they are the distance below which the answer stops being knowable. */
+const OV_MIN_PX = 24;      // apart on the photo
+const OV_MIN_HOLES = 3;    // apart on the board
+
+function ovFinite(){
+  for(const v of arguments) if(!Number.isFinite(v)) return false;
+  return true;
+}
+
+/* image [u,v] -> board [row, col], both fractional */
+function overlayAt(T, u, v){
+  return [T.b * u + T.a * v + T.ty, T.a * u - T.b * v + T.tx];
+}
+
+/* board [row, col] -> image [u, v]; the exact inverse of overlayAt */
+function overlayImageAt(T, row, col){
+  const det = T.a * T.a + T.b * T.b;
+  if(!det) return null;
+  const x = col - T.tx, y = row - T.ty;
+  return [(T.a * x + T.b * y) / det, (T.a * y - T.b * x) / det];
+}
+
+/* holes per image pixel, and how far the picture is turned, in degrees */
+function overlayScale(T){ return Math.hypot(T.a, T.b); }
+function overlayTurn(T){ return Math.atan2(T.b, T.a) * 180 / Math.PI; }
+
+/* Two matched pairs -- a spot on the photo and the hole it is -- and the fit
+   follows. Returns {why} instead of a transform when the picks cannot carry
+   an answer, because a plausible-looking overlay derived from two touching
+   points is worse than no overlay at all. */
+function overlayFrom(p1, q1, p2, q2){
+  const u1 = p1 && p1[0], v1 = p1 && p1[1], u2 = p2 && p2[0], v2 = p2 && p2[1];
+  const r1 = q1 && q1[0], c1 = q1 && q1[1], r2 = q2 && q2[0], c2 = q2 && q2[1];
+  if(!ovFinite(u1, v1, u2, v2, r1, c1, r2, c2)) return {why:'those points did not come out as numbers'};
+
+  const du = u2 - u1, dv = v2 - v1;
+  const den = du * du + dv * dv;
+  if(Math.sqrt(den) < OV_MIN_PX)
+    return {why:'those two spots on the picture are too close together to set the scale — pick one near each opposite corner'};
+
+  const dx = c2 - c1, dy = r2 - r1;
+  if(Math.hypot(dx, dy) < OV_MIN_HOLES)
+    return {why:'those two holes are too close together to set the scale — pick one near each opposite corner'};
+
+  const a = (du * dx + dv * dy) / den;
+  const b = (du * dy - dv * dx) / den;
+  if(!ovFinite(a, b) || (a === 0 && b === 0)) return {why:'those picks do not describe a fit'};
+
+  return {a:a, b:b, tx:c1 - (a * u1 - b * v1), ty:r1 - (b * u1 + a * v1)};
+}
+
+/* Where a picture goes before anybody has aligned it: whole thing inside the
+   grid, square on, centred. A starting point you can see all of, not a guess
+   at where it belongs -- alignment is still the person's to make. */
+function overlayFitBox(iw, ih, rows, cols){
+  if(!ovFinite(iw, ih, rows, cols) || iw <= 0 || ih <= 0) return null;
+  const w = Math.max(1, cols - 1), h = Math.max(1, rows - 1);
+  const s = Math.min(w / iw, h / ih);
+  if(!ovFinite(s) || s <= 0) return null;
+  return {a:s, b:0, tx:(w - iw * s) / 2, ty:(h - ih * s) / 2};
+}
+
+/* A nudge is in holes, and it moves the picture, not the board. */
+function overlayNudge(T, dr, dc){
+  return {a:T.a, b:T.b, tx:T.tx + dc, ty:T.ty + dr};
+}
+
+/* Scaling has to happen about a fixed point or the picture walks off screen
+   every time you touch it. The hole under the middle of the board stays put. */
+function overlayScaleBy(T, mult, row, col){
+  if(!ovFinite(mult) || mult <= 0) return T;
+  const p = overlayImageAt(T, row, col);
+  if(!p) return T;
+  const a = T.a * mult, b = T.b * mult;
+  return {a:a, b:b, tx:col - (a * p[0] - b * p[1]), ty:row - (b * p[0] + a * p[1])};
+}
+
+/* Turning is the same story, about the same fixed point. Degrees, because
+   that is what the readout says and nobody nudges in radians. */
+function overlayTurnBy(T, deg, row, col){
+  if(!ovFinite(deg)) return T;
+  const t = deg * Math.PI / 180, cs = Math.cos(t), sn = Math.sin(t);
+  const p = overlayImageAt(T, row, col);
+  if(!p) return T;
+  const a = T.a * cs - T.b * sn, b = T.a * sn + T.b * cs;
+  return {a:a, b:b, tx:col - (a * p[0] - b * p[1]), ty:row - (b * p[0] + a * p[1])};
+}
+
+/* Only a shape the renderer can trust gets drawn. A saved overlay from an
+   older file, or one a hand-edit got at, is dropped rather than repaired --
+   the same rule migrate() follows for parts. */
+function overlayOk(T){
+  return !!T && ovFinite(T.a, T.b, T.tx, T.ty) && (T.a !== 0 || T.b !== 0);
+}
+
 /*#endregion model */
 /* ============================================================
    RENDER
@@ -2974,6 +3151,20 @@ function render(){
   o.push('<svg id="board" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
          '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
   o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="#0E0B18" stroke="#241F36"/>');
+
+  /* --- the overlay picture, first thing after the board itself so that
+     every hole, strip, cut and part is drawn ON it. It carries no pointer
+     events at all: the board's pointer is for building, and a picture that
+     could be grabbed by accident would slide mid-trace without saying so.
+     It moves only by its own controls. --- */
+  if(OV.on && REF.src && overlayOk(OV.T) && refImg.naturalWidth){
+    const iw = refImg.naturalWidth, ih = refImg.naturalHeight;
+    const ma = PITCH * OV.T.a, mb = PITCH * OV.T.b;
+    o.push('<image href="' + esc(REF.src) + '" x="0" y="0" width="' + iw + '" height="' + ih +
+           '" opacity="' + OV.op + '" pointer-events="none" transform="matrix(' +
+           ma + ' ' + mb + ' ' + (-mb) + ' ' + ma + ' ' +
+           (MARGIN + PITCH * OV.T.tx) + ' ' + (MARGIN + PITCH * OV.T.ty) + ')"/>');
+  }
 
   /* --- rulers --- */
   for(let c = 0; c < cols; c++)
@@ -3344,6 +3535,30 @@ function render(){
         o.push('<rect class="phit" data-ic="' + ic.id + '" x="' + (X(ex.c0) - 9) +
                '" y="' + (Y(ex.r0) - 12) + '" width="' + (X(ex.c1) - X(ex.c0) + 18) +
                '" height="' + (Y(ex.r1) - Y(ex.r0) + 24) + '" fill="transparent"/>'); }
+  }
+
+  /* --- alignment marks: each pick, and the pair it makes. Drawn last and
+     inert, so they sit over the picture without catching a click meant for
+     the board underneath. --- */
+  if(ALIGN && overlayOk(OV.T)){
+    const mark = (row, col, col2, n) => {
+      const mx = X(col), my = Y(row);
+      o.push('<circle cx="' + mx + '" cy="' + my + '" r="11" fill="none" stroke="' + col2 +
+             '" stroke-width="2" pointer-events="none"/>');
+      o.push('<circle cx="' + mx + '" cy="' + my + '" r="2.5" fill="' + col2 + '" pointer-events="none"/>');
+      o.push('<text class="lbl" x="' + (mx + 15) + '" y="' + (my - 11) + '" pointer-events="none">' + n + '</text>');
+    };
+    const pair = (p, q, n) => {
+      const at = overlayAt(OV.T, p[0], p[1]);
+      mark(at[0], at[1], '#00F0FF', n);
+      if(q){
+        mark(q[0], q[1], '#FF3DBE', n);
+        o.push('<path d="M' + X(at[1]) + ' ' + Y(at[0]) + 'L' + X(q[1]) + ' ' + Y(q[0]) +
+               '" stroke="#FF3DBE" stroke-width="1.6" stroke-dasharray="5 4" fill="none" pointer-events="none"/>');
+      }
+    };
+    if(ALIGN.p1) pair(ALIGN.p1, ALIGN.q1, '1');
+    if(ALIGN.p2) pair(ALIGN.p2, ALIGN.q2, '2');
   }
 
   o.push('<style>' +
@@ -4291,7 +4506,7 @@ function onHole(r, c){
 
 /* Board coordinates straight from the pointer, so a drag keeps working even
    when the cursor is over a part rather than a hole. */
-function holeFromEvent(e){
+function boardPointFromEvent(e){
   const svg = document.getElementById('board');
   if(!svg || !svg.getScreenCTM) return null;
   const m = svg.getScreenCTM();
@@ -4299,8 +4514,14 @@ function holeFromEvent(e){
   const pt = svg.createSVGPoint();
   pt.x = e.clientX; pt.y = e.clientY;
   const q = pt.matrixTransform(m.inverse());
-  const r = Math.round((q.y - MARGIN) / PITCH), c = Math.round((q.x - MARGIN) / PITCH);
-  return [r, c];
+  return [(q.y - MARGIN) / PITCH, (q.x - MARGIN) / PITCH];
+}
+
+/* Placing snaps to a hole; aligning does not, because a spot on a photograph
+   is wherever it is and rounding it would be inventing precision. */
+function holeFromEvent(e){
+  const p = boardPointFromEvent(e);
+  return p ? [Math.round(p[0]), Math.round(p[1])] : null;
 }
 
 function moveSel(dr, dc, basePins, basePin1, basePadAt){
@@ -4443,10 +4664,19 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if(k === 'escape' && !walk.hidden){ closeWalk(); return; }
   if(k === 'escape' && !parts.hidden){ closeParts(); return; }
+  if(k === 'escape' && ALIGN){ ovAlignStop('alignment abandoned; the picture has not moved'); return; }
   if((e.ctrlKey || e.metaKey) && k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if((e.ctrlKey || e.metaKey) && k === 'y'){ e.preventDefault(); redo(); return; }
   if(e.ctrlKey || e.metaKey || e.altKey) return;
   if(e.key === 'Escape'){ pending = []; pinnedNet = null; focusHole = null; SEL = null; FOOT = false; REGION = null; LINE = null; renderCtx(); render(); return; }
+  /* Shift claims the arrows for the picture. Without the modifier they still
+     move a selected part, which is what a hand reaching for them expects. */
+  if(OV.on && e.shiftKey && e.key.indexOf('Arrow') === 0){
+    e.preventDefault();
+    const d = {ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1]}[e.key];
+    if(d) ovMove(d[0] * OV_NUDGE, d[1] * OV_NUDGE);
+    return;
+  }
   if(TOOL === 'select' && SEL && e.key.indexOf('Arrow') === 0){
     e.preventDefault();
     const d = {ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1]}[e.key];
@@ -4537,6 +4767,12 @@ const REF_KEY = 'copper-bottom.reference.v1';
 const REF_MAX = 2 * 1024 * 1024;     // biggest data URL we will try to remember
 let REF = {src:null, x:0, y:0, z:1, w:38};
 
+/* Declared here rather than down in the overlay section because the restore
+   below runs the moment this section is parsed, and a let in TDZ would take
+   the whole app with it. */
+let OV = {on:false, T:null, op:0.55};   // T maps image pixels to board holes
+let ALIGN = null;                       // an alignment part-way through
+
 function refShown(){ return !ref.hidden; }
 
 function refApply(){
@@ -4576,7 +4812,8 @@ function refZoom(mult, cx, cy){
 function refSave(){
   try{
     if(REF.src && REF.src.length <= REF_MAX)
-      localStorage.setItem(REF_KEY, JSON.stringify({src:REF.src, w:REF.w}));
+      localStorage.setItem(REF_KEY, JSON.stringify({src:REF.src, w:REF.w,
+        ov:{on:OV.on, T:OV.T, op:OV.op}}));
     else
       localStorage.removeItem(REF_KEY);
   }catch(err){
@@ -4587,6 +4824,11 @@ function refSave(){
 
 function refSet(src){
   REF.src = src || null;
+  /* clearing the picture clears what was behind the board with it, transform
+     and all -- a transform kept for a picture that is gone would silently
+     mis-place the next one */
+  if(!src && OV.on){ OV.on = false; ALIGN = null; }
+  if(!src) OV.T = null;
   if(!src){ refApply(); refSave(); return; }
   refImg.onload = () => { refFitNow(); };
   refImg.src = src;
@@ -4596,6 +4838,9 @@ function refSet(src){
 
 function refToggle(on){
   const show = on === undefined ? !refShown() : on;
+  /* One picture, two places to put it. Showing the pane takes it out from
+     behind the board rather than drawing it twice. */
+  if(show && OV.on) ovSet(false);
   ref.hidden = !show; refGrip.hidden = !show;
   btnRef.classList.toggle('on', show);
   if(show){ refApply(); if(REF.src && refImg.naturalWidth && REF.z === 1) refFitNow(); }
@@ -4664,11 +4909,213 @@ refFile.onchange = (e) => {
   try{ stored = JSON.parse(localStorage.getItem(REF_KEY) || 'null'); }catch(err){}
   if(stored && stored.src){
     if(stored.w) REF.w = stored.w;
-    refImg.onload = () => { if(refShown()) refFitNow(); };
+    /* A transform that does not survive overlayOk is dropped, not repaired.
+       A picture put back in roughly the right place is a picture you would
+       trace holes off, and the holes would be wrong. */
+    if(stored.ov && overlayOk(stored.ov.T)){
+      OV.T = stored.ov.T;
+      OV.on = !!stored.ov.on;
+      if(Number.isFinite(stored.ov.op)) OV.op = stored.ov.op;
+    }
+    refImg.onload = () => { if(refShown()) refFitNow(); if(OV.on) render(); };
     REF.src = stored.src; refImg.src = stored.src;
   }
   refApply();
 })();
+
+
+/* ============================================================
+   OVERLAY MODE
+   The reference picture moved from beside the board to behind it, so a
+   published layout can be traced hole for hole and the netlist read off the
+   result. The geometry lives in the model region; this is the shell.
+
+   Two things it deliberately does not do:
+
+   - it does not read the picture. No hole detection, no colour matching,
+     nothing that could put a part somewhere nobody chose to put it.
+   - it does not claim to be aligned. The fit is reported as pixels per hole
+     and degrees of turn, and the person can see the grid over the photo,
+     which is a looking question they can answer.
+   ============================================================ */
+const OV_NUDGE = 0.1;     // holes per press
+const OV_STEP  = 1.01;    // scale per press
+const OV_SPIN  = 0.25;    // degrees per press
+
+function ovSize(){
+  return refImg.naturalWidth ? [refImg.naturalWidth, refImg.naturalHeight] : null;
+}
+function ovReady(){ return OV.on && REF.src && overlayOk(OV.T) && !!ovSize(); }
+
+/* The middle hole of the board: scaling and turning happen about it so the
+   picture does not walk out of view every time it is touched. */
+function ovPivot(){ return [(S.board.rows - 1) / 2, (S.board.cols - 1) / 2]; }
+
+function ovTell(msg, bad){
+  ovSay.textContent = msg || '';
+  ovSay.classList.toggle('no', !!bad);
+}
+
+function ovReadout(){
+  if(!ovReady()){ ovRead.textContent = ''; return; }
+  const per = 1 / overlayScale(OV.T);
+  ovRead.textContent = per.toFixed(1) + 'px/hole \u00b7 ' +
+                       overlayTurn(OV.T).toFixed(1) + '\u00b0';
+}
+
+function ovSync(){
+  ovbar.hidden = !OV.on;
+  ovOpen.hidden = !!REF.src;      /* only worth offering when there is nothing behind the board */
+  btnRef.classList.toggle('on', refShown() || OV.on);
+  ovFade.value = Math.round(OV.op * 100);
+  stage.classList.toggle('aligning', !!ALIGN);
+  ovReadout();
+}
+
+function ovChanged(){ ovReadout(); refSave(); render(); }
+
+function ovMove(dr, dc){
+  if(!ovReady()) return;
+  OV.T = overlayNudge(OV.T, dr, dc);
+  ovChanged();
+}
+function ovZoom(mult){
+  if(!ovReady()) return;
+  const p = ovPivot();
+  OV.T = overlayScaleBy(OV.T, mult, p[0], p[1]);
+  ovChanged();
+}
+function ovSpin(deg){
+  if(!ovReady()) return;
+  const p = ovPivot();
+  OV.T = overlayTurnBy(OV.T, deg, p[0], p[1]);
+  ovChanged();
+}
+
+function ovSet(on){
+  if(on){
+    if(!REF.src){ refFile.click(); return; }     /* nothing to put back there yet */
+    const sz = ovSize();
+    if(!sz){ ovTell('the picture has not finished loading', true); return; }
+    const fresh = !overlayOk(OV.T);
+    if(fresh) OV.T = overlayFitBox(sz[0], sz[1], S.board.rows, S.board.cols);
+    if(!overlayOk(OV.T)){ OV.on = false; ovSync(); return; }
+    OV.on = true;
+    refToggle(false);
+    ovTell(fresh ? 'square on and centred, which is almost certainly not aligned \u2014 press align'
+                 : 'back where you left it');
+  }else{
+    OV.on = false;
+    ALIGN = null;
+    ovTell('');
+  }
+  ovSync();
+  refSave();
+  render();
+}
+
+/* ---- alignment ----
+   Four clicks: a spot on the picture, the hole it is, and again somewhere far
+   away. Clicks on the picture are carried back into image pixels through
+   whatever transform is current, so the sequence works however badly the
+   picture is placed when it starts -- including the very first time. */
+const OV_ASK = [
+  'click a spot on the picture you can name \u2014 a hole near one corner',
+  'now click the board hole that spot is',
+  'click a second spot on the picture, as far from the first as you can',
+  'and the board hole that one is'
+];
+
+function ovAlignStart(){
+  if(!ovReady()){ ovTell('open a picture first', true); return; }
+  ALIGN = {step:0, p1:null, q1:null, p2:null, q2:null};
+  ovTell(OV_ASK[0]);
+  ovAlign.classList.add('on');
+  ovSync();
+  render();
+}
+
+function ovAlignStop(msg, bad){
+  ALIGN = null;
+  ovAlign.classList.remove('on');
+  ovTell(msg || '', bad);
+  ovSync();
+  render();
+}
+
+function ovAlignClick(e){
+  const p = boardPointFromEvent(e);
+  if(!p) return;
+
+  /* an odd step wants a hole, and a hole is a whole number */
+  if(ALIGN.step === 1 || ALIGN.step === 3){
+    const q = [Math.round(p[0]), Math.round(p[1])];
+    if(q[0] < 0 || q[1] < 0 || q[0] >= S.board.rows || q[1] >= S.board.cols){
+      ovTell('that is off the edge of the board \u2014 click a hole', true);
+      return;
+    }
+    if(ALIGN.step === 1){ ALIGN.q1 = q; ALIGN.step = 2; ovTell(OV_ASK[2]); render(); return; }
+    ALIGN.q2 = q;
+    const T = overlayFrom(ALIGN.p1, ALIGN.q1, ALIGN.p2, ALIGN.q2);
+    if(T.why){
+      /* the old transform stays exactly where it was; a refused fit changes
+         nothing, so nothing has to be undone */
+      ALIGN.q2 = null;
+      ALIGN.p2 = null;
+      ALIGN.step = 2;
+      ovTell(T.why, true);
+      render();
+      return;
+    }
+    OV.T = T;
+    ovAlignStop('aligned on those two holes \u2014 check the grid against the picture before you trace it');
+    refSave();
+    return;
+  }
+
+  /* an even step wants a spot on the picture, which must actually be on it */
+  const uv = overlayImageAt(OV.T, p[0], p[1]);
+  const sz = ovSize();
+  if(!uv || !sz){ ovTell('that pick did not land anywhere', true); return; }
+  if(uv[0] < 0 || uv[1] < 0 || uv[0] > sz[0] || uv[1] > sz[1]){
+    ovTell('that is off the picture \u2014 click somewhere on the photo itself', true);
+    return;
+  }
+  if(ALIGN.step === 0){ ALIGN.p1 = uv; ALIGN.step = 1; }
+  else                { ALIGN.p2 = uv; ALIGN.step = 3; }
+  ovTell(OV_ASK[ALIGN.step]);
+  render();
+}
+
+/* Capture, so an alignment click never reaches the board and places a part
+   by accident. Both events: click alone would leave a pointerdown free to
+   start a drag on whatever is under it. */
+stage.addEventListener('click', e => {
+  if(!ALIGN) return;
+  e.preventDefault(); e.stopPropagation();
+  ovAlignClick(e);
+}, true);
+stage.addEventListener('pointerdown', e => {
+  if(!ALIGN) return;
+  e.preventDefault(); e.stopPropagation();
+}, true);
+
+refOverlay.onclick = () => ovSet(true);
+ovOff.onclick      = () => ovSet(false);
+ovOpen.onclick     = () => refFile.click();
+ovAlign.onclick    = () => { ALIGN ? ovAlignStop('') : ovAlignStart(); };
+ovLeft.onclick     = () => ovMove(0, -OV_NUDGE);
+ovRight.onclick    = () => ovMove(0,  OV_NUDGE);
+ovUp.onclick       = () => ovMove(-OV_NUDGE, 0);
+ovDown.onclick     = () => ovMove( OV_NUDGE, 0);
+ovSmall.onclick    = () => ovZoom(1 / OV_STEP);
+ovBig.onclick      = () => ovZoom(OV_STEP);
+ovCCW.onclick      = () => ovSpin(-OV_SPIN);
+ovCW.onclick       = () => ovSpin( OV_SPIN);
+ovFade.oninput     = () => { OV.op = Math.max(0.1, Math.min(1, (+ovFade.value || 55) / 100)); render(); };
+ovFade.onchange    = () => refSave();
+
+ovSync();
 
 /* Below 900px the checks live in a pull-up sheet rather than a column, so
    there has to be something to pull it up by. Above 900px the panel is always

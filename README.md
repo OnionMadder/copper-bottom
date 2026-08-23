@@ -62,6 +62,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | reference pane — a schematic beside the board | done |
 | diode + resistor types with their own symbols | done |
 | name a pad as you place it + duplicate-name check | done |
+| overlay mode — trace somebody else’s layout behind the grid | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -77,6 +78,7 @@ See `ROADMAP.md` for what's next.
 | `E` electrolytic (first hole is `+`) | `D` diode (band on the second hole) | `Q` transistor | `W` trimpot |
 | `G` regulator | `U` IC / DIP | `P` pad | `N` strip colour |
 | `[` `]` zoom | `,` `.` turn the selection | `Esc` cancel / deselect | `Del` erase tool, or delete the selection |
+| `Shift` + arrows nudge the overlay picture | | | |
 
 `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo everything.
 
@@ -159,6 +161,50 @@ Two refusals, both for the same reason as the row/column one: a DIP straddles it
 one way only, so neither a chip nor a block containing one will turn. And a turn that
 would throw a leg off the board is refused rather than clipped — try the other direction,
 which swings the opposite way.
+
+## Tracing somebody else’s layout
+
+Most layouts in the world are pictures. A forum post, a screenshot, a photo of a board
+somebody built — and the usual way to use one is to count holes off the picture with a
+finger and hope.
+
+**reference → behind board** puts the picture underneath the grid instead. Every hole,
+strip, cut and part is then drawn on top of it, and you place parts by clicking the holes
+you can see through the grid. Nothing is read off the picture by software: no hole
+detection, no colour matching, nothing that could put a part somewhere nobody chose to
+put it. It is a tracing surface, not an importer.
+
+**align** is what makes it trustworthy. Click a spot on the picture you can name — a hole
+near one corner — then click the board hole it is; then the same again as far away as you
+can get. From those two pairs the fit follows exactly: one scale, one turn, one shift.
+
+Deliberately **not** independent horizontal and vertical scale. A stretch can be made to
+agree perfectly at both of your calibration points while being wrong at every hole in
+between, and being wrong in the middle of a board is the one failure this tool must not
+have. A single scale cannot hide that way: if the photo does not fit, you can see that it
+does not fit.
+
+Two picks too close together are refused rather than fitted, with the reason, because a
+short baseline turns a small misjudgement into a large error. A pick that lands off the
+picture is refused too. A refusal changes nothing — the previous alignment stays exactly
+where it was, so there is never anything to undo.
+
+The bar reports what it did as **pixels per hole** and **degrees of turn**, never as
+"aligned". Whether it is aligned is a looking question, and the grid is sitting on the
+photo for you to answer it. Arrows, `+` `−` and the two turn buttons nudge it afterwards
+(`Shift` + arrow keys does the nudging from the keyboard), and **fade** sets how strongly
+the picture reads against the copper.
+
+The picture is remembered between sessions along with its alignment, under its own
+storage key. It is **never** written into your exported `.json` — it is a thing you read
+while building, not a thing the board is made of. A saved alignment that does not survive
+a soundness check is dropped rather than repaired, for the same reason `migrate()` drops
+a malformed part: a picture put back in roughly the right place is a picture you would
+trace wrong holes off.
+
+Once the parts are placed, **from my board** in the netlist panel writes the circuit out.
+That is the whole point of the mode: a published layout goes in as a picture and comes
+out as a netlist, without anybody having read a schematic.
 
 ## The netlist check — optional, always
 
