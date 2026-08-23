@@ -351,6 +351,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <span class="nlnote">optional — a second opinion, never required</span>
     <span class="sp"></span>
     <span id="nlVerdict"></span>
+    <button id="nlFromBoard" title="write out the circuit the copper currently has, as a starting point">from my board</button>
+    <button id="nlCopy" title="copy the netlist to the clipboard">copy</button>
     <button id="nlClose">close</button>
   </div>
   <div class="nlbody">
@@ -1877,6 +1879,119 @@ function bom(){
     a.what.localeCompare(b.what) ||
     a.note.localeCompare(b.note));
   return out;
+}
+
+/* ============================================================
+   WRITING THE NETLIST OUT
+   The check reads a netlist. This writes one, from the board in front of you.
+
+   It is not a verification — checking a board against a netlist derived from
+   that same board can only ever pass. What it produces is the circuit
+   SEPARATED from this particular arrangement of it: something you can carry to
+   a different board size, hand to somebody else, or lay out a second time and
+   have checked. Transcribe a layout you found somewhere, export the netlist,
+   and you have the circuit without ever having read a schematic.
+
+   It is also the honest starting point for writing one by hand. Editing names
+   on a list that already has the right members beats facing an empty pane.
+   ============================================================ */
+
+/* A name a builder would recognise, in descending order of how much it tells
+   them: what the wire off the board is called, then what drives the net, then
+   a bare number when there is genuinely nothing better to say. */
+function netName(net){
+  const pads = padsOnNet(net);
+  const rail = pads.filter(d => powerClass(d.label));
+  if(rail.length) return rail[0].label;
+  if(pads.length) return pads[0].label;
+
+  const pins = pinsOnNet(net);
+  const driver = pins.filter(q => pinRoleOf(q.ic, q.pin) === 'out')[0];
+  if(driver){
+    const info = pinInfoOf(driver.ic, driver.pin);
+    return driver.ic.ref + '_' + (info ? info.n.replace(/[^A-Za-z0-9]+/g, '') : 'PIN' + driver.pin);
+  }
+  if(pins.length){
+    /* not driven by anything on this net — name it after the pin anyway, but
+       use the datasheet's word for it: IC1_TRIG says more than IC1_2 */
+    const info = pinInfoOf(pins[0].ic, pins[0].pin);
+    return pins[0].ic.ref + '_' + (info ? info.n.replace(/[^A-Za-z0-9]+/g, '') : pins[0].pin);
+  }
+  /* no pads and no chips: name it after a leg. A three-leg part is the anchor
+     of whatever is going on around it, so Q1_B beats N3 by a mile. */
+  const leads = connections().filter(c => {
+    if(c.kind !== 'lead') return false;
+    const n = NET.netAt(c.at[0], c.at[1]);
+    return n && n.id === net.id;
+  });
+  const anchor = leads.filter(c => c.part && c.part.pins.length >= 3)[0] || leads[0];
+  if(anchor) return anchor.label.replace('.', '_');
+  return 'N' + net.id;
+}
+
+function netMembers(net){
+  const out = [];
+  for(const d of padsOnNet(net)) out.push('@' + d.label);
+  for(const q of pinsOnNet(net)) out.push(q.ic.ref + '.' + q.pin);
+  for(const c of connections()){
+    if(c.kind !== 'lead') continue;
+    const n = NET.netAt(c.at[0], c.at[1]);
+    if(n && n.id === net.id) out.push(c.label);
+  }
+  return out;
+}
+
+function netlistFromBoard(){
+  const rows = [];
+  for(const net of NET.nets){
+    const members = netMembers(net);
+    if(!members.length) continue;            // an empty strip has nothing to say
+    rows.push({net:net, name:netName(net), members:members});
+  }
+
+  /* supplies first, because that is the order a person reads a circuit in */
+  const rank = (r) => {
+    const c = padsOnNet(r.net).map(d => powerClass(d.label)).filter(Boolean)[0];
+    if(c && c.cls === 'pos') return 0;
+    if(c && c.cls === 'neg') return 1;
+    if(c && c.cls === 'gnd') return 2;
+    return 3;
+  };
+  rows.sort((a, b) => rank(a) - rank(b) || a.net.id - b.net.id);
+
+  /* two nets can want the same name — the pad-name rule flags that as a fault,
+     but a file that silently used one name twice would be worse than one that
+     shows the collision. */
+  const used = new Map();
+  for(const r of rows){
+    const n = used.get(r.name) || 0;
+    used.set(r.name, n + 1);
+    if(n) r.name = r.name + '_' + (n + 1);
+  }
+
+  /* nothing placed yet: say so rather than reducing over an empty list, which
+     gives -Infinity for the padding and asks rank() about a net that does not
+     exist. An empty board is a perfectly ordinary thing to press this on. */
+  if(!rows.length)
+    return '# ' + (S.name || 'untitled') + String.fromCharCode(10) +
+           '# nothing is placed yet, so there is no circuit to write down.';
+  const pad = Math.min(14, Math.max(...rows.map(r => r.name.length), 4) + 2);
+  const out = [
+    '# ' + (S.name || 'untitled') + ' — written from the board',
+    '# ' + S.board.rows + ' strips of ' + S.board.cols + ' holes, ' +
+      S.parts.length + ' parts, ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
+      ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's'),
+    '#',
+    '# This is the circuit as the copper currently has it. Checking the board',
+    '# against it can only pass — its use is to carry the circuit somewhere else.',
+    '',
+  ];
+  let lastRank = rank(rows[0] || {net:{id:0}});
+  for(const r of rows){
+    if(rank(r) !== lastRank){ out.push(''); lastRank = rank(r); }
+    out.push((r.name + ':').padEnd(pad) + r.members.join(' '));
+  }
+  return out.join('\n');
 }
 
 /* ============================================================
@@ -4417,6 +4532,35 @@ window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syn
 
 btnNet.onclick     = openNetlist;
 nlClose.onclick    = closeNetlist;
+
+/* Facing an empty pane is the hardest part of writing one of these. This fills
+   it with the circuit the board already has — right members, right spelling,
+   right shape — so the job becomes renaming and regrouping rather than
+   recalling a syntax. It replaces what is there, so it asks first when that
+   would throw away something you typed. */
+nlFromBoard.onclick = () => {
+  const current = nlText.value.trim();
+  const fresh = netlistFromBoard();
+  if(current && current !== fresh.trim() &&
+     !confirm('Replace what is in the pane with the netlist read off the board?')) return;
+  nlText.value = fresh;
+  S.netlist = fresh;
+  renderNetlist();
+  renderNetBadge();
+  autosave();
+};
+
+nlCopy.onclick = () => {
+  const text = nlText.value;
+  const done = () => flash('netlist copied');
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(text).then(done, () => fallback());
+  else fallback();
+  function fallback(){
+    nlText.select();
+    try{ document.execCommand('copy'); done(); }catch(err){ flash('copy failed — select and copy by hand'); }
+  }
+};
 nlText.oninput     = () => {
   const v = nlText.value;
   if(v.trim()) S.netlist = v; else delete S.netlist;

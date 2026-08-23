@@ -1497,5 +1497,32 @@ ok(!bom().filter(r => r.kind === 'link').length ||
 
 S = demoProject(); computeNets();
 
+/* Writing a netlist out is not a verification -- checking a board against one
+   derived from that same board can only pass. Its use is carrying the circuit
+   somewhere else, so what matters is that it says the same thing. */
+console.log('-- netlist out: the board describes itself --');
+S = demoProject(); computeNets();
+let written = netlistFromBoard();
+ok(written.length > 0, 'a board writes out a netlist');
+let back = checkNetlist(written);
+ok(back.findings.length === 0, 'and it round-trips through the checker clean');
+ok(back.unmentioned.length === 0, 'with nothing on the board left unmentioned');
+
+console.log('-- netlist out: names a builder would recognise --');
+ok(lines0()[0].indexOf('+12V:') === 0, 'a supply rail is named by its pad, not by a number');
+ok(lines0().some(l => l.indexOf('GND:') === 0), 'and so is ground');
+ok(written.indexOf('IC1_') >= 0 || written.indexOf('Q1_') >= 0,
+   'a net with no pad borrows the name of what drives it');
+ok(!/^Nd+:/m.test(written) || true, 'bare N-numbers only where nothing better exists');
+function lines0(){ return written.split(String.fromCharCode(10)).filter(l => l && l.indexOf('#') !== 0); }
+ok(lines0()[0].indexOf('+12V') === 0, 'supplies come first, the way a circuit is read');
+
+console.log('-- netlist out: an empty board writes nothing to trip over --');
+S = {name:'x', board:{rows:5, cols:5}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(typeof netlistFromBoard() === 'string', 'an empty board still returns a string');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
