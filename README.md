@@ -64,6 +64,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | name a pad as you place it + duplicate-name check | done |
 | overlay mode — trace somebody else’s layout behind the grid | done |
 | a movable cut line, and strips you can leave whole | done |
+| edit and checks in one column, prose set in a prose font | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
