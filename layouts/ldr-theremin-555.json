@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "name": "LDR theremin (555)",
+  "board": { "rows": 10, "cols": 20 },
+  "cuts": ["2,5", "3,5", "4,5", "5,5"],
+  "ics": [
+    {
+      "id": "u1",
+      "ref": "U1",
+      "part": "NE555",
+      "pins": 8,
+      "pin1": [2, 4],
+      "span": 3,
+      "autoCuts": ["2,5", "3,5", "4,5", "5,5"]
+    }
+  ],
+  "parts": [
+    { "id": "r4", "kind": "res",  "ref": "R4", "value": "10k",  "pins": [[0, 8], [3, 8]] },
+    { "id": "r3", "kind": "res",  "ref": "R3", "value": "1M",   "pins": [[6, 12], [9, 12]] },
+    { "id": "c3", "kind": "cap",  "ref": "C3", "value": "100n", "pins": [[6, 13], [9, 13]] },
+    { "id": "c4", "kind": "cap",  "ref": "C4", "value": "100n", "pins": [[5, 11], [9, 11]] },
+    { "id": "c5", "kind": "ecap", "ref": "C5", "value": "100u", "polarized": true, "pins": [[8, 14], [9, 14]] },
+
+    { "id": "j1", "kind": "link", "ref": "J1", "value": "", "pins": [[0, 6], [2, 6]] },
+    { "id": "j2", "kind": "link", "ref": "J2", "value": "", "pins": [[0, 1], [5, 1]] },
+    { "id": "j3", "kind": "link", "ref": "J3", "value": "", "pins": [[3, 2], [6, 2]] },
+    { "id": "j4", "kind": "link", "ref": "J4", "value": "", "pins": [[6, 9], [4, 9]] },
+    { "id": "j5", "kind": "link", "ref": "J5", "value": "", "pins": [[2, 0], [9, 0]] }
+  ],
+  "pads": [
+    { "id": "p1", "label": "9V",    "at": [0, 10], "to": "battery + / DC jack centre pin" },
+    { "id": "p2", "label": "LDR_A", "at": [3, 10], "to": "LDR pair, pin-7 end" },
+    { "id": "p3", "label": "OUT",   "at": [4, 3],  "to": "speaker, one side" },
+    { "id": "p4", "label": "LDR_B", "at": [6, 15], "to": "LDR pair, timing end" },
+    { "id": "p5", "label": "VOL",   "at": [8, 16], "to": "volume pot lug 2" },
+    { "id": "p6", "label": "GND",   "at": [9, 18], "to": "battery - / speaker return via pot" }
+  ],
+  "netlist": "# LDR theremin - 555 astable, from the Fritzing schematic\n# R1 and R2 are LDRs in series off-board; only their two ends come back.\n# R5 is the off-board 1k volume pot, J1 the speaker.\n\nV+:     @9V  R4.A  U1.8  U1.4\nDIS:    R4.B  U1.7  @LDR_A\nTIM:    U1.6  U1.2  @LDR_B  R3.A  C3.A\nGND:    @GND  U1.1  R3.B  C3.B  C4.B  C5.B\nCTRL:   U1.5  C4.A\nOUT:    U1.3  @OUT\nVOL:    @VOL  C5.A"
+}

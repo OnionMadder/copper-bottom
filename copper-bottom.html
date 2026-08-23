@@ -249,6 +249,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 
 /* ---- netlist overlay ---- */
 .nlnote{color:var(--dim); font-size:10.5px; letter-spacing:.04em}
+.walkbody{flex:1; overflow:auto; padding:18px 22px; background:var(--void)}
+.walkbody pre{
+  margin:0; white-space:pre-wrap; color:#CFC8E0;
+  font:12px/1.65 ui-monospace,"Cascadia Mono","Consolas",monospace;
+}
 .nlbody{flex:1; display:flex; min-height:0}
 .nlleft{width:46%; min-width:280px; display:flex; border-right:1px solid var(--line)}
 .nlleft textarea{
@@ -277,6 +282,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <button id="btnNew">new</button>
   <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
   <button id="btnRef" title="keep a schematic or layout photo beside the board while you work">reference</button>
+  <button id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough</button>
   <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
   <button id="btnExport">export .json</button>
   <button id="btnImport">import</button>
@@ -343,6 +349,17 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <h2 id="nethdr">NETS</h2>
     <div class="netwrap" id="netlist"></div>
   </div>
+</div>
+
+<div class="sheet" id="walk" hidden>
+  <div class="sheetbar">
+    <b>WALKTHROUGH</b>
+    <span class="nlnote">this layout as steps — for sharing, or for placing it again</span>
+    <span class="sp"></span>
+    <button id="walkCopy">copy</button>
+    <button id="walkClose">close</button>
+  </div>
+  <div class="walkbody"><pre id="walkText"></pre></div>
 </div>
 
 <div class="sheet" id="netl" hidden>
@@ -1879,6 +1896,118 @@ function bom(){
     a.what.localeCompare(b.what) ||
     a.note.localeCompare(b.note));
   return out;
+}
+
+/* ============================================================
+   THE WALKTHROUGH
+   The layout written out as steps somebody can follow.
+
+   This exists because of a mistake. Handing someone a list of positions read
+   off the JSON gave them 0-indexed coordinates while the screen counted from
+   1 — twice, by the person who had just changed the screen. A layout turned
+   into prose BY THE TOOL cannot disagree with the tool, because it does the
+   conversion the same way the board does.
+
+   It is also the layout in a form that travels. A .json is for the app; a
+   numbered list is for a forum post, a message, or somebody who finds a grid
+   of coloured holes harder to read than a sentence. And each step can carry
+   the reason it is that way, which a grid never can.
+   ============================================================ */
+
+/* said once per kind, the first time that kind comes up */
+const WALK_NOTES = {
+  link:  'A plain wire joining two strips. Links are the only thing that merges nets.',
+  ecap:  'The FIRST click is the + leg. Backwards, an electrolytic eventually vents.',
+  diode: 'The SECOND click is the banded end — the cathode. Backwards, nothing works at all.',
+  trans: 'The clicks go in leg order, so watch the letters the panel puts on them.',
+  res:   null, cap: null, trim: null, reg: null,
+};
+
+function walkthrough(){
+  const L = [];
+  const at = (h) => 'row ' + dRow(h[0]) + ', col ' + dCol(h[1]);
+  const seen = {};
+  let n = 0;
+  const step = (head, body) => {
+    n++;
+    L.push(String(n).padStart(2) + '. ' + head);
+    if(body) for(const line of [].concat(body)) L.push('    ' + line);
+    L.push('');
+  };
+
+  L.push((S.name || 'untitled') + ' — placing it step by step');
+  L.push(S.board.rows + ' rows of ' + S.board.cols + ' holes · ' +
+         S.parts.length + ' parts · ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
+         ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's') +
+         ' · ' + S.pads.length + ' pad' + (S.pads.length === 1 ? '' : 's'));
+  L.push('');
+  L.push('Every part crosses the strips — watch the ROW change between clicks.');
+  L.push('All the holes in one row are a single piece of copper, so a part with');
+  L.push('both legs on one row is bypassed by the strip and does nothing.');
+  L.push('');
+
+  step('Press new, then set rows to ' + S.board.rows + ' and cols to ' + S.board.cols + '.');
+
+  for(const ic of S.ics){
+    const def = IC_LIB[ic.part] || {};
+    const half = ic.pins / 2;
+    step('U — chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
+      ['Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
+       ' back up column ' + dCol(ic.pin1[1] + ic.span) + '.',
+       (ic.autoCuts || []).length
+         ? 'Placing it inserts ' + ic.autoCuts.length + ' cuts between the pin rows. Without them ' +
+           'each pin would be joined to the one facing it — pin 1 straight to pin ' + ic.pins + '.'
+         : null,
+       def.about ? ic.part + ' — ' + def.about + '.' : null].filter(Boolean));
+  }
+
+  /* cuts the builder has to make by hand, as opposed to the ones a chip brought */
+  const owned = new Set();
+  for(const ic of S.ics) for(const k of ic.autoCuts || []) owned.add(k);
+  const hand = S.cuts.filter(k => !owned.has(k));
+  if(hand.length)
+    step('X — cut track. ' + hand.length + ' cut' + (hand.length === 1 ? '' : 's') + ' to make by hand.',
+      hand.map(k => { const q = k.split(',').map(Number); return at(q); })
+        .concat(['A cut breaks one strip into two separate nets at that hole.']));
+
+  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G'};
+  for(const it of buildList()){
+    if(it.kind === 'ic') continue;
+    const part = S.parts.find(x => x.id === (it.key || '').replace('part:', '')) ||
+                 S.parts.find(x => x.ref === it.ref);
+    if(!part) continue;
+    const k = KEY[part.kind] || '?';
+    /* a device and a value are different fields and the panel labels them
+       differently. A resistor's 1M is a VALUE; a transistor's 2N3904 is a
+       DEVICE. Saying device-or-value would have swallowed the value of every
+       resistor placed since types were added, because those carry device
+       'fixed'. A device that is merely the family default is not worth a word. */
+    const fam = DEV_LIB[part.kind];
+    const isDefault = fam && part.device === Object.keys(fam)[0];
+    const bits = [];
+    if(part.device && !isDefault)
+      bits.push((LEG_LIB[part.kind] ? 'DEVICE ' : 'TYPE ') + part.device);
+    if(part.value) bits.push('VALUE ' + part.value);
+    const head = k + ' — ' + (PART_LIB[part.kind] || {}).name + ' ' + part.ref +
+                 (bits.length ? ', ' + bits.join(', ') : '') + '.';
+    const body = [part.pins.map(at).join('   then   ')];
+    if(!seen[part.kind] && WALK_NOTES[part.kind]){ body.push(WALK_NOTES[part.kind]); seen[part.kind] = 1; }
+    if(part.mount === 'vertical') body.push('This one stands on end rather than lying flat.');
+    step(head, body);
+  }
+
+  for(const d of S.pads)
+    step('P — pad. Click ' + at(d.at) + ', type ' + d.label + ', press Enter.',
+      d.to ? ['This is where ' + d.to + ' joins the board.'] : null);
+
+  if(S.netlist){
+    L.push('When it is all placed, paste this into the netlist pane and it should');
+    L.push('report a match:');
+    L.push('');
+    for(const line of S.netlist.split('\n')) L.push('    ' + line);
+    L.push('');
+  }
+  return L.join('\n');
 }
 
 /* ============================================================
@@ -4289,6 +4418,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   const k = e.key.toLowerCase();
+  if(k === 'escape' && !walk.hidden){ closeWalk(); return; }
   if((e.ctrlKey || e.metaKey) && k === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if((e.ctrlKey || e.metaKey) && k === 'y'){ e.preventDefault(); redo(); return; }
   if(e.ctrlKey || e.metaKey || e.altKey) return;
@@ -4529,6 +4659,25 @@ btnChecks.onclick = () => { side.hidden = !side.hidden; syncChecksButton(); };
 /* start closed on a narrow screen so it does not cover the board on arrival */
 if(NARROW()) side.hidden = true;
 window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syncChecksButton(); });
+
+/* A layout turned into prose BY THE TOOL cannot disagree with the tool — it
+   converts the coordinates the same way the board draws them. That is the
+   whole reason this exists: handing somebody positions read off the JSON gave
+   them 0-indexed numbers against a 1-indexed screen, twice. */
+function openWalk(){
+  walkText.textContent = walkthrough();
+  walk.hidden = false;
+}
+function closeWalk(){ walk.hidden = true; }
+btnWalk.onclick   = openWalk;
+walkClose.onclick = closeWalk;
+walkCopy.onclick  = () => {
+  const text = walkText.textContent;
+  const done = () => flash('walkthrough copied');
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(text).then(done, () => flash('copy failed — select it by hand'));
+  else flash('copy failed — select it by hand');
+};
 
 btnNet.onclick     = openNetlist;
 nlClose.onclick    = closeNetlist;
