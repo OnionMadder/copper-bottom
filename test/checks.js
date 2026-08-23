@@ -1445,5 +1445,57 @@ ok(DRC_WHY['floating'].indexOf('oscillates') >= 0,
 
 S = demoProject(); computeNets();
 
+/* A parts list is prose with numbers in it. These are the shapes people
+   actually paste, and the two bugs the first cut of it had. */
+console.log('-- parts check: reading a list the way people write one --');
+const bomOf = (lines) => checkBom(lines.join(String.fromCharCode(10)));
+S = demoProject(); computeNets();
+
+ok(parseBomLine('R1 - 100k 1/4W resistor 5%').value === '100k',
+   'a value is picked out of prose, and 1/4W and 5% are not mistaken for one');
+ok(parseBomLine('2 x 10n ceramic').qty === 2,
+   'a leading count is a quantity');
+ok(parseBomLine('100k').qty === 1,
+   'and the 100 in 100k is not — no quantity means one');
+ok(parseBomLine('hardware bag').unread === 'hardware bag',
+   'a line with no value is reported unread rather than guessed at');
+
+/* Parts lists write the unit; layouts do not. */
+console.log('-- parts check: 0.1uF and 100n are the same capacitor --');
+ok(bomKey('0.1uF') === bomKey('100n'), '0.1uF equals 100n');
+ok(bomKey('4.7uF') === bomKey('4u7'),  '4.7uF equals 4u7');
+ok(bomKey('100kOhm') === bomKey('100k'), 'and the ohm comes off a resistor');
+ok(bomKey('470R') === bomKey('470R'), 'but R is left alone — on a resistor it IS the multiplier');
+
+/* engValue('2N3904') reads the leading 2 and stops, so every part number
+   collapsed to a small integer and they collided with each other. */
+console.log('-- parts check: a part number is not a number --');
+ok(bomKey('2N3904') !== bomKey('2N5088'),
+   'two transistors are not the same part just because both start with 2');
+ok(bomKey('1N914') !== bomKey('1N4148'), 'nor two diodes starting with 1');
+ok(bomKey('NE555') !== bomKey('CD4093'), 'and chips stay distinct');
+
+console.log('-- parts check: the verdict --');
+S = demoProject(); computeNets();
+let bl2 = bom().filter(r => r.kind !== 'link');
+let exact = bomOf(bl2.map(r => r.qty + ' x ' + r.what));
+ok(exact.clean, 'a list matching the board exactly comes back clean');
+ok(exact.problems === 0, 'with no problems');
+
+let missing = bomOf(bl2.map(r => r.qty + ' x ' + r.what).concat(['1 x 47k']));
+ok(missing.rows.some(r => r.status === 'missing' && r.value === '47k'),
+   'a part on the list but not on the board is missing');
+let short = bomOf(bl2.map(r => (r.qty + 1) + ' x ' + r.what));
+ok(short.rows.every(r => r.status === 'short'), 'asking for more than the board has is short');
+let over = bomOf([bl2[0].qty + ' x ' + bl2[0].what]);
+ok(over.rows.some(r => r.status === 'extra'),
+   'and a board part the list never mentions is extra');
+
+/* wire is not a part you buy */
+ok(!bom().filter(r => r.kind === 'link').length ||
+   !exact.rows.some(r => r.value === ''), 'wire links are left out of the comparison');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

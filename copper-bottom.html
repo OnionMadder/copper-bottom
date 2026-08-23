@@ -1879,6 +1879,105 @@ function bom(){
   return out;
 }
 
+/* ============================================================
+   THE PARTS CHECK
+   A netlist is the stronger second opinion and the one you usually cannot get.
+   A parts list is on every build page, every kit bag and every forum post, and
+   you can paste it without understanding any of it.
+
+   It answers a weaker question — do I have the right PARTS — and says nothing
+   about whether they are in the right places. A board with every correct
+   component wired wrongly passes this perfectly. That is worth saying out loud
+   rather than letting anyone mistake a tick here for a working circuit. But a
+   weaker check you can actually run beats a stronger one you cannot.
+   ============================================================ */
+
+/* A quantity is a token that is ONLY digits — so the 2 in "2 x 10n" counts and
+   the 100 in "100k" does not. A value is either an engineering value with a
+   multiplier, or a part number. Everything else on the line is ignored, which
+   is how "R1 - 100k 1/4W 5%" reduces to one 100k. */
+const BOM_VALUE = /^\d+(?:[.,]\d+)?[pnu\u00b5mkKMR](?:\d+)?$/;
+const BOM_CODE  = /^\d?[A-Za-z]{1,4}\d{2,5}[A-Za-z]?\d?$/;
+
+/* Parts lists write the unit and layouts do not: a board says 100n, a BOM says
+   0.1uF. Strip a trailing farad or ohm so the two can be compared at all. R is
+   left alone, because on a resistor R IS the multiplier — 470R is 470 ohms. */
+function stripUnit(word){
+  const bare = word.replace(/(?:F|Fd|\u03a9|\u2126|ohms?)$/i, '');
+  return bare && BOM_VALUE.test(bare) ? bare : word;
+}
+
+/* Values are what identify a part in a list, and the same value gets written
+   several ways: 0.1uF and 100n are one capacitor, 4k7 and 4.7k one resistor.
+   Comparing by magnitude rather than by spelling makes all of those agree.
+   Anything with no readable magnitude — 2N3904, NE555 — is matched as text. */
+function bomKey(value){
+  const v = String(value == null ? '' : value).trim();
+  if(!v) return 'link';
+  const asText = () => 's:' + v.toUpperCase().replace(/\s+/g, '');
+  /* a part number first, or engValue reads 2N3904 as the number 2 */
+  if(BOM_CODE.test(v) && !BOM_VALUE.test(v)) return asText();
+  const n = engValue(v);
+  /* to a fixed precision: 0.1 x 1e-6 and 100 x 1e-9 are the same capacitor
+     but land on different floats, and 0.1uF against 100n is the commonest
+     mismatch there is between a parts list and a board. */
+  return Number.isFinite(n) ? 'v:' + n.toPrecision(6) : asText();
+}
+
+function parseBomLine(line){
+  const bare = line.replace(/#.*$/, '').trim();
+  if(!bare) return null;
+  const tokens = bare.split(/[\s,;]+/).filter(Boolean);
+  let qty = null, value = null;
+  for(const t of tokens){
+    const word = stripUnit(t.replace(/^[x\u00d7*]+/i, '').replace(/[).:]+$/, ''));
+    if(!word) continue;
+    if(qty === null && /^\d+$/.test(word) && !value){ qty = +word; continue; }
+    if(value === null && (BOM_VALUE.test(word) || BOM_CODE.test(word))) value = word;
+  }
+  if(!value) return {unread:bare};
+  return {qty:qty === null ? 1 : qty, value:value};
+}
+
+function checkBom(text){
+  const wanted = new Map();        // key -> {value, qty}
+  const unread = [];
+  for(const line of String(text || '').split(/\r?\n/)){
+    const r = parseBomLine(line);
+    if(!r) continue;
+    if(r.unread){ unread.push(r.unread); continue; }
+    const k = bomKey(r.value);
+    if(!wanted.has(k)) wanted.set(k, {value:r.value, qty:0});
+    wanted.get(k).qty += r.qty;
+  }
+
+  const have = new Map();
+  for(const row of bom()){
+    if(row.kind === 'link') continue;          // wire is not a part you buy
+    const k = bomKey(row.what);
+    if(!have.has(k)) have.set(k, {value:row.what, qty:0, refs:[]});
+    const h = have.get(k);
+    h.qty += row.qty;
+    h.refs = h.refs.concat(row.refs);
+  }
+
+  const rows = [];
+  for(const [k, w] of wanted){
+    const h = have.get(k);
+    if(!h)                 rows.push({value:w.value, want:w.qty, got:0,      status:'missing', refs:[]});
+    else if(h.qty < w.qty) rows.push({value:w.value, want:w.qty, got:h.qty,  status:'short',   refs:h.refs});
+    else if(h.qty > w.qty) rows.push({value:w.value, want:w.qty, got:h.qty,  status:'over',    refs:h.refs});
+    else                   rows.push({value:w.value, want:w.qty, got:h.qty,  status:'match',   refs:h.refs});
+  }
+  for(const [k, h] of have)
+    if(!wanted.has(k))
+      rows.push({value:h.value, want:0, got:h.qty, status:'extra', refs:h.refs});
+
+  const problems = rows.filter(r => r.status !== 'match');
+  return {rows:rows, unread:unread, problems:problems.length,
+          declared:wanted.size, clean:problems.length === 0 && wanted.size > 0};
+}
+
 /* Off-board wiring: the step that turns a working board into a working pedal,
    and the one no other tool writes down. */
 function wireList(){
