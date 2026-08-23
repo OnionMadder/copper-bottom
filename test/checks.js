@@ -1388,5 +1388,45 @@ ok(Object.values(DEV_LIB.diode).every(d => d.about), 'every diode type explains 
 
 S = demoProject(); computeNets();
 
+/* A finding says WHAT is wrong. The consequence says what the board does if you
+   build it anyway, which is the half that carries over to the next circuit. */
+console.log('-- findings carry their consequence --');
+ok(Object.keys(DRC_WHY).length >= 13, 'every rule has an entry: ' + Object.keys(DRC_WHY).length);
+ok(Object.values(DRC_WHY).every(w => typeof w === 'string' && w.length > 40),
+   'and none of them is a stub');
+
+/* Boards built to trip as many rules as possible at once. Any finding that comes
+   back without a why means a rule shipped that the table does not know about. */
+const BROKEN = [
+  {name:'t', board:{rows:6, cols:10}, cuts:['2,4'],
+   parts:[{id:'a', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[1,3]]}],
+   ics:[], pads:[{id:'p', label:'+9V', at:[0,7]}, {id:'q', label:'GND', at:[0,8]}]},
+  {name:'t', board:{rows:6, cols:10}, cuts:[],
+   parts:[{id:'a', kind:'diode', ref:'D1', value:'1N5817', pins:[[1,1],[2,1]]}],
+   ics:[], pads:[]},
+  {name:'t', board:{rows:8, cols:12}, cuts:[],
+   parts:[], ics:[{id:'u', ref:'IC1', part:'CD40106', pins:14, pin1:[0,2], span:3, autoCuts:[]}],
+   pads:[]},
+];
+let whySeen = new Set(), whyMissing = [];
+for(const b of BROKEN){
+  S = b; computeNets();
+  for(const f of runDRC()){
+    whySeen.add(f.rule);
+    if(!f.why) whyMissing.push(f.rule);
+  }
+}
+ok(whyMissing.length === 0, 'no finding arrives without a consequence: ' + [...new Set(whyMissing)].join(', '));
+ok(whySeen.size >= 4, 'and the boards above really did trip several rules: ' + [...whySeen].join(', '));
+
+/* The consequence must say what HAPPENS, not restate the rule. Spot-check the
+   two that matter most, since those are the ones a beginner meets first. */
+ok(DRC_WHY['part-short'].indexOf('doing nothing') >= 0,
+   'a shorted part is described by what it does, not by what it is');
+ok(DRC_WHY['floating'].indexOf('oscillates') >= 0,
+   'a floating CMOS input is described by how it misbehaves');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

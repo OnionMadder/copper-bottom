@@ -63,8 +63,18 @@ console.log('\nDRC');
 if(!o.findings.length){
   console.log('  clean — nothing shorted, nothing floating, nothing off the board');
 }else{
-  for(const f of o.findings)
+  for(const f of o.findings){
     console.log('  ' + f.sev.toUpperCase().padEnd(5) + ' ' + f.rule.padEnd(12) + ' ' + f.msg);
+    /* the consequence, wrapped under the finding it belongs to */
+    if(f.why){
+      let line = '';
+      for(const w of f.why.split(' ')){
+        if((line + ' ' + w).length > 74){ console.log('        ' + line); line = w; }
+        else line = line ? line + ' ' + w : w;
+      }
+      if(line) console.log('        ' + line);
+    }
+  }
 }
 if(o.netlist){
   console.log('');

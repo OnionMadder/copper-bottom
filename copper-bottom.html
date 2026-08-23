@@ -139,6 +139,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .f.warn{border-left-color:#A46BE8; color:#D8C8F0}
 .f .msg{flex:1}
 .f .loc{color:var(--dim)}
+.f .why{
+  color:var(--dim); font-size:10.5px; line-height:1.55; margin-top:5px;
+  padding-left:8px; border-left:1px solid var(--line2);
+}
 .f .fix{padding:0 6px; font-size:10px; border-color:var(--mint); color:var(--mint); background:transparent}
 .f .fix:hover{background:var(--mint); color:#0B0813}
 .clean{padding:9px 10px; color:var(--mint); font-size:11px; line-height:1.5}
@@ -1105,13 +1109,63 @@ function connections(){
   return list;
 }
 
+/* What actually happens if you build it.
+
+   A finding says WHAT is wrong. On its own that only helps someone who already
+   knows why the rule exists — and they were not the one who needed telling.
+   These say what the board does on the bench, because cause and effect is the
+   part that carries over to the next circuit. The rule you can restate is worth
+   nothing; the consequence you can picture is worth everything.
+
+   Attached in add() rather than at each call site, so a rule cannot ship
+   without one and the wording lives in a single place. */
+const DRC_WHY = {
+  'bounds':
+    'There is no board out there. That lead has nothing to solder to.',
+  'on-cut':
+    'The copper under that hole has been cut away from the rest of its strip. ' +
+    'The lead solders to a stub that goes nowhere — it looks connected and is not.',
+  'power-short':
+    'Two different supplies joined together is a short straight across your power. ' +
+    'Best case a blown fuse; worst case a cooked chip and a battery that gets hot in your hand.',
+  'pin-short':
+    'Two pins of one chip sharing a strip. If either is an output it is fighting whatever ' +
+    'else is on there — whichever pulls harder wins, and both of them get hot.',
+  'part-short':
+    'Both ends on the same strip means the copper carries the current straight past the part. ' +
+    'It is still soldered in, and it is doing nothing at all.',
+  'ic-nocuts':
+    'A DIP straddles the strips, so every pin lands on the same strip as the pin facing it. ' +
+    'Without a cut down the middle, pin 1 is wired directly to the last pin.',
+  'shared-hole':
+    'Two leads in one hole is awkward to solder and easy to get wrong. If you wanted them ' +
+    'joined, the strip is already doing that for you.',
+  'floating':
+    'An unconnected CMOS input does not sit still. It drifts, it oscillates, it draws current ' +
+    'it should not, and the chip behaves differently every time you power it up. Tie it to a rail.',
+  'orphan':
+    'A strip with one thing on it goes nowhere. Whatever you soldered there is connected to ' +
+    'nothing but itself.',
+  'body-clash':
+    'Electrically this is fine. Physically one of these two is not going on the board.',
+  'lead-span':
+    'Standing an axial part on end is ordinary and it will work. What changes is the height ' +
+    'of the finished board, which is what catches you when the lid goes on.',
+  'supply-range':
+    'Past its maximum a chip is damaged rather than merely unhappy, usually the first time ' +
+    'you power it. Below its minimum it is undamaged and simply will not run.',
+  'pad-name':
+    'The netlist looks a pad up by its name. Two pads wearing one name means only ever one ' +
+    'of them gets found, and the other is invisible to every check that mentions it.',
+};
+
 function runDRC(){
   const rows = S.board.rows, cols = S.board.cols;
   const cutSet = new Set(S.cuts);
   const inB = (r,c) => r >= 0 && c >= 0 && r < rows && c < cols;
   const out = [];
   const add = (sev, rule, msg, at, net, fix) =>
-    out.push({sev:sev, rule:rule, msg:msg, at:at || null,
+    out.push({sev:sev, rule:rule, msg:msg, why:DRC_WHY[rule] || null, at:at || null,
               net:(net === undefined || net === null) ? null : net, fix:fix || null});
 
   /* --- off the board, and leads on dead holes --- */
@@ -2959,6 +3013,7 @@ function renderDRC(){
     if(f.at) o.push(' <span class="loc">[' + f.at[0] + ',' + f.at[1] + ']</span>');
     o.push('</span>');
     if(f.fix) o.push('<button class="fix" data-fix="' + i + '">fix</button>');
+    if(f.why) o.push('<div class="why">' + esc(f.why) + '</div>');
     o.push('</div>');
   });
   drclist.innerHTML = o.join('');
