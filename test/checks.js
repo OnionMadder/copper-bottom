@@ -1654,5 +1654,103 @@ ok(overlayImageAt({a:0, b:0, tx:0, ty:0}, 1, 1) === null,
    'and a collapsed transform maps nothing back rather than returning infinity');
 
 
+/* ---------------------------------------------------------------
+   THE CHIP'S CUT LINE
+   It moves, and strips can be left whole, because the layout being traced
+   put its cuts where it put them. Every refusal gets a test that it fires and
+   a test that it stays quiet.
+   --------------------------------------------------------------- */
+console.log('-- cut line: the middle, until somebody says otherwise --');
+S = demoProject(); computeNets();
+let cic = S.ics[0];
+const cutCols = () => cic.autoCuts.map(k => +k.split(',')[1]);
+const cutRows = () => cic.autoCuts.map(k => +k.split(',')[0]).sort((a, b) => a - b);
+
+ok(icCutOff(cic) === 1, 'a 0.3in DIP cuts one column in from pin 1, as it always did');
+ok(icCutCol(cic.pin1, cic.span, icCutOff(cic)) === 8, 'which for the fixture is column 8');
+ok(cic.autoCuts.length === cic.pins / 2, 'one cut per strip the chip straddles');
+ok(new Set(cutCols()).size === 1, 'all of them in one column');
+
+console.log('-- cut line: it moves, and takes every cut with it --');
+ok(canMoveIcCuts(cic, 1), 'a span-3 DIP has somewhere to move the line to');
+ok(moveIcCuts(cic, 1), 'and moving it works');
+refreshAutoCuts(cic); computeNets();
+ok(icCutCol(cic.pin1, cic.span, icCutOff(cic)) === 9, 'the line is now column 9');
+ok(cutCols().every(c => c === 9), 'every cut moved with it, none left behind');
+ok(cutRows().join() === '3,4,5,6,7,8,9', 'and it is the same strips as before');
+ok(S.cuts.filter(k => k.split(',')[1] === '8').length === 0, 'nothing is left in the old column');
+
+console.log('-- cut line: it will not leave the space between the pin rows --');
+ok(!canMoveIcCuts(cic, 1), 'a span-3 chip cannot push the line onto its own far pin row');
+ok(!moveIcCuts(cic, 1), 'and asking anyway changes nothing');
+ok(icCutOff(cic) === 2, 'the offset is where it was');
+while(canMoveIcCuts(cic, -1)) moveIcCuts(cic, -1);
+ok(icCutOff(cic) === 1, 'walking the other way stops one column in from pin 1');
+ok(!canMoveIcCuts(cic, -1), 'never on pin 1 itself, where it would cut nothing apart');
+refreshAutoCuts(cic); computeNets();
+
+console.log('-- cut line: a strip can be left whole, and stays that way --');
+ok(toggleIcCutRow(cic, 2), 'a row of the chip can be told not to cut');
+refreshAutoCuts(cic); computeNets();
+ok(cic.autoCuts.length === cic.pins / 2 - 1, 'one fewer cut');
+ok(cutRows().indexOf(5) < 0, 'and it is the row that was skipped (pin1 row 3 + 2)');
+ok(sameNet([5, 7], [5, 10]), 'that strip now runs straight under the chip, pin row to pin row');
+ok(!sameNet([4, 7], [4, 10]), 'while its neighbour is still cut');
+
+console.log('-- cut line: leaving a strip whole survives the chip being moved --');
+cic.pin1 = [cic.pin1[0] + 1, cic.pin1[1] + 1];
+refreshAutoCuts(cic); computeNets();
+ok(cic.autoCuts.length === cic.pins / 2 - 1, 'still one fewer cut after the move');
+ok(cutRows().indexOf(6) < 0, 'and it is still the same strip of the chip, now a row down');
+ok(new Set(cutCols()).size === 1 && cutCols()[0] === 9, 'the line came along too');
+
+console.log('-- cut line: and can be taken back --');
+ok(toggleIcCutRow(cic, 2), 'the same row toggles again');
+refreshAutoCuts(cic); computeNets();
+ok(cic.autoCuts.length === cic.pins / 2, 'every strip is cut again');
+ok(cic.cutSkip === undefined, 'and the chip carries no leftover note about it');
+
+console.log('-- cut line: a click only means "the chip cuts here" on the chip --');
+S = demoProject(); computeNets();
+cic = S.ics[0];
+const ccol = icCutCol(cic.pin1, cic.span, icCutOff(cic));
+ok(icCutRowAt(cic, cic.pin1[0], ccol) === 0, 'the first hole of the line is row 0 of it');
+ok(icCutRowAt(cic, cic.pin1[0] + 6, ccol) === 6, 'and the last is row 6');
+ok(icCutRowAt(cic, cic.pin1[0] + 7, ccol) === -1, 'one row past the chip is not the chip"s business');
+ok(icCutRowAt(cic, cic.pin1[0] - 1, ccol) === -1, 'nor is one row before it');
+ok(icCutRowAt(cic, cic.pin1[0], ccol + 1) === -1, 'nor is the next column over');
+ok(icCutRowAt(cic, cic.pin1[0], cic.pin1[1]) === -1, 'nor pin 1 itself');
+ok(!toggleIcCutRow(cic, 7), 'a row the chip does not have cannot be skipped');
+ok(!toggleIcCutRow(cic, -1), 'and neither can a row below the first');
+
+console.log('-- cut line: a shaped chip has none --');
+/* hasFootprint wants a pinMap as long as the chip has pins */
+cic.pinMap = Array.from({length: cic.pins}, (_, i) => [i, 0]);
+ok(hasFootprint(cic), 'the chip is now shaped rather than a plain DIP');
+ok(icCutRowAt(cic, cic.pin1[0], ccol) === -1, 'so no hole is on a cut line it does not have');
+ok(!canMoveIcCuts(cic, 1), 'and there is no line to move');
+delete cic.pinMap;
+
+console.log('-- cut line: a saved one that cannot be true is dropped, not repaired --');
+const mig = (extra) => migrate({version:2, name:'x', board:{rows:13, cols:20}, cuts:[], parts:[], pads:[],
+  ics:[Object.assign({id:'a', ref:'IC1', part:'CD40106', pins:14, pin1:[3,7], span:3}, extra)]}).ics[0];
+ok(mig({cutOff:2}).cutOff === 2, 'a cut line inside the chip is kept');
+ok(mig({cutOff:9}).cutOff === undefined, 'one past the far pin row goes back to the middle');
+ok(mig({cutOff:0}).cutOff === undefined, 'and so does one on pin 1');
+ok(mig({cutOff:1.5}).cutOff === undefined, 'and one that is not a whole column');
+ok(mig({cutSkip:[2, 3]}).cutSkip.join() === '2,3', 'strips left whole are kept');
+ok(mig({cutSkip:[2, 99]}).cutSkip.join() === '2', 'a strip the chip does not have is dropped');
+ok(mig({cutSkip:'all'}).cutSkip === undefined, 'and a skip list that is not a list is dropped whole');
+ok(icCutOff({pins:14, pin1:[3,7], span:3, cutOff:9}) === 2,
+   'and a chip carrying a bad offset in memory is read as the nearest real column, never as 9');
+
+console.log('-- cut line: a chip with no room has nowhere to move it --');
+const tight = {id:'b', ref:'IC9', part:'CD40106', pins:8, pin1:[0,0], span:2};
+ok(icCutOff(tight) === 1, 'a span-2 chip cuts the one column it has');
+ok(!canMoveIcCuts(tight, 1) && !canMoveIcCuts(tight, -1), 'and it can go neither way');
+
+S = demoProject(); computeNets();
+
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

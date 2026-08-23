@@ -63,6 +63,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | diode + resistor types with their own symbols | done |
 | name a pad as you place it + duplicate-name check | done |
 | overlay mode — trace somebody else’s layout behind the grid | done |
+| a movable cut line, and strips you can leave whole | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -85,6 +86,17 @@ See `ROADMAP.md` for what's next.
 Parts take one click per leg — two for a resistor, three for a transistor. Refs
 auto-increment. Placing an IC inserts the column of cuts between its pin rows
 automatically, and dragging that IC takes its cuts with it.
+
+**That column is a default, not a rule.** Select the chip and the panel offers
+**move cuts ◀ ▶**, which walks the whole line to another column between the pin
+rows — and no further, because a cut outside that space does not separate pin 1
+from the pin facing it. Clicking one of the line’s holes with `X` leaves that one
+strip whole, and the chip remembers: pick it up, move it, and the strip is still
+whole, where simply deleting the cut would see it quietly reinstated. The DRC
+says what a whole strip means (`IC1 pins 3, 12 are all on one net`) and offers to
+cut them all again, so leaving one is a decision you make with the consequence in
+front of you. All of which exists because somebody else’s layout cuts where it
+cuts, and tracing one means being able to say so.
 
 With `S`, click a part or IC to pick it up: drag to move, arrow keys to nudge one hole,
 `Del` to remove. A selected part grows a green handle on each leg — drag one of those and
@@ -201,6 +213,9 @@ while building, not a thing the board is made of. A saved alignment that does no
 a soundness check is dropped rather than repaired, for the same reason `migrate()` drops
 a malformed part: a picture put back in roughly the right place is a picture you would
 trace wrong holes off.
+
+Where the traced layout cuts its strips somewhere other than the middle of a chip, move
+the cut line to match — see the paragraph under **Keys**.
 
 Once the parts are placed, **from my board** in the netlist panel writes the circuit out.
 That is the whole point of the mode: a published layout goes in as a picture and comes

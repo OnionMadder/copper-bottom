@@ -597,7 +597,18 @@ function migrate(obj){
   o.ics = (Array.isArray(o.ics) ? o.ics : []).filter(ic =>
     ic && typeof ic === 'object' && isHole(ic.pin1) &&
     Number.isInteger(ic.pins) && ic.pins >= 4 && ic.pins % 2 === 0 &&
-    Number.isInteger(ic.span) && ic.span >= 2);
+    Number.isInteger(ic.span) && ic.span >= 2
+  ).map(ic => {
+    /* A cut line that cannot be where it says it is goes back to the middle,
+       and rows it claims not to cut that the chip does not have are dropped.
+       Neither is repaired into a guess: the chip cuts where a chip cuts, and
+       the DRC says so if that is wrong for this board. */
+    const r = Object.assign({}, ic);
+    if(!Number.isInteger(r.cutOff) || r.cutOff < 1 || r.cutOff > r.span - 1) delete r.cutOff;
+    const skip = icCutSkip(r);
+    if(skip.length) r.cutSkip = skip; else delete r.cutSkip;
+    return r;
+  });
 
   o.pads = (Array.isArray(o.pads) ? o.pads : []).filter(d =>
     d && typeof d === 'object' && isHole(d.at) && typeof d.label === 'string' && d.label.trim());
@@ -1071,7 +1082,8 @@ function refreshAutoCuts(ic){
   const had = new Set(ic.autoCuts || []);
   S.cuts = S.cuts.filter(k => !had.has(k));
   if(hasFootprint(ic)){ ic.autoCuts = []; return ic.autoCuts; }
-  ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
+  ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins, icCutOff(ic), icCutSkip(ic))
+                  .filter(k => S.cuts.indexOf(k) < 0);
   S.cuts = S.cuts.concat(ic.autoCuts);
   return ic.autoCuts;
 }
@@ -1084,12 +1096,74 @@ function icPinAt(ic, r, c){
 }
 /* One column of cuts down the middle of the DIP is enough to split each strip.
    For a 0.3in package (span 3, pin 1 at col 7) that lands on col 8, matching
-   the hand-built fixture. */
-function icCutCol(pin1, span){ return pin1[1] + Math.floor(span / 2); }
-function icCutKeys(pin1, span, pins){
-  const c = icCutCol(pin1, span), out = [];
-  for(let i = 0; i < pins / 2; i++) out.push(K(pin1[0] + i, c));
+   the hand-built fixture.
+
+   The middle is only the DEFAULT. Somebody else's layout cuts where it cuts,
+   and which column the break falls in decides what stays joined to what on
+   either side of it — so the line moves, and individual strips can be left
+   whole. Both are stored on the chip, in chip-relative terms, so they survive
+   it being picked up and moved: an offset from pin 1's column, and a list of
+   row offsets the chip is deliberately not cutting.
+
+   What the tool will NOT do is let the line leave the space between the pin
+   rows. A cut outside it does not separate pin 1 from the pin facing it, and
+   a cut that looks like it is doing the job while not doing it is the one
+   thing this file is written to avoid. */
+function icCutOff(ic){
+  const span = ic && ic.span;
+  if(!Number.isInteger(span) || span < 2) return 1;
+  const mid = Math.floor(span / 2);
+  if(!Number.isInteger(ic.cutOff)) return mid;
+  return Math.max(1, Math.min(ic.cutOff, span - 1));
+}
+function icCutSkip(ic){
+  const half = (ic && Number.isInteger(ic.pins)) ? ic.pins / 2 : 0;
+  return (ic && Array.isArray(ic.cutSkip) ? ic.cutSkip : [])
+    .filter(i => Number.isInteger(i) && i >= 0 && i < half);
+}
+function icCutCol(pin1, span, off){
+  const lim = Number.isInteger(span) && span >= 2 ? span - 1 : 1;
+  const use = Number.isInteger(off) ? Math.max(1, Math.min(off, lim)) : Math.floor(span / 2);
+  return pin1[1] + use;
+}
+function icCutKeys(pin1, span, pins, off, skip){
+  const c = icCutCol(pin1, span, off), out = [];
+  const no = new Set(Array.isArray(skip) ? skip : []);
+  for(let i = 0; i < pins / 2; i++) if(!no.has(i)) out.push(K(pin1[0] + i, c));
   return out;
+}
+
+/* Which row of a chip's cut line this hole is, or -1 for a hole that is none
+   of the chip's business. This is what makes the cut tool mean two different
+   things in two different places without asking. */
+function icCutRowAt(ic, r, c){
+  if(!ic || hasFootprint(ic) || !Number.isInteger(ic.pins)) return -1;
+  if(c !== icCutCol(ic.pin1, ic.span, icCutOff(ic))) return -1;
+  const i = r - ic.pin1[0];
+  return (i >= 0 && i < ic.pins / 2) ? i : -1;
+}
+function canMoveIcCuts(ic, dir){
+  if(!ic || hasFootprint(ic) || !Number.isInteger(ic.span)) return false;
+  const want = icCutOff(ic) + dir;
+  return want >= 1 && want <= ic.span - 1;
+}
+function moveIcCuts(ic, dir){
+  if(!canMoveIcCuts(ic, dir)) return false;
+  ic.cutOff = icCutOff(ic) + dir;
+  return true;
+}
+/* Leaving a strip whole is a decision, so it is recorded as one rather than as
+   the absence of a cut. Delete the cut and move the chip and it would come
+   back; skip the row and it stays skipped. */
+function toggleIcCutRow(ic, i){
+  if(!ic || !Number.isInteger(ic.pins)) return false;
+  if(!Number.isInteger(i) || i < 0 || i >= ic.pins / 2) return false;
+  const skip = icCutSkip(ic);
+  const at = skip.indexOf(i);
+  if(at >= 0) skip.splice(at, 1); else skip.push(i);
+  skip.sort((a, b) => a - b);
+  if(skip.length) ic.cutSkip = skip; else delete ic.cutSkip;
+  return true;
 }
 
 /* ============================================================
@@ -2558,7 +2632,8 @@ function lineEdit(axis, at, delta){
   S.cuts = cuts.map(p => K(p[0], p[1]));
   for(const ic of S.ics){
     if(hasFootprint(ic)){ ic.autoCuts = []; continue; }
-    ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
+    ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins, icCutOff(ic), icCutSkip(ic))
+                    .filter(k => S.cuts.indexOf(k) < 0);
     S.cuts = S.cuts.concat(ic.autoCuts);
   }
   return {ok:true, removed:removed};
@@ -3712,9 +3787,11 @@ function applyFix(f){
     const ic = S.ics.find(x => x.id === f.fix.id);
     if(!ic) return;
     pushUndo();
-    const want = icCutKeys(ic.pin1, ic.span, ic.pins).filter(k => S.cuts.indexOf(k) < 0);
-    ic.autoCuts = (ic.autoCuts || []).concat(want);
-    S.cuts = S.cuts.concat(want);
+    /* The fix is "cut every strip under it", so a strip somebody chose to
+       leave whole is being un-chosen here. That is the point of pressing it,
+       and undo puts the choice back. */
+    delete ic.cutSkip;
+    refreshAutoCuts(ic);
     commit();
   }
 }
@@ -4219,6 +4296,16 @@ function renderCtx(){
       if(hasFootprint(ic)) o.push('<button id="edFootReset">back to a DIP</button>');
       if(FOOT) o.push('<div class="hint">drag any numbered pin to a new hole. a shaped chip ' +
                       'manages its own cuts — the auto-cut column no longer applies.</div>');
+      if(!hasFootprint(ic)){
+        const half = ic.pins / 2, whole = icCutSkip(ic).length;
+        o.push('<label>CUTS — column ' + dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
+        o.push('<button id="edCutL"' + (canMoveIcCuts(ic, -1) ? '' : ' disabled') + '>&#9664; move cuts</button>' +
+               '<button id="edCutR"' + (canMoveIcCuts(ic,  1) ? '' : ' disabled') + '>move cuts &#9654;</button>');
+        o.push('<div class="hint">' + (half - whole) + ' of ' + half + ' strips cut' +
+               (whole ? ', ' + whole + ' left whole' : '') +
+               '. the line only moves between the pin rows. click one of its holes with ' +
+               '<b>X</b> to leave that strip whole — it stays that way when the chip moves.</div>');
+      }
     }else{
       o.push('<div class="hint">nothing selected.<br>click a part or an IC.</div>');
     }
@@ -4257,6 +4344,16 @@ function renderCtx(){
     renderCtx();
   });
   on('ctxSpan','oninput',  e => { IC_SPAN = Math.max(2, +e.target.value || 3); });
+  const nudgeCuts = (dir) => {
+    const t = selObj();
+    if(!t || !SEL || SEL.type !== 'ic' || !canMoveIcCuts(t, dir)) return;
+    pushUndo();
+    moveIcCuts(t, dir);
+    refreshAutoCuts(t);
+    commit();
+  };
+  on('edCutL', 'onclick', () => nudgeCuts(-1));
+  on('edCutR', 'onclick', () => nudgeCuts(1));
   on('rgDr', 'oninput',  e => { RDR = Math.round(+e.target.value || 0); renderCtx(); render(); });
   on('rgDc', 'oninput',  e => { RDC = Math.round(+e.target.value || 0); renderCtx(); render(); });
   on('rgDup', 'onclick', () => {
@@ -4431,6 +4528,16 @@ function onHole(r, c){
 
   if(TOOL === 'cut'){
     pushUndo();
+    /* A hole on a chip's own cut line belongs to the chip. Clicking it there
+       says "this chip does not cut that strip", which survives the chip being
+       moved — where deleting the cut on its own would simply be reinstated the
+       next time it was picked up. */
+    const owner = S.ics.find(x => icCutRowAt(x, r, c) >= 0);
+    if(owner){
+      toggleIcCutRow(owner, icCutRowAt(owner, r, c));
+      refreshAutoCuts(owner);
+      commit(); return;
+    }
     const i = S.cuts.indexOf(key);
     if(i >= 0) S.cuts.splice(i, 1); else S.cuts.push(key);
     commit(); return;
