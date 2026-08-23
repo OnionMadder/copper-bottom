@@ -1259,6 +1259,35 @@ function runDRC(){
     else if(sup.total < def.volts.min) add('warn',  'supply-range', runs + tail, pinPos(ic, 1));
   }
 
+  /* --- two pads answering to the same name ---
+     The netlist resolves @NAME by finding the FIRST pad with that label, so a
+     second pad wearing the same name is invisible to it. Two ground points
+     both called GND are only untidy, because they are the same net either way.
+     Two pads called GND on DIFFERENT nets is a real trap: half the netlist is
+     talking about a pad it cannot reach, and nothing else would say so. */
+  const padsByName = new Map();
+  for(const d of S.pads){
+    const k = String(d.label || '').trim().toUpperCase();
+    if(!k) continue;
+    if(!padsByName.has(k)) padsByName.set(k, []);
+    padsByName.get(k).push(d);
+  }
+  for(const ds of padsByName.values()){
+    if(ds.length < 2) continue;
+    const nets = new Set(ds.map(d => {
+      const n = NET.netAt(d.at[0], d.at[1]);
+      return n ? n.id : 'cut';
+    }));
+    if(nets.size > 1)
+      add('error', 'pad-name',
+          ds.length + ' pads are called ' + ds[0].label + ' and they are not on the same net — ' +
+          'a netlist saying @' + ds[0].label + ' can only ever mean one of them', ds[0].at);
+    else
+      add('warn', 'pad-name',
+          ds.length + ' pads are called ' + ds[0].label + '. They do share a net, so nothing is ' +
+          'broken, but only one of them answers to @' + ds[0].label, ds[0].at);
+  }
+
   /* --- two bodies wanting the same space ---
      Electrically these boards are fine; physically one of the parts is not
      going on. Only pairs that cannot slide clear of each other are reported. */
@@ -3693,8 +3722,22 @@ function onHole(r, c){
   if(TOOL === 'pad'){
     if(!PAD_LABEL.trim()) return;
     pushUndo();
-    S.pads.push({id:uid(), label:PAD_LABEL.trim(), at:[r,c]});
-    commit(); return;
+    /* Naming is the point of a pad, and the label field used to live in a
+       panel you only saw after switching tools and clicking the thing again —
+       so pads stayed called GND, which the netlist then resolves to whichever
+       one happens to come first. Select the new pad, show its panel, and put
+       the cursor in the name with the text already selected: type, Enter, done.
+       Press P to go back to placing another. */
+    const pad = {id:uid(), label:PAD_LABEL.trim(), at:[r,c]};
+    S.pads.push(pad);
+    SEL = {type:'pad', id:pad.id};
+    setTool('select');
+    commit();
+    /* after commit, because commit re-renders the panel and would otherwise
+       replace the very input we had just focused */
+    const nameField = document.getElementById('edPadLabel');
+    if(nameField){ nameField.focus(); nameField.select(); }
+    return;
   }
 
   if(TOOL === 'ic'){

@@ -61,6 +61,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | decoupling advice + what each part is for | done |
 | reference pane — a schematic beside the board | done |
 | diode + resistor types with their own symbols | done |
+| name a pad as you place it + duplicate-name check | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
