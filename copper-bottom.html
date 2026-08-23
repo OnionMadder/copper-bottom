@@ -676,6 +676,62 @@ const V_CD4000B = {min:3,  max:18, note:'3-18V, with 20V the absolute maximum'};
 const V_TL0XX   = {min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across both rails'};
 const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
 
+/* Two-lead parts that come in visibly different bodies.
+
+   LEG_LIB names the legs of a three-leg part. This is a different job: it says
+   what the part physically IS — its package, whether it has a polarity at all,
+   and how it should be drawn — for kinds where one schematic symbol covers
+   several real components.
+
+   An LDR lives under `res`, not under `diode`, however much it looks like one
+   in a parts drawer. It is a resistor: two leads, no polarity, no cathode band.
+   Filing it with the diodes would have the tool draw a band on it and call one
+   end the cathode, which is a confident lie to exactly the person who cannot
+   check it. */
+const DEV_PKG = {
+  'DO-35': {shape:'box',  len:1.40, wid:0.70, leads:'axial'},   // glass small-signal
+  'DO-41': {shape:'box',  len:2.05, wid:1.06, leads:'axial'},   // plastic rectifier
+  'LED5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LED
+  'LDR5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LDR
+};
+const DEV_LIB = {
+  diode: {
+    'switching': {value:'1N4148', pkg:'DO-35', draw:'axial',
+                  about:'a small-signal diode. Fast, tiny, and what most clipping and logic jobs want'},
+    'rectifier': {value:'1N4001', pkg:'DO-41', draw:'axial',
+                  about:'a power rectifier. Bigger body, handles real current — reverse-polarity protection lives here'},
+    'Schottky':  {value:'1N5817', pkg:'DO-41', draw:'axial',
+                  about:'a Schottky. Drops about 0.3V instead of 0.7V, which matters when you are protecting a 9V rail'},
+    'zener':     {value:'5V1',    pkg:'DO-35', draw:'zener',
+                  about:'a zener. Fitted BACKWARDS on purpose — it conducts in reverse at its rated voltage, which is how it clamps a rail'},
+    'LED':       {value:'red',    pkg:'LED5',  draw:'led',
+                  about:'an LED. Round body, both leads out the same end, and the SHORT leg is the cathode — the flat on the rim marks it too'},
+  },
+  res: {
+    'fixed': {value:'10k',  pkg:null,   draw:'axial',
+              about:'an ordinary resistor'},
+    'LDR':   {value:'LDR',  pkg:'LDR5', draw:'ldr',
+              about:'a light-dependent resistor. No polarity — it is a resistor whose value falls as light rises, which is what makes an optical theremin work'},
+  },
+};
+/* the device a part is actually using, or null when it has none */
+/* An LED's value is its colour, so the drawing may as well use it. Anything
+   unrecognised gets the red body, which is what is in the drawer. */
+const LED_TINT = {
+  red:['#E8452F','#FF8A78'], green:['#3FBF57','#8CF0A0'], blue:['#3A7BE0','#8FB6FF'],
+  yellow:['#E5C13A','#FFE894'], white:['#DCD8E8','#FFFFFF'], amber:['#E09A2E','#FFC978'],
+  orange:['#E4762C','#FFAE73'],
+};
+function ledTint(v){
+  const k = String(v || '').trim().toLowerCase();
+  return LED_TINT[k] || LED_TINT.red;
+}
+
+function devOf(part){
+  const fam = DEV_LIB[part && part.kind];
+  return (fam && part.device && fam[part.device]) || null;
+}
+
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
   CD40106:{pins:14, about:"six Schmitt inverters. One inverter, a resistor and a capacitor is an oscillator — the standard Lunetta voice, and six of them come in the one chip", name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
@@ -1555,6 +1611,10 @@ function explainHole(r, c){
     }
     if(oc.type === 'pad' && oc.pad.to)
       lines.push('This pad is where ' + oc.pad.to + ' joins the board.');
+    if(oc.type === 'part'){
+      const dv = devOf(oc.part);
+      if(dv && dv.about) lines.push(oc.part.ref + ' is ' + dv.about + '.');
+    }
     if(oc.type === 'part' && oc.part.polarized){
       const lg = legLabels(oc.part);
       if(!lg) lines.push(oc.part.ref + ' is polarised, and this is its ' +
@@ -2203,6 +2263,9 @@ function diodePkg(part){
 function footprintOf(part){
   const fp = FOOTPRINT[part.kind];
   if(!fp) return fp;
+  /* an explicitly chosen device beats anything guessed from the value */
+  const dev = devOf(part);
+  if(dev && dev.pkg && DEV_PKG[dev.pkg]) return Object.assign({}, fp, DEV_PKG[dev.pkg]);
   if(part.kind === 'diode') return Object.assign({}, fp, DIODE_PKG[diodePkg(part)]);
   return fp;
 }
@@ -2517,7 +2580,40 @@ function render(){
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
     let tint = '#fff', off = 18, half = 12;
 
-    if(p.kind === 'res'){
+    const dev = devOf(p);
+
+    if(dev && dev.draw === 'ldr'){
+      /* face-on: a light window with the serpentine track across it. No band,
+         no polarity — the whole point of filing this under `res`. */
+      const LR = PITCH * footprintOf(p).dia / 2;
+      tint = '#D9D2B4'; off = LR + 12; half = LR;
+      o.push(g +
+        '<circle cx="0" cy="0" r="' + LR + '" fill="#CFC7A6" stroke="#5A5340" stroke-width="1.3"/>' +
+        '<path d="M' + (-LR*0.62) + ' ' + (-LR*0.5) + 'q' + (LR*0.31) + ' ' + (LR*0.5) + ' 0 ' + (LR) +
+          'q' + (LR*0.31) + ' ' + (-LR) + ' ' + (LR*0.62) + ' 0' +
+          'q' + (LR*0.31) + ' ' + (LR) + ' ' + (LR*0.62) + ' 0" fill="none" stroke="#3A3428" stroke-width="1.5"/>' +
+        '</g>');
+
+    }else if(dev && dev.draw === 'led'){
+      /* round body with a flat on the cathode rim, and the two arrows that say
+         it emits rather than merely conducts */
+      const LR = PITCH * footprintOf(p).dia / 2;
+      const col = ledTint(p.value);
+      tint = col[1]; off = LR + 12; half = LR;
+      const fx = LR*0.94, fy = LR*0.34;
+      o.push(g +
+        '<path d="M' + fx + ' ' + (-fy) + 'A' + LR + ' ' + LR + ' 0 1 0 ' + fx + ' ' + fy +
+          'Z" fill="' + col[0] + '" stroke="#141020" stroke-width="1.2"/>' +
+        '<line x1="' + fx + '" y1="' + (-fy) + '" x2="' + fx + '" y2="' + fy +
+          '" stroke="#141020" stroke-width="1.6"/>' +
+        '<circle cx="' + (-LR*0.2) + '" cy="' + (-LR*0.2) + '" r="' + (LR*0.3) +
+          '" fill="' + col[1] + '" fill-opacity="0.75"/>' +
+        '<path d="M' + (-LR*0.5) + ' ' + (-LR*1.15) + 'l' + (LR*0.55) + ' ' + (-LR*0.55) +
+          'M' + (LR*0.05) + ' ' + (-LR*1.15) + 'l' + (LR*0.55) + ' ' + (-LR*0.55) +
+          '" stroke="' + col[0] + '" stroke-width="1.6" stroke-linecap="round"/>' +
+        '</g>');
+
+    }else if(p.kind === 'res'){
       tint = '#EBD3A6'; off = RH/2 + 13; half = RW/2;
       o.push(g +
         '<rect x="' + (-RW/2) + '" y="' + (-RH/2) + '" width="' + RW + '" height="' + RH +
@@ -2541,11 +2637,19 @@ function render(){
       const dfp = footprintOf(p);
       const DW = PITCH * dfp.len, DH = PITCH * dfp.wid;
       tint = '#CFC8E0'; off = DH/2 + 12; half = DW/2;
+      const bx0 = DW*0.22, bw = DW*0.17;
+      /* a zener wears the same body; the tails on its band are the only thing
+         that tells you it is one, so they are drawn rather than implied */
+      const tails = (dev && dev.draw === 'zener')
+        ? '<path d="M' + (bx0 + bw) + ' ' + (-DH/2) + 'l' + (DW*0.16) + ' ' + (-DH*0.34) +
+          'M' + bx0 + ' ' + (DH/2) + 'l' + (-DW*0.16) + ' ' + (DH*0.34) +
+          '" stroke="#E8E4F0" stroke-width="1.5" stroke-linecap="round" fill="none"/>'
+        : '';
       o.push(g +
         '<rect x="' + (-DW/2) + '" y="' + (-DH/2) + '" width="' + DW + '" height="' + DH +
         '" rx="' + (DH*0.22) + '" fill="#1A1620" stroke="#B9B4C7" stroke-width="1.1"/>' +
-        '<rect x="' + (DW*0.22) + '" y="' + (-DH/2) + '" width="' + (DW*0.17) + '" height="' + DH +
-        '" fill="#E8E4F0"/>' +
+        '<rect x="' + bx0 + '" y="' + (-DH/2) + '" width="' + bw + '" height="' + DH +
+        '" fill="#E8E4F0"/>' + tails +
         '</g>');
 
     }else{
@@ -2983,7 +3087,17 @@ function exportSVG(side){
       const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg +
                 ')" fill="#fff" stroke="#000" stroke-width="0.3">';
       let half = 2;
-      if(p.kind === 'res'){
+      const dev = devOf(p);
+      if(dev && dev.draw === 'ldr'){
+        half = 2.45;
+        o.push(g + '<circle cx="0" cy="0" r="2.45"/>' +
+               '<path d="M-1.5 -1.2q0.75 1.2 0 2.4q0.75 -2.4 1.5 0q0.75 2.4 1.5 0" fill="none" stroke-width="0.4"/></g>');
+      }else if(dev && dev.draw === 'led'){
+        half = 2.45;
+        o.push(g + '<path d="M2.3 -0.85A2.45 2.45 0 1 0 2.3 0.85Z"/>' +
+               '<line x1="2.3" y1="-0.85" x2="2.3" y2="0.85" stroke-width="0.45"/>' +
+               '<path d="M-1.2 -2.9l1.3 -1.3M0.1 -2.9l1.3 -1.3" fill="none" stroke-width="0.4"/></g>');
+      }else if(p.kind === 'res'){
         half = 2.55;
         o.push(g + '<rect x="-2.55" y="-1.0" width="5.1" height="2.0" rx="0.7"/>' +
                [-1.3, -0.4, 0.5].map(bx2 =>
@@ -2994,8 +3108,10 @@ function exportSVG(side){
         o.push(g + '<rect x="-2.05" y="-2.05" width="4.1" height="4.1" rx="0.5"/></g>');
       }else if(p.kind === 'diode'){
         half = 1.65;
+        const zt = (dev && dev.draw === 'zener')
+          ? '<path d="M1.3 -0.8l0.5 -0.45M0.75 0.8l-0.5 0.45" fill="none" stroke-width="0.35"/>' : '';
         o.push(g + '<rect x="-1.65" y="-0.8" width="3.3" height="1.6" rx="0.2"/>' +
-               '<rect x="0.75" y="-0.8" width="0.55" height="1.6" fill="#000" stroke="none"/></g>');
+               '<rect x="0.75" y="-0.8" width="0.55" height="1.6" fill="#000" stroke="none"/>' + zt + '</g>');
       }else{
         half = 2.2;
         o.push(g + '<circle cx="0" cy="0" r="2.2"/>' +
@@ -3231,7 +3347,7 @@ function downloadSVG(side){
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
 const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k'};
-const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot'};
+const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', diode:'switching', res:'fixed'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
@@ -3315,6 +3431,8 @@ function renderCtx(){
       o.push('<label>REF</label><input id="edRef" value="' + esc(p.ref) + '">');
       if(LEG_LIB[p.kind])
         o.push('<label>DEVICE</label><select id="edDev">' + opts(Object.keys(LEG_LIB[p.kind]), p.device) + '</select>');
+      else if(DEV_LIB[p.kind])
+        o.push('<label>TYPE</label><select id="edDev">' + opts(Object.keys(DEV_LIB[p.kind]), p.device || Object.keys(DEV_LIB[p.kind])[0]) + '</select>');
       if(p.kind !== 'link')
         o.push('<label>VALUE</label><input id="edVal" value="' + esc(p.value || '') + '">');
       const sameLegs = Object.keys(PART_LIB).filter(k => legsOf(k) === p.pins.length);
@@ -3348,7 +3466,11 @@ function renderCtx(){
     if(ll) o.push('<div class="hint">legs in click order: <b style="color:#00F0FF">' + ll.join(' · ') + '</b></div>');
   }else if(TOOL === 'res' || TOOL === 'cap' || TOOL === 'ecap' || TOOL === 'diode'){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
+    if(DEV_LIB[TOOL])
+      o.push('<label>TYPE</label><select id="ctxDev">' + opts(Object.keys(DEV_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
     o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES[TOOL]) + '">');
+    const dv = DEV_LIB[TOOL] && DEV_LIB[TOOL][DEVICE[TOOL]];
+    if(dv && dv.about) o.push('<div class="hint">' + esc(dv.about) + '.</div>');
   }else if(TOOL === 'link'){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef('link')) + '" readonly>');
   }else if(TOOL === 'ic'){
@@ -3363,7 +3485,12 @@ function renderCtx(){
   on('ctxVal', 'oninput',  e => { VALUES[TOOL] = e.target.value; });
   on('ctxPad', 'oninput',  e => { PAD_LABEL = e.target.value; });
   on('ctxIc',  'onchange', e => { IC_PART = e.target.value; });
-  on('ctxDev', 'onchange', e => { DEVICE[TOOL] = e.target.value; renderCtx(); });
+  on('ctxDev', 'onchange', e => {
+    DEVICE[TOOL] = e.target.value;
+    const dv = DEV_LIB[TOOL] && DEV_LIB[TOOL][DEVICE[TOOL]];
+    if(dv && dv.value) VALUES[TOOL] = dv.value;   // a Schottky is not a 1N4148
+    renderCtx();
+  });
   on('ctxSpan','oninput',  e => { IC_SPAN = Math.max(2, +e.target.value || 3); });
   on('rgDr', 'oninput',  e => { RDR = Math.round(+e.target.value || 0); renderCtx(); render(); });
   on('rgDc', 'oninput',  e => { RDC = Math.round(+e.target.value || 0); renderCtx(); render(); });
@@ -3591,7 +3718,7 @@ function onHole(r, c){
   pushUndo();
   const part = {id:uid(), kind:TOOL, ref:nextRef(TOOL), pins:pending};
   if(TOOL !== 'link') part.value = VALUES[TOOL] || '';
-  if(LEG_LIB[TOOL]) part.device = DEVICE[TOOL];
+  if(LEG_LIB[TOOL] || DEV_LIB[TOOL]) part.device = DEVICE[TOOL];
   if(PART_LIB[TOOL].polarized) part.polarized = true;
   S.parts.push(part);
   pending = [];

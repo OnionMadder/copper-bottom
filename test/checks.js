@@ -1348,5 +1348,45 @@ ok(linesAt(3).some(l => l.indexOf('pin 3') >= 0),
 
 S = demoProject(); computeNets();
 
+console.log('-- devices: a chosen type beats anything guessed from the value --');
+const fpOf = (kind, device, value) => footprintOf({kind:kind, device:device, value:value, pins:[[0,0],[0,3]]});
+ok(fpOf('diode','switching','1N4148').len === 1.40, 'a switching diode is a DO-35');
+ok(fpOf('diode','rectifier','1N4001').len === 2.05, 'a rectifier is a DO-41');
+ok(fpOf('diode','Schottky','1N5817').len === 2.05, 'so is a Schottky');
+ok(fpOf('diode','zener','5V1').len === 1.40, 'a zener is a DO-35, and 5V1 is not a value the guesser knows');
+ok(fpOf('diode','rectifier','1N4148').len === 2.05,
+   'and the chosen type wins even when the value would have guessed smaller');
+
+console.log('-- devices: LED and LDR are round parts with both leads one end --');
+ok(fpOf('diode','LED','red').shape === 'disc', 'an LED has a round body, not an axial one');
+ok(fpOf('diode','LED','red').leads === 'radial', 'with both leads out the same end');
+ok(fpOf('res','LDR','LDR').shape === 'disc' && fpOf('res','LDR','LDR').leads === 'radial',
+   'and so does an LDR');
+
+/* radial parts are exempt from the lead-span rule: a wide span just splays the
+   legs. If either had stayed axial they would warn on every sensible placement. */
+S = demoProject();
+S.parts.push({id:'x1', kind:'diode', ref:'DX', device:'LED', value:'red', polarized:true, pins:[[1,14],[2,14]]});
+S.parts.push({id:'x2', kind:'res', ref:'RX', device:'LDR', value:'LDR', pins:[[3,14],[4,14]]});
+computeNets();
+ok(runDRC().filter(f => f.rule === 'lead-span').length === 0,
+   'neither warns about lead span, because both are radial');
+
+console.log('-- devices: an LDR is a resistor, and is not filed with the diodes --');
+ok(!DEV_LIB.diode.LDR, 'there is no LDR among the diode types');
+ok(!!DEV_LIB.res.LDR, 'it lives under the resistor kind, where it belongs');
+ok(!PART_LIB.res.polarized, 'so it carries no polarity, and gets no cathode band');
+ok(PART_LIB.diode.polarized, 'while a diode still does');
+
+console.log('-- devices: every type names a package the footprint table knows --');
+let devBad = [];
+for(const [kind, fam] of Object.entries(DEV_LIB))
+  for(const [name, d] of Object.entries(fam))
+    if(d.pkg && !DEV_PKG[d.pkg]) devBad.push(kind + '/' + name + ' -> ' + d.pkg);
+ok(devBad.length === 0, 'no device points at a package that does not exist: ' + devBad.join(', '));
+ok(Object.values(DEV_LIB.diode).every(d => d.about), 'every diode type explains itself');
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
