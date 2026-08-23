@@ -84,6 +84,10 @@ button:hover{border-color:var(--cyan); color:var(--cyan)}
 .hint{color:var(--dim); font-size:10.5px; line-height:1.5; padding:0 2px}
 
 /* ---- reference pane ---- */
+/* An author `display:flex` beats the hidden attribute's UA display:none, so
+   without this the pane kept its 38% of the board while invisible. It did
+   exactly that from the day it was added until the breakage pass found it. */
+.ref[hidden]{display:none}
 .ref{
   flex:0 0 auto; display:flex; flex-direction:column; min-width:180px;
   border-left:1px solid var(--line); background:var(--panel);
@@ -139,6 +143,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .f.warn{border-left-color:#A46BE8; color:#D8C8F0}
 .f .msg{flex:1}
 .f .loc{color:var(--dim)}
+.checkstoggle{display:none}
+@media (max-width:900px){ .checkstoggle{display:inline-block} }
 .f .why{
   color:var(--dim); font-size:10.5px; line-height:1.55; margin-top:5px;
   padding-left:8px; border-left:1px solid var(--line2);
@@ -178,7 +184,16 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    no board width, and it disappears by itself when the current tool has
    nothing to configure. */
 @media (max-width:900px){
-  .side{display:none}
+  /* The side panel used to be display:none here, which took the DRC, the net
+     list and the inspector with it — on a tool whose whole point is telling you
+     what is wrong, that is the last thing to hide. It becomes a sheet you pull
+     up from the footer instead, so the findings are always one tap away. */
+  .side{
+    position:fixed; left:0; right:0; bottom:0; top:auto; z-index:8;
+    width:auto; max-height:70%; overflow-y:auto;
+    border-top:1px solid var(--mint); box-shadow:0 -10px 26px rgba(0,0,0,.7);
+  }
+  .side[hidden]{display:none}
   .rail{width:52px}
   .rail .lbl,.hint{display:none}
   .ctx{
@@ -320,7 +335,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       </div>
     </div>
   </div>
-  <div class="side">
+  <div class="side" id="side">
     <h2>INSPECTOR</h2>
     <div class="readout" id="readout"></div>
     <h2 id="drchdr">DRC</h2>
@@ -360,6 +375,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 </div>
 
 <div class="foot">
+  <button id="btnChecks" class="checkstoggle" title="show the checks panel">checks</button>
   <span>rows <input id="rows" type="number" min="2" max="60" value="13"></span>
   <span>cols <input id="cols" type="number" min="2" max="80" value="20"></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
@@ -420,17 +436,78 @@ function legLabels(p){
 
 /* v1 kept two-lead parts as a/b. v2 keeps pins[], which is what lets a
    transistor or a trimpot exist at all. Old files migrate on load. */
+/* Anything that got dropped on the way in, so load() can say so out loud
+   rather than quietly handing back a board with holes in it. */
+let MIGRATE_NOTES = [];
+
+const isHole = (h) => Array.isArray(h) && h.length === 2 &&
+  Number.isInteger(h[0]) && Number.isInteger(h[1]) && h[0] >= 0 && h[1] >= 0;
+const clampInt = (v, lo, hi, dflt) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(lo, Math.min(n, hi)) : dflt;
+};
+
+/* migrate() used to default only the TOP level and trust everything under it.
+   A file with a part missing its pins, a pad missing its hole, or a null in the
+   cut list would sail through and then throw during the first render — by which
+   point S had already been replaced, so the board on screen was gone and the app
+   was wedged. That is what a truncated download or a hand-edited file looks
+   like, and it is the worst possible moment to fall over.
+
+   Everything is checked on the way in now. Anything unusable is dropped rather
+   than repaired, because a part whose position we had to invent is a lie about
+   somebody's board, and the drops are reported instead of being silent. */
 function migrate(obj){
+  MIGRATE_NOTES = [];
+  const note = (what) => { MIGRATE_NOTES.push(what); };
   const o = Object.assign({version:2, name:'untitled', board:{rows:13, cols:20},
-                           cuts:[], parts:[], ics:[], pads:[]}, obj || {});
-  o.parts = (o.parts || []).map(p => {
-    if(p.pins) return p;
-    const q = Object.assign({}, p);
-    q.pins = [p.a, p.b].filter(Boolean);
-    delete q.a; delete q.b;
-    return q;
-  });
+                           cuts:[], parts:[], ics:[], pads:[]},
+                          (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {});
+
+  if(typeof o.name !== 'string') o.name = 'untitled';
+  const b = (o.board && typeof o.board === 'object') ? o.board : {};
+  o.board = {rows:clampInt(b.rows, 2, 60, 13), cols:clampInt(b.cols, 2, 80, 20)};
+
+  const before = {
+    cuts:Array.isArray(o.cuts) ? o.cuts.length : 0,
+    parts:Array.isArray(o.parts) ? o.parts.length : 0,
+    ics:Array.isArray(o.ics) ? o.ics.length : 0,
+    pads:Array.isArray(o.pads) ? o.pads.length : 0,
+  };
+
+  o.cuts = (Array.isArray(o.cuts) ? o.cuts : [])
+    .filter(k => typeof k === 'string' && /^\d+,\d+$/.test(k));
+
+  o.parts = (Array.isArray(o.parts) ? o.parts : []).map(q => {
+    if(!q || typeof q !== 'object') return null;
+    let r = q;
+    if(!r.pins){                                  // v1 stored two-lead parts as a / b
+      r = Object.assign({}, q);
+      r.pins = [q.a, q.b].filter(Boolean);
+      delete r.a; delete r.b;
+    }
+    if(!PART_LIB[r.kind]) return null;
+    if(!Array.isArray(r.pins) || r.pins.length !== legsOf(r.kind)) return null;
+    if(!r.pins.every(isHole)) return null;
+    if(!r.id) r = Object.assign({}, r, {id:uid()});
+    return r;
+  }).filter(Boolean);
+
+  o.ics = (Array.isArray(o.ics) ? o.ics : []).filter(ic =>
+    ic && typeof ic === 'object' && isHole(ic.pin1) &&
+    Number.isInteger(ic.pins) && ic.pins >= 4 && ic.pins % 2 === 0 &&
+    Number.isInteger(ic.span) && ic.span >= 2);
+
+  o.pads = (Array.isArray(o.pads) ? o.pads : []).filter(d =>
+    d && typeof d === 'object' && isHole(d.at) && typeof d.label === 'string' && d.label.trim());
+
+  for(const k of ['cuts', 'parts', 'ics', 'pads']){
+    const lost = before[k] - o[k].length;
+    if(lost > 0) note(lost + ' ' + k + (lost === 1 ? '' : ''));
+  }
+
   if(o.netlist === '') delete o.netlist;
+  if(typeof o.netlist !== 'string' && o.netlist !== undefined) delete o.netlist;
   o.version = 2;
   return o;
 }
@@ -3017,6 +3094,7 @@ function renderDRC(){
     o.push('</div>');
   });
   drclist.innerHTML = o.join('');
+  if(typeof syncChecksButton === 'function') syncChecksButton();
 }
 
 function focusFinding(f){
@@ -4032,6 +4110,8 @@ function autosave(){
 function load(obj){
   pushUndo();
   S = migrate(obj);
+  if(MIGRATE_NOTES.length && typeof flash === 'function')
+    flash('dropped ' + MIGRATE_NOTES.join(', ') + ' — ctrl+z to go back');
   projname.value = S.name;
   rows.value = S.board.rows;
   cols.value = S.board.cols;
@@ -4199,6 +4279,20 @@ refFile.onchange = (e) => {
   }
   refApply();
 })();
+
+/* Below 900px the checks live in a pull-up sheet rather than a column, so
+   there has to be something to pull it up by. Above 900px the panel is always
+   on screen and this button is hidden by CSS. */
+const NARROW = () => window.matchMedia('(max-width:900px)').matches;
+function syncChecksButton(){
+  const n = (typeof FINDINGS !== 'undefined' && FINDINGS) ? FINDINGS.length : 0;
+  btnChecks.textContent = n ? 'checks (' + n + ')' : 'checks';
+  btnChecks.classList.toggle('on', !side.hidden);
+}
+btnChecks.onclick = () => { side.hidden = !side.hidden; syncChecksButton(); };
+/* start closed on a narrow screen so it does not cover the board on arrival */
+if(NARROW()) side.hidden = true;
+window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syncChecksButton(); });
 
 btnNet.onclick     = openNetlist;
 nlClose.onclick    = closeNetlist;
