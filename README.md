@@ -87,9 +87,9 @@ Parts take one click per leg — two for a resistor, three for a transistor. Ref
 auto-increment. Placing an IC inserts the column of cuts between its pin rows
 automatically, and dragging that IC takes its cuts with it.
 
-**That column is a default, not a rule.** Select the chip and the panel offers
-**move cuts ◀ ▶**, which walks the whole line to another column between the pin
-rows — and no further, because a cut outside that space does not separate pin 1
+**That column is a default, not a rule.** Press `X` and the panel lists every chip
+on the board with the column its cuts sit in and a **◀ move ▶** either side, which
+walks the whole line to another column between the pin rows — and no further, because a cut outside that space does not separate pin 1
 from the pin facing it. Clicking one of the line’s holes with `X` leaves that one
 strip whole, and the chip remembers: pick it up, move it, and the strip is still
 whole, where simply deleting the cut would see it quietly reinstated. The DRC

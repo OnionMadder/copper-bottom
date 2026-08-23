@@ -3796,6 +3796,20 @@ function applyFix(f){
   }
 }
 
+/* Delegated, because the panel is rebuilt from scratch on every render and
+   there is one pair of these per chip. */
+ctx.addEventListener('click', e => {
+  const b = e.target.closest ? e.target.closest('[data-cut]') : null;
+  if(!b || b.disabled) return;
+  const ic = S.ics.find(x => x.id === b.dataset.cut);
+  const dir = +b.dataset.dir;
+  if(!ic || !canMoveIcCuts(ic, dir)) return;
+  pushUndo();
+  moveIcCuts(ic, dir);
+  refreshAutoCuts(ic);
+  commit();
+});
+
 drclist.addEventListener('click', e => {
   const fx = e.target.closest('.fix');
   if(fx){ applyFix(FINDINGS[+fx.dataset.fix]); return; }
@@ -4199,7 +4213,7 @@ const HINTS = {
   select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. arrows nudge · , and . turn it · del removes.',
   area   :'click two opposite corners to box off a block. only whole parts inside it count. , and . turn it.',
   line   :'click any hole to pick its row and column, then add or remove one.',
-  cut    :'click a hole to cut the track there. click again to undo the cut.',
+  cut    :'click a hole to cut the track there, or again to undo it. under a chip, click one of its own cuts to leave that strip whole \u2014 and move the whole line with the buttons on the left.',
   link   :'two clicks: start hole, end hole. links are the only thing that merges nets.',
   res    :'two clicks: lead A, lead B.',
   cap    :'two clicks: lead A, lead B.',
@@ -4208,7 +4222,7 @@ const HINTS = {
   trans  :'three clicks, in leg order. the leg names are drawn on the board.',
   trim   :'three clicks: pin 1, wiper, pin 3.',
   reg    :'three clicks, in leg order.',
-  ic     :'click where pin 1 goes. cuts between the pin rows are added automatically.',
+  ic     :'click where pin 1 goes. cuts between the pin rows are added automatically \u2014 the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
   erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
 };
@@ -4232,7 +4246,31 @@ function renderCtx(){
   const opts = (list, cur) => list.map(k =>
     '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(k) + '</option>').join('');
 
-  if(TOOL === 'line'){
+  if(TOOL === 'cut'){
+    /* Every chip that has a cut line, listed where somebody reaching for the
+       cut tool will see it. It used to live only in the select tool, behind
+       picking the chip up first, which is three steps away from the hand that
+       wants to move a cut. */
+    const dips = S.ics.filter(ic => !hasFootprint(ic));
+    if(!dips.length){
+      o.push('<div class="hint">click any hole to cut the track there, and again to undo it.</div>');
+    }else{
+      for(const ic of dips){
+        const half = ic.pins / 2, whole = icCutSkip(ic).length;
+        o.push('<label>' + esc(ic.ref) + ' — CUTS IN COLUMN ' +
+               dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
+        o.push('<button data-cut="' + esc(ic.id) + '" data-dir="-1"' +
+               (canMoveIcCuts(ic, -1) ? '' : ' disabled') + '>&#9664; move</button>' +
+               '<button data-cut="' + esc(ic.id) + '" data-dir="1"' +
+               (canMoveIcCuts(ic,  1) ? '' : ' disabled') + '>move &#9654;</button>');
+        if(whole) o.push('<div class="hint">' + (half - whole) + ' of ' + half +
+                         ' strips cut, ' + whole + ' left whole.</div>');
+      }
+      o.push('<div class="hint">the line moves as a whole, and only between the pin rows. ' +
+             'click one of its holes on the board to leave that strip whole. any other hole ' +
+             'cuts the track there.</div>');
+    }
+  }else if(TOOL === 'line'){
     if(!LINE){
       o.push('<div class="hint">click any hole.<br>its row and column light up, then add or remove one.</div>');
     }else{
