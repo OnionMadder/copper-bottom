@@ -1752,5 +1752,41 @@ ok(!canMoveIcCuts(tight, 1) && !canMoveIcCuts(tight, -1), 'and it can go neither
 S = demoProject(); computeNets();
 
 
+/* ---------------------------------------------------------------
+   THE BOARD THE APP OPENS WITH
+   Whatever exampleProject() returns is the first thing a person ever sees,
+   and for most of them it is the only worked example they will read. A board
+   that fails its own checks would teach the wrong thing on sight, so it is
+   held to the same bar as anything in layouts/.
+   --------------------------------------------------------------- */
+console.log('-- the opening example --');
+S = exampleProject(); computeNets();
+const exDRC = runDRC();
+const exErr = exDRC.filter(x => x.sev === 'error');
+ok(exErr.length === 0,
+   'the opening example raises no errors' + (exErr.length ? ' — ' + exErr[0].msg : ''));
+ok(typeof S.name === 'string' && S.name.trim(), 'it has a name to show in the title bar');
+ok(S.board.rows >= 2 && S.board.cols >= 2, 'and a board with size to it');
+
+const exBefore = exampleProject();
+const exAfter = migrate(exampleProject());
+ok(exAfter.parts.length === exBefore.parts.length &&
+   exAfter.ics.length === exBefore.ics.length &&
+   exAfter.pads.length === exBefore.pads.length,
+   'migrate keeps every part, chip and pad — nothing in it is malformed');
+
+/* If it declares a netlist, the board has to match it. This is the check that
+   makes swapping the example safe: a half-traced layout cannot slip in. */
+if(exBefore.netlist){
+  S = exampleProject(); computeNets();
+  const exNet = checkNetlist(exBefore.netlist);
+  ok(exNet.clean, 'its declared netlist matches the copper' +
+     (exNet.clean ? '' : ' — ' + (exNet.findings[0] || '')));
+}else{
+  ok(true, 'it declares no netlist, so there is nothing to match it against');
+}
+
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

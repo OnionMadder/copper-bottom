@@ -201,6 +201,29 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .ovbar .say:empty{display:none}
 .ovbar .say.no{color:var(--mag)}
 
+/* ---- the one-time thank-you ---- */
+/* Shown once, dismissed forever. [hidden] is spelled out because an author
+   display:flex beats the attribute, which is the mistake this file has made
+   before. If localStorage is unavailable the banner simply shows again — a
+   nuisance, never a blocker, and never a reason to stop the app starting. */
+.thanks[hidden]{display:none}
+/* wraps, so the close button drops to its own line on a narrow screen
+   rather than being pushed off the right edge — a banner you cannot dismiss
+   is worse than no banner */
+.thanks{
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; flex:0 0 auto;
+  padding:9px 14px; background:#141F1C; border-bottom:1px solid #1E4A3C;
+  color:#CFE9DF; font-size:13px; line-height:1.5;
+}
+.thanks .msg{flex:1 1 auto; min-width:0}
+.thanks b{color:var(--mint); font-weight:600}
+.thanks a{color:var(--mint)}
+.thanks button{flex:0 0 auto; margin-left:auto}
+@media (prefers-reduced-motion:no-preference){
+  .thanks{animation:thanksIn .38s ease-out}
+  @keyframes thanksIn{from{opacity:0; transform:translateY(-100%)} to{opacity:1; transform:none}}
+}
+
 /* ---- board ---- */
 .stage{flex:1; min-width:0; min-height:0; overflow:auto; padding:22px; background:var(--void)}
 .stage.aligning{cursor:crosshair}
@@ -423,6 +446,13 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   </span>
   <input type="file" id="file" accept=".json,application/json" style="display:none">
   <input type="file" id="refFile" accept="image/*" style="display:none">
+</div>
+
+<div class="thanks" id="thanks" hidden>
+  <span class="msg"><b>Thanks to Paul Stevenson.</b> His stripboard layouts at
+    <a href="https://www.paulinthelab.com" target="_blank" rel="noopener noreferrer">paulinthelab.com</a>
+    are the kind of thing this editor was built to help you follow, check and change.</span>
+  <button id="thanksClose" title="close — this only appears once">close</button>
 </div>
 
 <div class="main">
@@ -1391,6 +1421,20 @@ function uid(){ return 'e' + (++_uid).toString(36) + Math.floor(Math.random() * 
 /* ============================================================
    TEST FIXTURE - CD40106 two-voice optical theremin
    ============================================================ */
+/* The board the app opens with, and what the demo button loads.
+   Kept apart from demoProject() on purpose: that one is the test fixture and
+   the suite is written against its exact holes. Point this at any sound
+   layout and nothing in the tests moves. Whatever it returns has to survive
+   the opening-example check in test/checks.js — no DRC errors, no parts lost
+   to migrate, and if it declares a netlist, the board has to match it. */
+function exampleProject(){
+  return demoProject();
+}
+
+/* THE TEST FIXTURE. 692 checks know these holes by heart — pin 1 at [3,7],
+   seven cuts down column 8, pads named on known nets. Change the geometry
+   here and the suite goes with it. To change what a VISITOR sees, edit
+   exampleProject() above instead. */
 function demoProject(){
   const P = (kind, ref, value, a, b) => ({id:uid(), kind:kind, ref:ref, value:value, pins:[a, b]});
   const cuts = [3,4,5,6,7,8,9].map(r => K(r,8));
@@ -5024,7 +5068,7 @@ function load(obj){
   pending = []; pinnedNet = null; SEL = null;
   commit();
 }
-btnDemo.onclick = () => load(demoProject());
+btnDemo.onclick = () => load(exampleProject());
 btnNew.onclick  = () => load({name:'untitled', board:{rows:13, cols:20}});
 btnExport.onclick = () => {
   const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
@@ -5581,11 +5625,25 @@ file.onchange = () => {
   file.value = '';
 };
 
+/* ---- the one-time thank-you ----
+   Its own key, like the reference picture's, so clearing a board never
+   un-thanks anybody and a full storage never stops the editor opening. */
+const THANKS_KEY = 'copper-bottom.thanks.v1';
+(function(){
+  let seen = null;
+  try{ seen = localStorage.getItem(THANKS_KEY); }catch(err){}
+  if(!seen) thanks.hidden = false;
+})();
+thanksClose.onclick = () => {
+  thanks.hidden = true;
+  try{ localStorage.setItem(THANKS_KEY, '1'); }catch(err){}
+};
+
 /* ---- boot ---- */
 (function boot(){
   let stored = null;
   try{ stored = JSON.parse(localStorage.getItem(LS) || 'null'); }catch(err){}
-  S = stored ? migrate(stored) : demoProject();
+  S = stored ? migrate(stored) : exampleProject();
   projname.value = S.name;
   rows.value = S.board.rows;
   cols.value = S.board.cols;
