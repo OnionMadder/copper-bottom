@@ -43,10 +43,24 @@
   --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
 }
 *{box-sizing:border-box}
+
+/* Windows draws a wide light-grey scrollbar that sits on this palette like a
+   strip of masking tape. Firefox takes the two-property form, everything else
+   takes the pseudo-elements; the header sets scrollbar-width:none separately
+   and still wins, because it is the more specific rule. */
+*{scrollbar-width:thin; scrollbar-color:var(--line2) transparent}
+::-webkit-scrollbar{width:11px; height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{
+  background:var(--line2); border-radius:7px;
+  border:3px solid transparent; background-clip:padding-box;
+}
+::-webkit-scrollbar-thumb:hover{background:#4B4170; background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
 html,body{height:100%}
 body{
   margin:0; background:var(--void); color:#fff;
-  font:13px/1.5 var(--ui);
+  font:14px/1.55 var(--ui);
   display:flex; flex-direction:column; overflow:hidden;
 }
 .hdr{
@@ -67,7 +81,7 @@ body{
 .hdr .sp{flex:1}
 /* fields hold data, so they are mono; buttons are labels, so they are not */
 input,select,textarea,button{
-  color:#fff; background:#171325; font-size:12px;
+  color:#fff; background:#171325; font-size:13px;
   border:1px solid var(--line2); border-radius:5px; padding:4px 9px;
 }
 input,select,textarea{font-family:var(--mono)}
@@ -81,31 +95,41 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 
 /* ---- tool rail ---- */
 .rail{
-  width:186px; flex:0 0 auto; border-right:1px solid var(--line);
+  width:204px; flex:0 0 auto; border-right:1px solid var(--line);
   background:var(--panel); display:flex; flex-direction:column; min-height:0;
 }
 .rail .scroll{overflow-y:auto; padding:8px}
 .sect{
-  font-size:11px; letter-spacing:.03em; color:var(--soft); font-weight:600;
+  font-size:12px; letter-spacing:.03em; color:var(--soft); font-weight:600;
   margin:14px 2px 6px;
 }
 .sect:first-child{margin-top:2px}
 .tool{
   display:flex; align-items:center; gap:9px; width:100%; text-align:left;
   padding:6px 8px; margin-bottom:2px; background:transparent; border:1px solid transparent;
-  color:var(--gray); border-radius:5px; font-size:13px;
+  color:var(--gray); border-radius:5px; font-size:14px;
 }
 .tool:hover{background:#171325; color:#fff; border-color:var(--line2)}
 .tool.on{background:#1c1630; border-color:var(--mint); color:var(--mint)}
+/* The icon is the part as the BOARD draws it — a resistor with bands, an
+   electrolytic as a disc with a +, a DIP with its notch — not the schematic
+   symbol. This tool exists for people who cannot read schematics; the rail is
+   the wrong place to make them start. The letter stays, moved to the right and
+   dimmed, because it is still the shortcut. */
+.tool .ico{order:0; flex:0 0 auto; width:20px; height:20px; display:flex; align-items:center; justify-content:center}
+.tool .ico svg{width:20px; height:20px; display:block}
+.tool .lbl{order:1; flex:1 1 auto; min-width:0}
+/* the shortcut sits at the far end, where a menu would put it */
+.tool kbd{order:2}
 .tool kbd{
-  font:11px/1.4 var(--mono); min-width:18px; text-align:center; padding:1px 4px; border-radius:3px;
+  font:11.5px/1.4 var(--mono); min-width:18px; text-align:center; padding:1px 4px; border-radius:3px;
   background:#241F36; color:var(--soft); border:1px solid var(--line2);
 }
 .tool.on kbd{color:var(--mint); border-color:var(--mint)}
 .ctx{border-top:1px solid var(--line); padding:10px; display:flex; flex-direction:column; gap:7px}
-.ctx label{font-size:10.5px; letter-spacing:.05em; color:var(--soft); font-weight:600}
+.ctx label{font-size:11.5px; letter-spacing:.04em; color:var(--soft); font-weight:600}
 .ctx input,.ctx select{width:100%}
-.hint{color:var(--soft); font-size:11.5px; line-height:1.55; padding:0 2px}
+.hint{color:var(--soft); font-size:12.5px; line-height:1.6; padding:0 2px}
 
 /* ---- reference pane ---- */
 /* An author `display:flex` beats the hidden attribute's UA display:none, so
@@ -195,7 +219,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    completely different treatment and a shared parent takes one down with the
    other. */
 .rightcol{
-  width:274px; flex:0 0 auto; min-height:0; display:flex; flex-direction:column;
+  width:300px; flex:0 0 auto; min-height:0; display:flex; flex-direction:column;
   border-left:1px solid var(--line); background:var(--panel);
 }
 /* capped, so selecting a chip cannot squeeze the findings list to a sliver */
@@ -203,10 +227,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .editwrap[hidden]{display:none}
 .editwrap .ctx{border-top:0}
 .side h2{
-  font-size:11px; letter-spacing:.03em; color:var(--soft); font-weight:600;
+  font-size:12px; letter-spacing:.03em; color:var(--soft); font-weight:600;
   margin:0; padding:10px 12px 8px; border-bottom:1px solid var(--line);
 }
-.readout{padding:10px 12px; border-bottom:1px solid var(--line); min-height:96px; font-size:12px}
+.readout{padding:11px 13px; border-bottom:1px solid var(--line); min-height:96px; font-size:13px}
 .readout .big{font:700 14px/1.3 var(--mono); letter-spacing:.04em}
 .readout .row{color:var(--gray); margin-top:3px}
 .readout .row b{color:#fff; font-weight:400}
@@ -217,25 +241,31 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .readout .why + .why{border-top:0; margin-top:4px; padding-top:0}
 .netwrap{flex:1; overflow-y:auto; min-height:0}
 .drcwrap{flex:1.3; overflow-y:auto; min-height:54px; border-bottom:1px solid var(--line)}
-.f{display:flex; align-items:flex-start; gap:7px; padding:7px 11px 7px 9px; cursor:pointer;
-   border-left:3px solid transparent; font-size:12.5px; line-height:1.45}
+/* wrap, and give the consequence a row of its own. Without this the .why
+   block is just another flex item on the same line: it takes its content
+   width, .msg shrinks to min-content, and a finding renders one word per
+   line. It did exactly that from the day consequences shipped — and every
+   finding carries one, so the panel was never right. */
+.f{display:flex; flex-wrap:wrap; align-items:flex-start; gap:7px;
+   padding:8px 12px 9px 10px; cursor:pointer;
+   border-left:3px solid transparent; font-size:13.5px; line-height:1.5}
+.f .msg{flex:1 1 auto; min-width:0}
 .f:hover{background:var(--panel2)}
 .f.error{border-left-color:var(--mag); color:#F2C8E4}
 .f.warn{border-left-color:#A46BE8; color:#D8C8F0}
-.f .msg{flex:1}
 .f .loc{color:var(--dim); font-family:var(--mono); font-size:11px}
 .checkstoggle{display:none}
 @media (max-width:900px){ .checkstoggle{display:inline-block} }
 .f .why{
-  color:var(--soft); font-size:11.5px; line-height:1.55; margin-top:6px;
+  flex:1 0 100%; color:var(--soft); font-size:12.5px; line-height:1.6; margin-top:2px;
   padding-left:9px; border-left:1px solid var(--line2);
 }
 .f .fix{padding:1px 7px; font-size:11px; border-color:var(--mint); color:var(--mint); background:transparent}
 .f .fix:hover{background:var(--mint); color:#0B0813}
-.clean{padding:10px 12px; color:var(--mint); font-size:12.5px; line-height:1.55}
+.clean{padding:11px 13px; color:var(--mint); font-size:13.5px; line-height:1.6}
 .net{
   display:flex; align-items:center; gap:8px; padding:5px 12px; cursor:pointer;
-  border-left:2px solid transparent; font-family:var(--mono); font-size:12px;
+  border-left:2px solid transparent; font-family:var(--mono); font-size:12.5px;
 }
 .net:hover,.net.on{background:var(--panel2); border-left-color:currentColor}
 .sw{width:10px; height:10px; border-radius:2px; flex:0 0 auto}
@@ -245,7 +275,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 /* ---- footer ---- */
 .foot{
   height:28px; flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
-  display:flex; align-items:center; gap:16px; padding:0 12px; color:var(--soft); font-size:11.5px;
+  display:flex; align-items:center; gap:16px; padding:0 12px; color:var(--soft); font-size:12px;
 }
 .foot b{color:var(--gray); font-weight:400; font-family:var(--mono)}
 .foot #stat,.foot #saved{font-family:var(--mono)}
@@ -283,7 +313,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   }
   .side[hidden]{display:none}
   .rail{width:52px}
-  .rail .lbl,.hint{display:none}
+  /* no keyboard on a phone, so the shortcut is dead weight in a 52px rail.
+     The icon takes the middle on its own. */
+  .rail .lbl,.rail kbd,.hint{display:none}
+  .rail .tool{justify-content:center; padding:8px 4px}
   /* the wrapper stops existing for layout, so these two are siblings of
      .main again and the old, working arrangement returns */
   .rightcol{display:contents}
@@ -4287,6 +4320,27 @@ let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
                 e:'ecap', d:'diode', q:'trans', w:'trim', g:'reg', u:'ic', p:'pad'};
+/* 20x20, currentColor, no fills that would fight the row's own colour. Drawn
+   rather than fetched: this file has no network and no icon font. */
+const TOOL_ICON = {
+  inspect:'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M12.8 12.8 17 17"/><path d="M6.5 9h5" stroke-width="2"/></svg>',
+  select :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 3.5 15 10l-4.2 1.1L9 16z"/></svg>',
+  area   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="4.5" width="13" height="11" rx="1" stroke-dasharray="3 2.2"/><circle cx="3.5" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/></svg>',
+  line   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6.5h14M3 13.5h14M7.5 3v14"/><path d="M13.5 10h4M15.5 8v4" stroke-width="1.8"/></svg>',
+  cut    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10h4.5M13.5 10H18"/><circle cx="10" cy="10" r="4"/><path d="M7.7 7.7l4.6 4.6M12.3 7.7l-4.6 4.6" stroke-width="1.8"/></svg>',
+  link   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 13.5c0-5 12-5 12 0"/><circle cx="4" cy="13.5" r="1.9" fill="currentColor" stroke="none"/><circle cx="16" cy="13.5" r="1.9" fill="currentColor" stroke="none"/></svg>',
+  res    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 10h3.5M15 10h3.5"/><rect x="5" y="6.5" width="10" height="7" rx="2"/><path d="M7.6 6.5v7M9.6 6.5v7M11.6 6.5v7" stroke-width="1.2"/></svg>',
+  cap    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 10h4M14.5 10h4"/><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"/></svg>',
+  ecap   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="6"/><path d="M5.6 8.2h2.6M6.9 6.9v2.6" stroke-width="1.6"/></svg>',
+  diode  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 10h3.5M15 10h3.5"/><rect x="5" y="6.5" width="10" height="7" rx="1.6"/><path d="M12.6 6.5v7" stroke-width="2.4"/></svg>',
+  trans  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 9.5a5.5 5.5 0 0 1 11 0z"/><path d="M4.5 9.5h11"/><path d="M7 9.5v6M10 9.5v6M13 9.5v6"/></svg>',
+  trim   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="3.5" width="11" height="9" rx="1.4"/><path d="M7.5 8h5" stroke-width="1.8"/><path d="M7 12.5v4M10 12.5v4M13 12.5v4"/></svg>',
+  reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
+  ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
+  pad    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="12" r="4"/><circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M10.9 9.1 16 4M13 4h3v3" stroke-linecap="round"/></svg>',
+  erase  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8.4 15.5H16"/><path d="M3.9 12.6 9 7.5a1.6 1.6 0 0 1 2.2 0l3.3 3.3a1.6 1.6 0 0 1 0 2.2l-2.4 2.4H6.6z"/><path d="M7.6 8.9 12.6 14"/></svg>',
+};
+
 const HINTS = {
   inspect:'hover a hole to light its whole net. click to pin, esc to release.',
   select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. arrows nudge · , and . turn it · del removes.',
@@ -4305,6 +4359,13 @@ const HINTS = {
   pad    :'click a hole to mark an off-board wire exit with the label above.',
   erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
 };
+
+/* Injected rather than written into the markup sixteen times: one place to
+   change, and a tool whose icon is missing still gets a working row. */
+for(const b of document.querySelectorAll('.tool')){
+  const ico = TOOL_ICON[b.dataset.tool];
+  if(ico) b.insertAdjacentHTML('afterbegin', '<span class="ico">' + ico + '</span>');
+}
 
 function setTool(t){
   TOOL = t;
