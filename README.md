@@ -8,11 +8,24 @@ and for *copper-bottomed*, meaning a thing you can rely on.
 Single self-contained HTML file. No build step, no install, no server - double-click
 `copper-bottom.html` and it opens. Works offline at the bench.
 
+## What it looks like
+
+![The editor: a 555 theremin laid out, every net colored, checks clean](docs/editor.png)
+
+A finding never just points - it says what the board will do if you build it anyway:
+
+![A shorted resistor caught by the checks, consequence spelled out](docs/drc.png)
+
+The build sheet prints both sides at 1:1 with a calibration bar, the copper drawn the
+way the board in your hand actually looks:
+
+![The printable build sheet: branded, both sides, cut list below](docs/sheet.png)
+
 ```bash
 node test/fixture.test.js
 ```
 
-555 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+767 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
