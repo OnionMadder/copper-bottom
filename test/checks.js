@@ -1840,6 +1840,34 @@ const mJunk = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[
   parts:[{id:'j', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[2,1]], mount:'sideways'}]});
 ok(!('mount' in mJunk.parts[0]), 'migrate drops a mount value nothing reads');
 
+console.log('-- split-supply VEE --');
+// fires: a negative rail exists, but the TL072's V- (pin 4) is tied to ground
+S = {version:2, name:'vee', board:{rows:8, cols:12}, cuts:[], parts:[],
+  ics:[{id:'u', ref:'IC1', part:'TL072', pins:8, pin1:[1,2], span:3, autoCuts:[]}],
+  pads:[{id:'n', label:'-12V', at:[7,0]}]};
+computeNets();
+{ const vee = pinPos(S.ics[0], 4); S.pads.push({id:'g', label:'GND', at:[vee[0], 11]}); }
+computeNets();
+ok(runDRC().some(f => f.rule === 'vee-ground'), 'a TL072 V- tied to ground while a negative rail exists is flagged');
+
+// silent: V- sits on the negative rail, as it should
+S = {version:2, name:'vee', board:{rows:8, cols:12}, cuts:[], parts:[],
+  ics:[{id:'u', ref:'IC1', part:'TL072', pins:8, pin1:[1,2], span:3, autoCuts:[]}],
+  pads:[{id:'g', label:'GND', at:[7,0]}]};
+computeNets();
+{ const vee = pinPos(S.ics[0], 4); S.pads.push({id:'n', label:'-12V', at:[vee[0], 11]}); }
+computeNets();
+ok(!runDRC().some(f => f.rule === 'vee-ground'), 'V- on the negative rail raises nothing');
+
+// silent: single-supply board (no negative pad) - V- at ground is a normal design
+S = {version:2, name:'vee', board:{rows:8, cols:12}, cuts:[], parts:[],
+  ics:[{id:'u', ref:'IC1', part:'TL072', pins:8, pin1:[1,2], span:3, autoCuts:[]}],
+  pads:[]};
+computeNets();
+{ const vee = pinPos(S.ics[0], 4); S.pads.push({id:'g', label:'GND', at:[vee[0], 11]}); }
+computeNets();
+ok(!runDRC().some(f => f.rule === 'vee-ground'), 'V- at ground with no negative rail on the board is left alone');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

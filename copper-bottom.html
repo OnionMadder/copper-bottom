@@ -1635,6 +1635,10 @@ const DRC_WHY = {
   'pad-name':
     'The netlist looks a pad up by its name. Two pads wearing one name means only ever one ' +
     'of them gets found, and the other is invisible to every check that mentions it.',
+  'vee-ground':
+    'That pin is the negative supply of the chip, and at ground it sits at 0V. On a split rail the ' +
+    'part needs the negative side to pull below ground - tied to ground it has none, its outputs ' +
+    'cannot swing negative, and an OTA has no headroom at all. Move it to the negative rail.',
 };
 
 function runDRC(){
@@ -1789,6 +1793,36 @@ function runDRC(){
                  'V and this board gives it ' + sup.total + 'V';
     if(sup.total > def.volts.max)      add('error', 'supply-range', runs + tail, pinPos(ic, 1));
     else if(sup.total < def.volts.min) add('warn',  'supply-range', runs + tail, pinPos(ic, 1));
+  }
+
+  /* --- a split-supply chip's negative pin tied to ground ---
+     A 'vee' pin (as against a CMOS chip's 'gnd') is a negative supply: the
+     part is built for a split rail. On a board that carries a negative rail, a
+     vee pin sitting on ground instead is the classic Eurorack slip - the chip
+     loses its negative swing, an OTA loses all its headroom, and nothing else
+     here would catch it, because the positive side still reads a valid voltage.
+     Gated on a negative pad existing, because without one the board is
+     single-supply and a vee-at-ground part - a TL072 biased to mid-rail - is a
+     normal design, not a mistake. That gate is what keeps this off every pedal. */
+  const negRail = S.pads.some(d => { const c = powerClass(d.label); return c && c.cls === 'neg'; });
+  if(negRail){
+    for(const ic of S.ics){
+      const def = IC_LIB[ic.part];
+      if(!def || !def.roles) continue;
+      for(const pk of Object.keys(def.roles)){
+        if(def.roles[pk] !== 'vee') continue;
+        const at = pinPos(ic, +pk);
+        if(!at) continue;
+        const net = NET.netAt(at[0], at[1]);
+        if(!net) continue;                                    // unwired: not this rule's call
+        const cls = padsOnNet(net).map(d => powerClass(d.label)).filter(Boolean);
+        if(cls.some(c => c.cls === 'neg')) continue;          // on the negative rail: correct
+        if(cls.some(c => c.cls === 'gnd'))
+          add('error', 'vee-ground',
+              ic.ref + ' (' + ic.part + ') pin ' + pk + ' is its negative supply, and it is ' +
+              'tied to ground rather than the negative rail', at);
+      }
+    }
   }
 
   /* --- two pads answering to the same name ---
