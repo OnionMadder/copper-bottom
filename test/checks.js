@@ -1825,6 +1825,15 @@ const flyNone = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads
   parts:[{id:'n', kind:'pot', ref:'POT1', pins:[[1,1],[1,2],[1,3]], fly:[]}]});
 ok(!('fly' in flyNone.parts[0]), 'migrate drops an empty fly list');
 
+console.log('-- vertical mount --');
+S = {version:2, name:'vert', board:{rows:6, cols:4}, cuts:[], parts:[
+  {id:'r', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[2,1]]},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'lead-span'), 'an axial part crammed into too tight a span warns');
+S.parts[0].mount = 'vertical'; computeNets();
+ok(!runDRC().some(f => f.rule === 'lead-span'), "and mount:'vertical' quiets it");
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
