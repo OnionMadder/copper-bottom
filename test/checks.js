@@ -1868,6 +1868,37 @@ computeNets();
 computeNets();
 ok(!runDRC().some(f => f.rule === 'vee-ground'), 'V- at ground with no negative rail on the board is left alone');
 
+console.log('-- off-board switches --');
+// the two switch kinds share one SW prefix and number together
+S = {version:2, name:'sw', board:{rows:6, cols:8}, cuts:[], parts:[], ics:[], pads:[]};
+const r1 = nextRef('spst'); S.parts.push({id:'a', kind:'spst', ref:r1, pins:[[1,1],[3,1]]});
+const r2 = nextRef('spdt'); S.parts.push({id:'b', kind:'spdt', ref:r2, pins:[[1,4],[3,4],[5,4]], device:'SPDT toggle'});
+const r3 = nextRef('spst'); S.parts.push({id:'c', kind:'spst', ref:r3, pins:[[1,6],[3,6]]});
+ok(r1 === 'SW1' && r2 === 'SW2' && r3 === 'SW3', 'SPST and SPDT share the SW prefix and number as one series');
+
+// a switch with both lugs on one strip is shorted, same as any other part
+S = {version:2, name:'sw2', board:{rows:4, cols:6}, cuts:[], parts:[
+  {id:'s', kind:'spst', ref:'SW1', pins:[[1,1],[1,3]]},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'part-short'), 'a switch with both lugs on one strip is shorted out');
+
+// a switch has a body that can clash; flying it off the board clears that
+S = {version:2, name:'sw3', board:{rows:6, cols:8}, cuts:[], parts:[
+  {id:'a', kind:'spdt', ref:'SW1', pins:[[1,1],[1,2],[1,3]], device:'SPDT toggle'},
+  {id:'b', kind:'spdt', ref:'SW2', pins:[[1,2],[1,3],[1,4]], device:'SPDT toggle'},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'body-clash'), 'two overlapping switch bodies clash');
+S.parts[0].fly = [0,1,2]; computeNets();
+ok(!runDRC().some(f => f.rule === 'body-clash'), 'flying a switch off the board clears its clash');
+
+// migrate keeps a switch and its fly list
+const swMig = migrate({version:2, board:{rows:4,cols:6}, cuts:[], ics:[], pads:[],
+  parts:[{id:'m', kind:'spdt', ref:'SW1', pins:[[1,1],[1,2],[1,3]], fly:[0,1,2]}]});
+ok(swMig.parts.length === 1 && swMig.parts[0].kind === 'spdt' && String(swMig.parts[0].fly) === '0,1,2',
+   'migrate keeps a flown SPDT switch');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

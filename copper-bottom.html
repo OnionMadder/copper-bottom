@@ -480,6 +480,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="trans"><kbd>Q</kbd><span class="lbl">transistor</span></button>
       <button class="tool" data-tool="trim"><kbd>W</kbd><span class="lbl">trimpot</span></button>
       <button class="tool" data-tool="pot"><kbd>O</kbd><span class="lbl">potentiometer</span></button>
+      <button class="tool" data-tool="spst"><kbd>T</kbd><span class="lbl">SPST switch</span></button>
+      <button class="tool" data-tool="spdt"><kbd>Y</kbd><span class="lbl">SPDT switch</span></button>
       <button class="tool" data-tool="reg"><kbd>G</kbd><span class="lbl">regulator</span></button>
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
@@ -656,6 +658,8 @@ const PART_LIB = {
   trans: {legs:3, name:'transistor',   prefix:'Q'},
   trim:  {legs:3, name:'trimpot',      prefix:'VR'},
   pot:   {legs:3, name:'potentiometer', prefix:'POT'},
+  spst:  {legs:2, name:'SPST switch',   prefix:'SW'},
+  spdt:  {legs:3, name:'SPDT switch',   prefix:'SW'},
   reg:   {legs:3, name:'regulator',    prefix:'U'},
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
@@ -684,6 +688,7 @@ const LEG_LIB = {
         'TO-92':['1','2','3'] },
   trim:{ 'trimpot':['1','W','3'] },
   pot:{ 'potentiometer':['1','W','3'] },
+  spdt:{ 'SPDT toggle':['A','C','B'] },   // A/B throws, C the common between them
 };
 function legLabels(p){
   const fam = LEG_LIB[p.kind];
@@ -2017,7 +2022,7 @@ function holeText(r, c){ return 'row ' + dRow(r) + ' \u00b7 col ' + dCol(c); }
 function holeShort(r, c){ return 'r' + dRow(r) + ' c' + dCol(c); }
 
 /* Solder the flat things first or you will not be able to reach them later. */
-const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9, pot:10};
+const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9, pot:10, spst:11, spdt:12};
 
 function buildList(){
   const items = [];
@@ -2340,6 +2345,8 @@ const WALK_NOTES = {
   diode: 'The SECOND click is the banded end - the cathode. Backwards, nothing works at all.',
   trans: 'The clicks go in leg order, so watch the letters the panel puts on them.',
   pot:   'Three clicks: lug 1, wiper, lug 3. These are the holes its flying leads land in - the pot itself lives on the panel, not the board.',
+  spst:  'Two lugs, on/off. These are the holes its wires land in - the switch itself is on the panel.',
+  spdt:  'Three lugs, and the centre one is the common. These are the holes its wires land in - the switch is on the panel.',
   res:   null, cap: null, trim: null, reg: null,
 };
 
@@ -2390,7 +2397,7 @@ function walkthrough(){
       hand.map(k => { const q = k.split(',').map(Number); return at(q); })
         .concat(['A cut breaks one strip into two separate nets at that hole.']));
 
-  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O'};
+  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O', spst:'T', spdt:'Y'};
   for(const it of buildList()){
     if(it.kind === 'ic') continue;
     const part = S.parts.find(x => x.id === (it.key || '').replace('part:', '')) ||
@@ -3172,6 +3179,8 @@ const FOOTPRINT = {
   trim:  {shape:'box',  len:1.90, wid:1.71, leads:'radial'},    // small square trimmer
   pot:   {shape:'disc', dia:1.90, leads:'radial'},              // panel pot: only its leads
                                                                 // land here, the body is off-board
+  spst:  {shape:'disc', dia:1.55, leads:'radial'},              // off-board toggle: leads only
+  spdt:  {shape:'disc', dia:1.85, leads:'radial'},
 };
 
 /* 'axial' means the leads leave opposite ends of the body, so the holes have
@@ -3659,6 +3668,14 @@ function render(){
           '" height="' + (TR*0.66) + '" rx="' + (TR*0.06) +
           '" fill="#C9C3DA" stroke="#0B0A12" stroke-width="0.8"/>' +
           '</g>');
+      }else if(p.kind === 'spdt'){
+        /* a panel toggle: a bat lever off a small body. Off-board when flown. */
+        o.push(g3 +
+          '<rect x="' + (-TR*0.72) + '" y="' + (-TR*1.15) + '" width="' + (TR*1.44) + '" height="' + (TR*2.3) +
+          '" rx="' + (TR*0.28) + '" fill="#2A2636" stroke="#0B0A12" stroke-width="1.2"/>' +
+          '<line x1="0" y1="0" x2="' + (TR*0.55) + '" y2="' + (-TR*0.95) + '" stroke="#C9C3DA" stroke-width="' + (TR*0.34) + '" stroke-linecap="round"/>' +
+          '<circle cx="0" cy="0" r="' + (TR*0.24) + '" fill="#C9C3DA" stroke="#0B0A12" stroke-width="0.8"/>' +
+          '</g>');
       }else{
         /* TO-92 from above: a circle with one flat, the flat facing the legs */
         const fx = TR*0.9075, fy = TR*0.42;
@@ -3770,6 +3787,17 @@ function render(){
         '" rx="' + (DH*0.22) + '" fill="#1A1620" stroke="#B9B4C7" stroke-width="1.1"/>' +
         '<rect x="' + bx0 + '" y="' + (-DH/2) + '" width="' + bw + '" height="' + DH +
         '" fill="#E8E4F0"/>' + tails +
+        '</g>');
+
+    }else if(p.kind === 'spst'){
+      /* a panel toggle on two lugs. Off-board when flown. */
+      const SW = PITCH * 0.62;
+      tint = '#C9C3DA'; off = SW + 12; half = SW;
+      o.push(g +
+        '<rect x="' + (-SW) + '" y="' + (-SW*0.72) + '" width="' + (2*SW) + '" height="' + (SW*1.44) +
+        '" rx="' + (SW*0.28) + '" fill="#2A2636" stroke="#0B0A12" stroke-width="1.1"/>' +
+        '<line x1="' + (-SW*0.32) + '" y1="0" x2="' + (SW*0.5) + '" y2="' + (-SW*0.58) + '" stroke="#C9C3DA" stroke-width="' + (SW*0.34) + '" stroke-linecap="round"/>' +
+        '<circle cx="' + (-SW*0.32) + '" cy="0" r="' + (SW*0.2) + '" fill="#C9C3DA"/>' +
         '</g>');
 
     }else{
@@ -4243,6 +4271,10 @@ function exportSVG(side){
           o.push(g + '<circle cx="0" cy="0" r="' + R + '"/><circle cx="0" cy="0" r="' +
                  (R*0.42) + '"/><rect x="' + (-R*0.13) + '" y="' + (-R*1.6) + '" width="' +
                  (R*0.26) + '" height="' + (R*0.62) + '"/></g>');
+        else if(p.kind === 'spdt')
+          o.push(g + '<rect x="' + (-R*0.72) + '" y="' + (-R*1.1) + '" width="' + (R*1.44) + '" height="' + (R*2.2) +
+                 '" rx="' + (R*0.28) + '"/><line x1="0" y1="0" x2="' + (R*0.55) + '" y2="' + (-R*0.9) +
+                 '" stroke-width="' + (R*0.3) + '" stroke-linecap="round"/><circle cx="0" cy="0" r="' + (R*0.22) + '"/></g>');
         else
           o.push(g + '<path d="M' + (-R*0.9075) + ' ' + (R*0.42) + 'A' + R + ' ' + R + ' 0 1 1 ' +
                  (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
@@ -4302,6 +4334,11 @@ function exportSVG(side){
           ? '<path d="M1.3 -0.8l0.5 -0.45M0.75 0.8l-0.5 0.45" fill="none" stroke-width="0.35"/>' : '';
         o.push(g + '<rect x="-1.65" y="-0.8" width="3.3" height="1.6" rx="0.2"/>' +
                '<rect x="0.75" y="-0.8" width="0.55" height="1.6" fill="#000" stroke="none"/>' + zt + '</g>');
+      }else if(p.kind === 'spst'){
+        half = 2.1;
+        o.push(g + '<rect x="-2.1" y="-1.5" width="4.2" height="3.0" rx="0.6"/>' +
+               '<line x1="-0.7" y1="0" x2="1.0" y2="-1.1" stroke-width="0.5" stroke-linecap="round"/>' +
+               '<circle cx="-0.7" cy="0" r="0.4"/></g>');
       }else{
         half = 2.2;
         o.push(g + '<circle cx="0" cy="0" r="2.2"/>' +
@@ -4538,11 +4575,12 @@ function downloadSVG(side){
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
 const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k'};
-const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', diode:'switching', res:'fixed'};
+const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
-                e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly'};
+                e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly',
+                t:'spst', y:'spdt'};
 /* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
@@ -4562,6 +4600,8 @@ const TOOL_ICON = {
   reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
   ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
   pad    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="12" r="4"/><circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M10.9 9.1 16 4M13 4h3v3" stroke-linecap="round"/></svg>',
+  spst   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.6" fill="currentColor" stroke="none"/><path d="M5 15 13 7" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  spdt   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="15" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="15" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/><path d="M10 15 16 7" stroke-width="1.8" stroke-linecap="round"/></svg>',
   fly    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="14.5" r="1.9" fill="currentColor" stroke="none"/><path d="M5.5 14.5C10 14.5 10 5.5 15 5.5"/><circle cx="16.2" cy="5" r="1.5"/></svg>',
   erase  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8.4 15.5H16"/><path d="M3.9 12.6 9 7.5a1.6 1.6 0 0 1 2.2 0l3.3 3.3a1.6 1.6 0 0 1 0 2.2l-2.4 2.4H6.6z"/><path d="M7.6 8.9 12.6 14"/></svg>',
 };
@@ -4583,6 +4623,8 @@ const HINTS = {
   reg    :'three clicks, in leg order.',
   ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
+  spst   :'two clicks: the two lugs. an on/off switch, usually flown off-board with F.',
+  spdt   :'three clicks: throw, common, throw. the centre lug is the common. usually flown off-board.',
   fly    :'click a part leg to lift it off the board on a flying wire. click it again to set it back down.',
   erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
 };
@@ -4680,7 +4722,7 @@ function renderCtx(){
         o.push('<label>DEVICE</label><select id="edDev">' + opts(Object.keys(LEG_LIB[p.kind]), p.device) + '</select>');
       else if(DEV_LIB[p.kind])
         o.push('<label>TYPE</label><select id="edDev">' + opts(Object.keys(DEV_LIB[p.kind]), p.device || Object.keys(DEV_LIB[p.kind])[0]) + '</select>');
-      if(p.kind !== 'link')
+      if(p.kind !== 'link' && p.kind !== 'spst' && p.kind !== 'spdt')
         o.push('<label>VALUE</label><input id="edVal" value="' + esc(p.value || '') + '">');
       const sameLegs = Object.keys(PART_LIB).filter(k => legsOf(k) === p.pins.length);
       o.push('<label>KIND</label><select id="edKind">' + sameLegs.map(k =>
@@ -4720,6 +4762,12 @@ function renderCtx(){
     }else{
       o.push('<div class="hint">nothing selected.<br>click a part or an IC.</div>');
     }
+  }else if(TOOL === 'spst' || TOOL === 'spdt'){
+    o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
+    if(TOOL === 'spdt')
+      o.push('<div class="hint">three lugs in click order: <b style="color:#00F0FF">A \u00b7 C \u00b7 B</b> - the centre, C, is the common. usually flown off-board with F.</div>');
+    else
+      o.push('<div class="hint">two lugs: on / off. usually flown off-board with F.</div>');
   }else if(legsOf(TOOL) >= 3 && PART_LIB[TOOL]){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
     if(LEG_LIB[TOOL] && Object.keys(LEG_LIB[TOOL]).length > 1)
