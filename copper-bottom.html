@@ -386,6 +386,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   flex:1; overflow:auto; background:#fff; color:#111; padding:16mm 14mm 24mm;
   font:12px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
 }
+.sheetdoc .brandrow{display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  border-bottom:2px solid #111; padding-bottom:6px; margin-bottom:12px}
+.sheetdoc .bwordmark{font:700 13px/1 var(--mono); letter-spacing:.24em; color:#111}
+.sheetdoc .bwordmark span{color:#0B8F5D}
+.sheetdoc .bsite{font:400 10.5px/1 var(--mono); color:#777; letter-spacing:.06em}
 .sheetdoc h1{font-size:22px; margin:0 0 2px; letter-spacing:.04em}
 .sheetdoc h2{font-size:13px; letter-spacing:.18em; margin:26px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px}
 .sheetdoc h2 .n{color:#777; font-weight:400; letter-spacing:0}
@@ -394,7 +399,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .sheetdoc .svgwrap{margin:6px 0 4px; overflow-x:auto}
 .sheetdoc svg{display:block; border:1px solid #ddd}
 .sheetdoc table{border-collapse:collapse; margin:2px 0 6px; font-size:11.5px}
-.sheetdoc th{text-align:left; font-weight:700; border-bottom:1.5px solid #333; padding:3px 10px 3px 0; white-space:nowrap}
+.sheetdoc th{text-align:left; font-weight:700; border-bottom:1.5px solid #333; padding:3px 10px 3px 0; white-space:nowrap;
+  font-size:10px; letter-spacing:.1em; text-transform:uppercase}
+.sheetdoc tbody tr:nth-child(even){background:#f6f4f1}
 .sheetdoc td{border-bottom:1px solid #ddd; padding:3px 10px 3px 0; white-space:nowrap}
 .sheetdoc td.mono{color:#555}
 .sheetdoc td.fill{min-width:52mm; border-bottom:1px solid #999}
@@ -2120,12 +2127,17 @@ function buildList(){
       key:'part:' + p.id, ref:p.ref, kind:p.kind,
       name:(PART_LIB[p.kind] || {}).name || p.kind,
       what:p.device || p.value || '',
-      holes:p.pins.map(q => holeShort(q[0], q[1])).join('  '),
+      holes:p.pins.map((q, i) => legBent(p, i) ? null : holeShort(q[0], q[1])).filter(Boolean).join('  ') +
+            (Array.isArray(p.bent) && p.bent.length
+              ? ' \u00b7 ' + p.bent.map(i => { const nm = legLabels(p); return 'leg ' + (nm ? nm[i] : i + 1); }).join(', ') +
+                (p.bent.length === 1 ? ' bent up, not soldered' : ' bent up, not soldered')
+              : ''),
       rank:BUILD_ORDER[p.kind] || 5,
     });
   for(const ic of S.ics)
     items.push({
-      key:'ic:' + ic.id, ref:ic.ref, kind:'ic', name:'IC',
+      key:'ic:' + ic.id, ref:ic.ref, kind:'ic',
+      name:(IC_LIB[ic.part] && IC_LIB[ic.part].module) ? 'module' : 'IC',
       what:ic.part,
       holes:'pin 1 at ' + holeShort(ic.pin1[0], ic.pin1[1]),
       rank:BUILD_ORDER.ic,
@@ -2469,7 +2481,10 @@ function walkthrough(){
     const half = ic.pins / 2;
     step('U - chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
       [def.padNames ? 'A module, wired by its pads. In pin order: ' + def.padNames.join(', ') + '.' : null,
-       'Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
+       hasFootprint(ic)
+         ? 'This one wears a custom footprint - pin 1 goes at ' + at(ic.pin1) +
+           ', then check every pin against the component-side drawing rather than assuming two straight rows.'
+         : 'Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
        ' back up column ' + dCol(ic.pin1[1] + ic.span) + '.',
        (ic.autoCuts || []).length
          ? 'Placing it inserts ' + ic.autoCuts.length + ' cuts between the pin rows. Without them ' +
@@ -2534,6 +2549,9 @@ function walkthrough(){
     for(const line of S.netlist.split('\n')) L.push('    ' + line);
     L.push('');
   }
+  L.push('---');
+  L.push('Made with Copper Bottom - messopedals.com/diy/copper-bottom');
+  L.push('');
   return L.join('\n');
 }
 
@@ -2752,10 +2770,24 @@ function checkBom(text){
 /* Off-board wiring: the step that turns a working board into a working pedal,
    and the one no other tool writes down. */
 function wireList(){
-  return S.pads.slice()
+  const out = S.pads.slice()
     .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1])
     .map(d => ({key:'pad:' + d.id, label:d.label, row:d.at[0], col:d.at[1],
                 back:backHole(d.at[1]), to:d.to || ''}));
+  /* a flying lead is a hookup wire too - one end in this hole, the other on
+     the part, off the board. Its destination is known, so it arrives filled in. */
+  for(const p of S.parts){
+    if(!Array.isArray(p.fly)) continue;
+    const names = legLabels(p);
+    for(const i of p.fly){
+      const at = p.pins[i];
+      const nm = names ? names[i] : (i < 2 ? 'AB'[i] : String(i + 1));
+      out.push({key:'fly:' + p.id + ':' + i, label:p.ref + '.' + nm,
+                row:at[0], col:at[1], back:backHole(at[1]),
+                to:((PART_LIB[p.kind] || {}).name || p.kind) + ' ' + p.ref + ', leg ' + nm + ' - off the board'});
+    }
+  }
+  return out;
 }
 
 function buildMarkdown(){
@@ -2778,7 +2810,7 @@ function buildMarkdown(){
   L.push('"from left (back)" counts holes from the left edge as you look at the back.');
   L.push('');
   table(['row', 'col', 'from left (back)'],
-        cuts.map(c => [c.row, c.col, c.back]));
+        cuts.map(c => [dRow(c.row), dCol(c.col), c.back]));
 
   const parts = bom();
   const totalParts = parts.reduce((n, r) => n + r.qty, 0);
@@ -4315,7 +4347,7 @@ function calBar(ox, oy){
 function exportSVG(side){
   const rows = S.board.rows, cols = S.board.cols;
   const solder = side === 'solder';
-  const TOP = 12, BOT = 14;
+  const TOP = 16, BOT = 14;   // three header lines: name, side/meta, maker's mark
   const W = +(EDGE*2 + (cols-1)*MM).toFixed(3);
   const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
   const x = c => EDGE + (solder ? (cols-1-c) : c) * MM;
@@ -4333,6 +4365,11 @@ function exportSVG(side){
   o.push(T(EDGE, 9.6, (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
                               : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
            '  ·  0.1in pitch  ·  1:1', 2.2));
+  /* the maker's mark, the same two-tone as the app header - its own line, so
+     a narrow board cannot run its name into it */
+  o.push('<text x="' + EDGE + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
+         'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
+         '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
   o.push('</g>');
 
   /* rulers keep the layout's own numbering in both views, so a coordinate
@@ -4342,8 +4379,10 @@ function exportSVG(side){
   for(let r = 0; r < rows; r++)
     o.push(T(EDGE - 3.4, y(r) + 0.6, String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
 
-  /* copper runs, component side only */
-  if(!solder)
+  /* Copper runs, both sides. On the solder side the copper faces you, so
+     the strips draw as the filled bands they are, broken at every cut - the
+     printout reads like the board in your hand. The component side keeps a
+     ghost of them so the parts stay legible on top. */
     for(let r = 0; r < rows; r++){
       let c = 0;
       while(c < cols){
@@ -4352,14 +4391,18 @@ function exportSVG(side){
         while(e + 1 < cols && !cutSet.has(K(r, e+1))) e++;
         const x0 = Math.min(x(c), x(e)) - MM*0.42, w = Math.abs(x(e) - x(c)) + MM*0.84;
         o.push('<rect x="' + x0 + '" y="' + (y(r) - 0.95) + '" width="' + w +
-               '" height="1.9" rx="0.95" fill="none" stroke="#bbb" stroke-width="0.16"/>');
+               '" height="1.9" rx="0.95" ' +
+               (solder ? 'fill="#EBD9C4" stroke="#C7A87E" stroke-width="0.2"'
+                       : 'fill="#F8F2EA" stroke="#D8C7B2" stroke-width="0.16"') + '/>');
         c = e + 1;
       }
     }
 
   for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
     if(cutSet.has(K(r,c))) continue;
-    o.push('<circle cx="' + x(c) + '" cy="' + y(r) + '" r="0.5" fill="none" stroke="#999" stroke-width="0.15"/>');
+    o.push('<circle cx="' + x(c) + '" cy="' + y(r) + '" r="0.5" ' +
+           (solder ? 'fill="#fff" stroke="#8A7357" stroke-width="0.2"'
+                   : 'fill="none" stroke="#999" stroke-width="0.15"') + '/>');
   }
 
   /* ---- component side: the parts ---- */
@@ -4548,8 +4591,8 @@ function exportSVG(side){
     o.push('<path d="M' + (ox + (cols > 1 ? 4.5 : 0)) + ' ' + (oy - 4.5) + 'L' + ox + ' ' + (oy - 1.4) +
            'L' + (ox + 3.2) + ' ' + (oy - 5.6) + 'Z" fill="#000"/>');
     late.push('');
-    o.push(T(EDGE, footY - 3.2, 'The arrow marks hole [0,0]. On the back it sits at the ' +
-             'RIGHT-hand end of row 0.', 2.1, 'font-weight="bold"'));
+    o.push(T(EDGE, footY - 3.2, 'The arrow marks row 1, col 1 - the first hole. On the back it sits at the ' +
+             'RIGHT-hand end of row 1.', 2.1, 'font-weight="bold"'));
   }
   o.push(calBar(EDGE, footY + 2));
   o.push('</svg>');
@@ -4593,8 +4636,10 @@ function renderSheet(){
     return '<label class="tick"><input type="checkbox" data-key="' + esc(key) + '"' +
            (on ? ' checked' : '') + '><span></span></label>';
   };
+  /* the tick key speaks model coordinates; every cell a person reads is 1-based,
+     or the row and the back-of-board column would disagree by one */
   const cutRows = cuts.map(c =>
-    '<tr><td>' + box('cut:' + c.row + ',' + c.col) + '</td><td>' + c.row + '</td><td>' + c.col +
+    '<tr><td>' + box('cut:' + c.row + ',' + c.col) + '</td><td>' + dRow(c.row) + '</td><td>' + dCol(c.col) +
     '</td><td><b>' + c.back + '</b></td></tr>').join('');
   const partRows = parts.map(r =>
     '<tr><td><b>' + r.qty + '</b></td><td>' + esc(r.name) + '</td><td>' +
@@ -4605,12 +4650,14 @@ function renderSheet(){
     esc(it.name) + '</td><td>' + esc(it.what || '-') + '</td><td class="mono">' + esc(it.holes) +
     '</td></tr>').join('');
   const wireRows = wires.map(w =>
-    '<tr><td><b>' + esc(w.label) + '</b></td><td class="mono">[' + w.row + ',' + w.col + ']</td><td>' +
+    '<tr><td><b>' + esc(w.label) + '</b></td><td class="mono">' + holeShort(w.row, w.col) + '</td><td>' +
     w.back + '</td><td class="fill">' + esc(w.to || '') + '</td></tr>').join('');
 
   sheetdoc.innerHTML =
+    '<div class="brandrow"><span class="bwordmark">COPPER<span>BOTTOM</span></span>' +
+    '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom</span></div>' +
     '<h1>' + esc(S.name || 'untitled') + '</h1>' +
-    '<p class="sub">' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch · ' +
+    '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch · ' +
       items.length + ' parts · ' + cuts.length + ' cuts · <b id="prog">' + ticked + ' / ' + total +
       '</b> done</p>' +
     '<h2>Component side</h2>' +

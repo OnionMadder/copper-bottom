@@ -326,8 +326,8 @@ ok(md.indexOf('## Cuts (7)') > 0,        'has a cut section with the count');
 ok(md.indexOf('## Build order (15)') > 0,'has a build order section with the count');
 ok(md.indexOf('## Off-board wiring (8)') > 0, 'has a wiring section');
 ok(md.indexOf('from left (back)') > 0,   'explains the back-of-board numbering');
-ok(md.split('\n').filter(l => l.indexOf('| 3 | 8 | 12 |') === 0).length === 1,
-   'a cut row reads row 3, col 8, 12th from the back-left');
+ok(md.split('\n').filter(l => l.indexOf('| 4 | 9 | 12 |') === 0).length === 1,
+   'a cut row speaks one dialect: row 4, col 9, 12th from the back-left, all counted from 1');
 ok(md.indexOf('CD40106') > 0,            'the IC appears in the build order');
 
 console.log('-- M4: a one-column board is still coherent --');
@@ -2007,6 +2007,34 @@ ok(icPinName(S.ics[0], 5) === 'OUT+', 'the board draws OUT+ where a chip would d
 const modMig = migrate({version:2, board:{rows:8,cols:12}, cuts:[], parts:[], pads:[],
   ics:[{id:'m', ref:'IC1', part:'ECHO-2399', pins:9, pin1:[1,2], span:4, autoCuts:[]}]});
 ok(modMig.ics.length === 1 && modMig.ics[0].pins === 9, 'migrate keeps the 9-pad echo module');
+
+console.log('-- printouts --');
+S = {version:2, name:'print', board:{rows:8, cols:10}, cuts:[], pads:[
+  {id:'d', label:'GND', at:[7,0]},
+], parts:[
+  {id:'p', kind:'pot', ref:'POT1', value:'100k', device:'potentiometer', pins:[[1,1],[3,1],[5,1]], fly:[0,1,2]},
+  {id:'q', kind:'trans', ref:'Q1', device:'2N3904', pins:[[1,4],[3,4],[5,4]], bent:[2]},
+], ics:[]};
+computeNets();
+const pwl = wireList();
+ok(pwl.length === 4, 'the wiring table carries the pad and the three flying leads');
+const pwlW = pwl.find(w => w.label === 'POT1.W');
+ok(!!pwlW && /off the board/.test(pwlW.to), 'a flying lead arrives with its destination filled in');
+const pbl = buildList();
+const pq1 = pbl.find(it => it.ref === 'Q1');
+ok(pq1.holes.indexOf('r6 c5') < 0 && /bent up, not soldered/.test(pq1.holes),
+   'a bent leg is out of the solder holes and named as bent');
+ok(pq1.holes.indexOf('r2 c5') >= 0, 'while the soldered legs keep their holes');
+
+// a shaped chip's walkthrough step stops claiming two straight rows
+S = {version:2, name:'shaped', board:{rows:8, cols:10}, cuts:[], parts:[], pads:[],
+  ics:[{id:'u', ref:'IC1', part:'DIP-8', pins:8, pin1:[1,2], span:3, autoCuts:[]}]};
+computeNets();
+ok(/run down that column/.test(walkthrough()), 'a plain DIP step describes the two rows');
+editFootprint(S.ics[0]); setIcPin(S.ics[0], 5, [6,7]); computeNets();
+const wkShaped = walkthrough();
+ok(!/run down that column/.test(wkShaped) && /custom footprint/.test(wkShaped),
+   'a shaped chip step points at the drawing instead');
 
 S = demoProject(); computeNets();
 
