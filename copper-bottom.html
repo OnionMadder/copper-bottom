@@ -479,6 +479,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
       <div class="sect">Edit</div>
+      <button class="tool" data-tool="fly"><kbd>F</kbd><span class="lbl">flying lead</span></button>
       <button class="tool" data-tool="erase"><kbd>Del</kbd><span class="lbl">erase</span></button>
     </div>
     <div class="ctx"><div class="hint" id="hint"></div></div>
@@ -654,6 +655,12 @@ const PART_LIB = {
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
 
+/* A flying leg is wired off the board: electrically it still sits at its
+   landing hole, so the netlist and every electrical check see it unchanged,
+   but the part has no body on the board, so the geometry checks let it go. */
+const isFlying  = p => Array.isArray(p.fly) && p.fly.length > 0;
+const legFlying = (p, i) => Array.isArray(p.fly) && p.fly.indexOf(i) >= 0;
+
 /* Three-leg pinouts, read left to right with the flat face toward you and the
    legs pointing down. Getting this backwards is the classic stripboard
    build-killer, so the legs are lettered on the board. Check any device you
@@ -734,6 +741,14 @@ function migrate(obj){
     if(!PART_LIB[r.kind]) return null;
     if(!Array.isArray(r.pins) || r.pins.length !== legsOf(r.kind)) return null;
     if(!r.pins.every(isHole)) return null;
+    /* keep only in-range, unique leg indices; a fly list we cannot trust is
+       dropped rather than repaired, like everything else in migrate. */
+    {
+      const n = r.pins.length;
+      let fly = Array.isArray(r.fly) ? r.fly.filter(i => Number.isInteger(i) && i >= 0 && i < n) : [];
+      fly = [...new Set(fly)].sort((a, b) => a - b);
+      if(fly.length || ('fly' in r)){ r = Object.assign({}, r); if(fly.length) r.fly = fly; else delete r.fly; }
+    }
     if(!r.id) r = Object.assign({}, r, {id:uid()});
     return r;
   }).filter(Boolean);
@@ -2355,6 +2370,11 @@ function walkthrough(){
                  (bits.length ? ', ' + bits.join(', ') : '') + '.';
     const body = [part.pins.map(at).join('   then   ')];
     if(!seen[part.kind] && WALK_NOTES[part.kind]){ body.push(WALK_NOTES[part.kind]); seen[part.kind] = 1; }
+    if(isFlying(part)){
+      const ll = legLabels(part) || [];
+      const which = part.fly.map(i => (ll[i] ? ll[i] : 'leg ' + (i + 1)) + ' at ' + at(part.pins[i])).join(', ');
+      body.push('Off the board on flying leads: ' + which + '. Those holes are only where its wires land - the part itself sits off the board.');
+    }
     if(part.mount === 'vertical') body.push('This one stands on end rather than lying flat.');
     step(head, body);
   }
@@ -3172,6 +3192,7 @@ function bodies(){
   for(const p of S.parts){
     const fp = footprintOf(p);
     if(!fp) continue;
+    if(isFlying(p)) continue;   // off-board on flying leads: no body to test
 
     if(p.pins.length >= 3){
       const ys = p.pins.map(q => q[0]), xs = p.pins.map(q => q[1]);
@@ -3537,6 +3558,16 @@ function render(){
     const wire = (x1, y1, x2, y2, col, w) =>
       '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
       '" stroke="' + col + '" stroke-width="' + w + '" stroke-linecap="round"/>';
+    /* A flying lead: a ring where it solders to the board, and a short stub
+       running off toward wherever the part actually sits. Gold, because a cut
+       is magenta, selection mint and focus cyan - a flying wire is none of those. */
+    const flyTerm = (hx, hy, fx, fy) => {
+      let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+      const ex = hx + dx * PITCH * 0.72, ey = hy + dy * PITCH * 0.72;
+      return wire(hx, hy, ex, ey, '#07050D', 4.4) + wire(hx, hy, ex, ey, '#E0B870', 1.7) +
+        '<circle cx="' + hx + '" cy="' + hy + '" r="4.1" fill="none" stroke="#E0B870" stroke-width="1.7"/>' +
+        '<circle cx="' + ex + '" cy="' + ey + '" r="2.2" fill="#E0B870" stroke="#07050D" stroke-width="0.8"/>';
+    };
 
     if(sel){
       const d = xs.map((x, i) => (i ? 'L' : 'M') + x + ' ' + ys[i]).join('');
@@ -3549,10 +3580,13 @@ function render(){
       const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
       const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
       const a3 = Math.atan2(ys[ys.length-1] - ys[0], xs[xs.length-1] - xs[0]);
+      const allFly3 = isFlying(p) && p.fly.length === xs.length;
       for(let i = 0; i < xs.length; i++){
+        if(legFlying(p, i)){ o.push(flyTerm(xs[i], ys[i], cx, cy)); continue; }
         o.push(wire(xs[i], ys[i], cx, cy, '#07050D', 4.6));
         o.push(wire(xs[i], ys[i], cx, cy, '#A9A3BC', 1.5));
       }
+      if(!allFly3){
       const g3 = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a3*180/Math.PI) +
                  ') translate(0,' + (-TR*0.8) + ')">';
       if(p.kind === 'trim'){
@@ -3581,6 +3615,7 @@ function render(){
           '<line x1="' + (-fx) + '" y1="' + fy + '" x2="' + fx + '" y2="' + fy +
           '" stroke="#B9B4C7" stroke-width="1.3"/></g>');
       }
+      }
       const ll = legLabels(p);
       if(ll) p.pins.forEach((q, i) =>
         labels.push('<text class="leg" x="' + (xs[i] + 11) + '" y="' + (ys[i] + 3.5) + '">' +
@@ -3602,14 +3637,18 @@ function render(){
       o.push(wire(ax, ay, bx, by, '#F4F2FA', 3.4));
       continue;
     }
-    o.push(wire(ax, ay, bx, by, '#07050D', 4.6));
-    o.push(wire(ax, ay, bx, by, '#A9A3BC', 1.5));
+    const flyA = legFlying(p, 0), flyB = legFlying(p, 1);
+    const allFly2 = flyA && flyB;
+    const lead2 = (x, y) => { o.push(wire(x, y, mx, my, '#07050D', 4.6)); o.push(wire(x, y, mx, my, '#A9A3BC', 1.5)); };
+    if(flyA) o.push(flyTerm(ax, ay, mx, my)); else lead2(ax, ay);
+    if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
 
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
     let tint = '#fff', off = 18, half = 12;
 
     const dev = devOf(p);
 
+    if(!allFly2){
     if(dev && dev.draw === 'ldr'){
       /* face-on: a light window with the serpentine track across it. No band,
          no polarity - the whole point of filing this under `res`. */
@@ -3691,6 +3730,7 @@ function render(){
         '<circle cx="0" cy="0" r="' + (ER*0.44) + '" fill="none" stroke="#4A4458" stroke-width="1"/>' +
         '</g>');
       labels.push('<text class="pol" x="' + (ax + nx*13) + '" y="' + (ay + ny*13 + 4) + '">+</text>');
+    }
     }
 
     const label = p.ref + (p.value ? ' ' + p.value : '');
@@ -4132,8 +4172,15 @@ function exportSVG(side){
       if(p.pins.length >= 3){
         const cx = xs.reduce((a,b)=>a+b,0)/xs.length, cy = ys.reduce((a,b)=>a+b,0)/ys.length;
         const a3 = Math.atan2(ys[ys.length-1]-ys[0], xs[xs.length-1]-xs[0]) * 180 / Math.PI;
-        for(let i = 0; i < xs.length; i++) o.push(lead(i, cx, cy, 0.25));
+        const allFlyS = isFlying(p) && p.fly.length === xs.length;
+        const termS = (hx, hy, fx, fy) => { let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+          const ex = hx + dx * 1.8, ey = hy + dy * 1.8;
+          return '<line x1="' + hx + '" y1="' + hy + '" x2="' + ex + '" y2="' + ey + '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>' +
+            '<circle cx="' + hx + '" cy="' + hy + '" r="0.9" fill="none" stroke="#000" stroke-width="0.3"/>' +
+            '<circle cx="' + ex + '" cy="' + ey + '" r="0.45" fill="#000" stroke="none"/>'; };
+        for(let i = 0; i < xs.length; i++){ if(legFlying(p, i)) o.push(termS(xs[i], ys[i], cx, cy)); else o.push(lead(i, cx, cy, 0.25)); }
         const R = 2.4;
+        if(!allFlyS){
         const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + a3 +
                   ') translate(0,' + (-R*0.8) + ')" fill="#fff" stroke="#000" stroke-width="0.3">';
         if(p.kind === 'trim')
@@ -4146,6 +4193,7 @@ function exportSVG(side){
         else
           o.push(g + '<path d="M' + (-R*0.9075) + ' ' + (R*0.42) + 'A' + R + ' ' + R + ' 0 1 1 ' +
                  (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
+        }
         const ll = legLabels(p);
         if(ll) p.pins.forEach((q, i) =>
           late.push(T(xs[i] + 1.3, ys[i] + 0.7, ll[i] || '', 1.9, 'font-weight="bold"')));
@@ -4163,12 +4211,20 @@ function exportSVG(side){
                '" stroke="#000" stroke-width="0.75" stroke-linecap="round"/>');
         continue;
       }
-      o.push('<line x1="' + ax + '" y1="' + ay + '" x2="' + bx + '" y2="' + by +
-             '" stroke="#000" stroke-width="0.25"/>');
+      const flyA = legFlying(p, 0), flyB = legFlying(p, 1), allFly2S = flyA && flyB;
+      const leadS = (hx, hy) => '<line x1="' + hx + '" y1="' + hy + '" x2="' + mx + '" y2="' + my + '" stroke="#000" stroke-width="0.25"/>';
+      const term2 = (hx, hy) => { let dx = hx - mx, dy = hy - my; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+        const ex = hx + dx * 1.8, ey = hy + dy * 1.8;
+        return '<line x1="' + hx + '" y1="' + hy + '" x2="' + ex + '" y2="' + ey + '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>' +
+          '<circle cx="' + hx + '" cy="' + hy + '" r="0.9" fill="none" stroke="#000" stroke-width="0.3"/>' +
+          '<circle cx="' + ex + '" cy="' + ey + '" r="0.45" fill="#000" stroke="none"/>'; };
+      o.push(flyA ? term2(ax, ay) : leadS(ax, ay));
+      o.push(flyB ? term2(bx, by) : leadS(bx, by));
       const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg +
                 ')" fill="#fff" stroke="#000" stroke-width="0.3">';
       let half = 2;
       const dev = devOf(p);
+      if(!allFly2S){
       if(dev && dev.draw === 'ldr'){
         half = 2.45;
         o.push(g + '<circle cx="0" cy="0" r="2.45"/>' +
@@ -4198,6 +4254,7 @@ function exportSVG(side){
         o.push(g + '<circle cx="0" cy="0" r="2.2"/>' +
                '<path d="M1.03 -1.94A2.2 2.2 0 0 1 1.03 1.94Z" fill="#ccc"/></g>');
         late.push(T(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'text-anchor="middle" font-weight="bold"'));
+      }
       }
       const label = p.ref + (p.value ? ' ' + p.value : '');
       const len = Math.hypot(bx-ax, by-ay);
@@ -4432,7 +4489,7 @@ const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer'
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
-                e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad'};
+                e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly'};
 /* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
@@ -4452,6 +4509,7 @@ const TOOL_ICON = {
   reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
   ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
   pad    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="12" r="4"/><circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M10.9 9.1 16 4M13 4h3v3" stroke-linecap="round"/></svg>',
+  fly    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="14.5" r="1.9" fill="currentColor" stroke="none"/><path d="M5.5 14.5C10 14.5 10 5.5 15 5.5"/><circle cx="16.2" cy="5" r="1.5"/></svg>',
   erase  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8.4 15.5H16"/><path d="M3.9 12.6 9 7.5a1.6 1.6 0 0 1 2.2 0l3.3 3.3a1.6 1.6 0 0 1 0 2.2l-2.4 2.4H6.6z"/><path d="M7.6 8.9 12.6 14"/></svg>',
 };
 
@@ -4472,6 +4530,7 @@ const HINTS = {
   reg    :'three clicks, in leg order.',
   ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
+  fly    :'click a part leg to lift it off the board on a flying wire. click it again to set it back down.',
   erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
 };
 
@@ -4886,6 +4945,18 @@ function onHole(r, c){
     const auto = icCutKeys(pin1, IC_SPAN, def.pins).filter(k => S.cuts.indexOf(k) < 0);
     S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:def.pins, pin1:pin1, span:IC_SPAN, autoCuts:auto});
     S.cuts = S.cuts.concat(auto);
+    commit(); return;
+  }
+
+  if(TOOL === 'fly'){
+    const leg = occupants(r, c).find(o => o.type === 'part');
+    if(!leg){ flash('click a part leg to give it a flying lead'); return; }
+    pushUndo();
+    const p = leg.part;
+    const set = new Set(p.fly || []);
+    if(set.has(leg.leg)) set.delete(leg.leg); else set.add(leg.leg);
+    const fly = [...set].sort((a, b) => a - b);
+    if(fly.length) p.fly = fly; else delete p.fly;
     commit(); return;
   }
 

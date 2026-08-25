@@ -1786,6 +1786,45 @@ if(exBefore.netlist){
   ok(true, 'it declares no netlist, so there is nothing to match it against');
 }
 
+console.log('-- flying leads --');
+
+// a body that clashes on the board, and the flying lead that lifts it off
+S = {version:2, name:'fly-clash', board:{rows:6, cols:8}, cuts:[], parts:[
+  {id:'pa', kind:'pot', ref:'POT1', value:'100k', pins:[[2,2],[2,3],[2,4]]},
+  {id:'pb', kind:'pot', ref:'POT2', value:'100k', pins:[[2,3],[2,4],[2,5]]},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'body-clash'), 'two overlapping pot bodies clash on the board');
+S.parts[0].fly = [0,1,2]; computeNets();
+ok(!runDRC().some(f => f.rule === 'body-clash'), 'flying one pot off the board clears the body clash');
+
+// electrical checks do not move: three lugs on one strip is a short, flown or not
+S = {version:2, name:'fly-short', board:{rows:4, cols:6}, cuts:[], parts:[
+  {id:'p', kind:'pot', ref:'POT1', value:'100k', pins:[[1,1],[1,2],[1,3]], fly:[0,1,2]},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'part-short'), 'a flown pot with every lug on one strip is still shorted');
+
+// a flying leg sits on exactly the net its landing hole is on
+S = {version:2, name:'fly-net', board:{rows:4, cols:6}, cuts:[], parts:[
+  {id:'p', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[3,1]]},
+], ics:[], pads:[]};
+computeNets();
+const flyNetBefore = NET.netAt(1,1).id;
+S.parts[0].fly = [0]; computeNets();
+ok(NET.netAt(1,1).id === flyNetBefore, 'a flying leg stays on the net its landing hole is on');
+
+// migrate keeps a good fly list, sorted and de-duped, and drops the rest
+const flyGood = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[],
+  parts:[{id:'g', kind:'pot', ref:'POT1', pins:[[1,1],[1,2],[1,3]], fly:[2,0,0,1]}]});
+ok(String(flyGood.parts[0].fly) === '0,1,2', 'migrate sorts and de-dupes a fly list');
+const flyBad = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[],
+  parts:[{id:'b', kind:'pot', ref:'POT1', pins:[[1,1],[1,2],[1,3]], fly:[7,-1]}]});
+ok(!('fly' in flyBad.parts[0]), 'migrate drops a fly list that is entirely out of range');
+const flyNone = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[],
+  parts:[{id:'n', kind:'pot', ref:'POT1', pins:[[1,1],[1,2],[1,3]], fly:[]}]});
+ok(!('fly' in flyNone.parts[0]), 'migrate drops an empty fly list');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
