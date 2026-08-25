@@ -4348,7 +4348,22 @@ function exportSVG(side){
   const rows = S.board.rows, cols = S.board.cols;
   const solder = side === 'solder';
   const TOP = 16, BOT = 14;   // three header lines: name, side/meta, maker's mark
-  const W = +(EDGE*2 + (cols-1)*MM).toFixed(3);
+  const name = S.name || 'untitled';
+  const subLine = (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
+                          : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
+                  '  ·  0.1in pitch  ·  1:1';
+  const ARROW_NOTE = 'The arrow marks row 1, col 1 - the first hole. On the back it sits at the RIGHT-hand end of row 1.';
+  /* The board is 1:1 and cannot stretch, but the words around it can outrun
+     a narrow board and clip. Size the sheet to its longest line as well as
+     its copper - monospace runs about 0.62 of its point size per character. */
+  const lineW = (chars, size) => chars * size * 0.62;
+  const textW = Math.max(
+    lineW(name.length, 3.4),
+    lineW(subLine.length, 2.2),
+    lineW(48, 2.4) + 6,                          // the maker's mark, letter-spaced
+    solder ? lineW(ARROW_NOTE.length, 2.1) : 0,
+    27 + lineW(74, 2.1));                        // the calibration bar and its caption
+  const W = +Math.max(EDGE*2 + (cols-1)*MM, EDGE*2 + textW).toFixed(3);
   const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
   const x = c => EDGE + (solder ? (cols-1-c) : c) * MM;
   const y = r => TOP + EDGE + r * MM;
@@ -4361,10 +4376,8 @@ function exportSVG(side){
          'mm" viewBox="0 0 ' + W + ' ' + H + '">');
   o.push('<rect width="' + W + '" height="' + H + '" fill="#fff"/>');
   o.push('<g fill="#000" stroke="none">');
-  o.push(T(EDGE, 6, (S.name || 'untitled'), 3.4, 'font-weight="bold"'));
-  o.push(T(EDGE, 9.6, (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
-                              : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
-           '  ·  0.1in pitch  ·  1:1', 2.2));
+  o.push(T(EDGE, 6, name, 3.4, 'font-weight="bold"'));
+  o.push(T(EDGE, 9.6, subLine, 2.2));
   /* the maker's mark, the same two-tone as the app header - its own line, so
      a narrow board cannot run its name into it */
   o.push('<text x="' + EDGE + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
@@ -4591,8 +4604,7 @@ function exportSVG(side){
     o.push('<path d="M' + (ox + (cols > 1 ? 4.5 : 0)) + ' ' + (oy - 4.5) + 'L' + ox + ' ' + (oy - 1.4) +
            'L' + (ox + 3.2) + ' ' + (oy - 5.6) + 'Z" fill="#000"/>');
     late.push('');
-    o.push(T(EDGE, footY - 3.2, 'The arrow marks row 1, col 1 - the first hole. On the back it sits at the ' +
-             'RIGHT-hand end of row 1.', 2.1, 'font-weight="bold"'));
+    o.push(T(EDGE, footY - 3.2, ARROW_NOTE, 2.1, 'font-weight="bold"'));
   }
   o.push(calBar(EDGE, footY + 2));
   o.push('</svg>');
