@@ -1205,7 +1205,7 @@ ok(claims.length === 0, 'no pin table names a pin the package does not have: ' +
 
 let mismatched = [];
 for(const [name, def] of Object.entries(IC_LIB)){
-  if(!def.pinInfo) continue;
+  if(!def.pinInfo || def.module) continue;   // module pads speak silkscreen, checked below
   for(const [k, info] of Object.entries(def.pinInfo)){
     const role = (def.roles || {})[k];
     const nm = info.n.toUpperCase();
@@ -1216,6 +1216,23 @@ for(const [name, def] of Object.entries(IC_LIB)){
 ok(mismatched.length === 0,
    'every supply pin is named like a supply pin, so the role and the words agree: ' +
    mismatched.join(', '));
+
+/* A module's pad names come off its silkscreen, so the vocabulary sweep above
+   cannot judge them - what CAN rot is the two name lists drifting apart, or a
+   duplicate name making a netlist token ambiguous. */
+let modBad = [];
+for(const [name, def] of Object.entries(IC_LIB)){
+  if(!def.module) continue;
+  if(!Array.isArray(def.padNames) || def.padNames.length !== def.pins) modBad.push(name + ': padNames/pins mismatch');
+  else{
+    if(new Set(def.padNames.map(x => x.toUpperCase())).size !== def.pins) modBad.push(name + ': duplicate pad name');
+    for(let i = 1; i <= def.pins; i++){
+      const info = (def.pinInfo || {})[i];
+      if(!info || info.n !== def.padNames[i - 1]) modBad.push(name + ' pin ' + i + ': pinInfo and padNames disagree');
+    }
+  }
+}
+ok(modBad.length === 0, 'module pad names are unique and agree with their pin tables: ' + modBad.join(', '));
 
 S = demoProject(); computeNets();
 
@@ -1964,6 +1981,32 @@ const bm = migrate({version:2, board:{rows:6,cols:8}, cuts:[], ics:[], pads:[],
   parts:[{id:'q', kind:'trans', ref:'Q1', pins:[[1,1],[2,2],[3,3]], bent:[2,2,7,-1], fly:[1,2]}]});
 ok(String(bm.parts[0].bent) === '2', 'migrate de-dupes and range-checks bent');
 ok(String(bm.parts[0].fly) === '1', 'a leg both bent and flying keeps only bent');
+
+console.log('-- daughterboard modules --');
+S = {version:2, name:'mod', board:{rows:8, cols:12}, parts:[], pads:[],
+  cuts:['1,4','2,4','3,4','4,4','5,4'],   // the cut column a real placement inserts
+  ics:[{id:'m', ref:'IC1', part:'ECHO-2399', pins:9, pin1:[1,2], span:4, autoCuts:[]}]};
+computeNets();
+const mVCC = resolveMember('IC1.VCC'), mS = resolveMember('IC1.S'), mG2 = resolveMember('IC1.G2');
+ok(mVCC.ok && String(mVCC.at) === String(pinPos(S.ics[0], 1)), 'IC1.VCC resolves to pad 1');
+ok(mS.ok && String(mS.at) === String(pinPos(S.ics[0], 7)), 'IC1.S resolves to the delay-pot pad');
+ok(mG2.ok, 'IC1.G2 resolves - the duplicate silkscreen G pads carry unique names');
+ok(!resolveMember('IC1.NOPE').ok && /its pads are/.test(resolveMember('IC1.NOPE').why),
+   'a wrong pad name is answered with the real pad list');
+ok(icPinName(S.ics[0], 5) === 'OUT+', 'the board draws OUT+ where a chip would draw 5');
+
+// the ground-family pads joined on one net are the board's own doing - no pin-short
+{
+  const g = [2,4,6,8,9].map(i => pinPos(S.ics[0], i));
+  S.parts = g.slice(1).map((at, k) => ({id:'l'+k, kind:'link', ref:'J'+(k+1), pins:[g[0], at]}));
+  computeNets();
+  ok(!runDRC().some(f => f.rule === 'pin-short'), 'the tied ground pads share a net without a pin-short');
+}
+
+// migrate keeps a 9-pad module (odd count, module leniency)
+const modMig = migrate({version:2, board:{rows:8,cols:12}, cuts:[], parts:[], pads:[],
+  ics:[{id:'m', ref:'IC1', part:'ECHO-2399', pins:9, pin1:[1,2], span:4, autoCuts:[]}]});
+ok(modMig.ics.length === 1 && modMig.ics[0].pins === 9, 'migrate keeps the 9-pad echo module');
 
 S = demoProject(); computeNets();
 

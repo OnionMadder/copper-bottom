@@ -807,7 +807,7 @@ function migrate(obj){
     Number.isInteger(ic.pins) &&
     /* a fixed DIP is an even count of at least 4; a custom module can be any
        count from 2 up, odd included - the footprint editor lays it out. */
-    (IC_LIB[ic.part] && IC_LIB[ic.part].custom ? ic.pins >= 2 : (ic.pins >= 4 && ic.pins % 2 === 0)) &&
+    (IC_LIB[ic.part] && (IC_LIB[ic.part].custom || IC_LIB[ic.part].module) ? ic.pins >= 2 : (ic.pins >= 4 && ic.pins % 2 === 0)) &&
     Number.isInteger(ic.span) && ic.span >= 2
   ).map(ic => {
     /* A cut line that cannot be where it says it is goes back to the middle,
@@ -1234,6 +1234,40 @@ const IC_LIB = {
      a fallback. Drops as two rows, then the footprint editor shapes it - which
      is how a reverb brick or an odd module gets laid out. */
   'DIP-N' :{pins:8,  name:'custom (set pin count)', cmos:false, roles:{}, custom:true},
+
+  /* Daughterboard modules: whole boards wired by their external pads, not
+     chips. Every entry is pinout-SOURCED - a photo of the board's silkscreen,
+     the maker's connection diagram, or a schematic - never recalled, and the
+     pad order here is this file's own canon (the numbers mean nothing on the
+     real board; the names are what the silkscreen says). `padNames` draws on
+     the board and resolves in the netlist in place of pin numbers. */
+  'ECHO-2399':{pins:9, module:true, cmos:false,
+    name:'PT2399 echo/delay board',
+    about:"the common Chinese echo module - a PT2399 (often marked CD2399, a clone with the same pinout), its own 5V regulator, a volume pot and a wet/dry mix on board. The S/G/G pads take an external delay pot in series with R27, the onboard delay resistor - sourced from the board silkscreen, a schematic, and Kellye's bench",
+    padNames:['VCC','GND','IN+','IN-','OUT+','OUT-','S','G1','G2'],
+    roles:{1:'vdd',2:'gnd',4:'gnd',6:'gnd',8:'gnd',9:'gnd',3:'in',5:'out'},
+    ties:[[2,4,6,8,9]],   // every ground-family pad; the board joins them itself
+    pinInfo:{1:{n:'VCC',  d:'power in +, the screw terminal - the board regulates its own 5V, so this is the raw supply'},
+             2:{n:'GND',  d:'power in -'},
+             3:{n:'IN+',  d:'audio in, the IN header'},
+             4:{n:'IN-',  d:'audio in ground'},
+             5:{n:'OUT+', d:'audio out, the OUT header'},
+             6:{n:'OUT-', d:'audio out ground'},
+             7:{n:'S',    d:'delay pot feed - runs through R27, the onboard series resistor, into the delay pin'},
+             8:{n:'G1',   d:'delay pot ground; the silkscreen says G'},
+             9:{n:'G2',   d:'second ground pad; the silkscreen says G'}}},
+  'BTDR-2H':{pins:6, module:true, cmos:false,
+    name:'Belton reverb brick',
+    about:'the Accutronics/Belton Digi-Log reverb module, horizontal pins. 5V supply. Sourced from the Belton connection diagram',
+    padNames:['+5V','PGND','IN','SGND','OUT2','OUT1'],
+    roles:{1:'vdd',2:'gnd',4:'gnd',3:'in',5:'out',6:'out'},
+    ties:[[2,4]],   // power and signal grounds are joined inside the module
+    pinInfo:{1:{n:'+5V',  d:'the 5V supply'},
+             2:{n:'PGND', d:'power ground - joined to pin 4 inside the module'},
+             3:{n:'IN',   d:'the input'},
+             4:{n:'SGND', d:'signal ground - joined to pin 2 inside the module'},
+             5:{n:'OUT2', d:'output 2'},
+             6:{n:'OUT1', d:'output 1'}}},
 };
 
 /* pin i (1-based) of an IC to [row,col]. By default pins run down the left row
@@ -1250,6 +1284,13 @@ function defaultPinMap(ic){
   return out;
 }
 function hasFootprint(ic){ return !!(ic && ic.pinMap && ic.pinMap.length === ic.pins); }
+
+/* What a pin is called where a person reads it. A chip's pins are numbers;
+   a module's pads carry the names its silkscreen does. */
+function icPinName(ic, i){
+  const def = IC_LIB[ic.part];
+  return (def && def.padNames && def.padNames[i - 1]) || String(i);
+}
 
 function pinPos(ic, i){
   if(hasFootprint(ic)){
@@ -2427,7 +2468,8 @@ function walkthrough(){
     const def = IC_LIB[ic.part] || {};
     const half = ic.pins / 2;
     step('U - chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
-      ['Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
+      [def.padNames ? 'A module, wired by its pads. In pin order: ' + def.padNames.join(', ') + '.' : null,
+       'Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
        ' back up column ' + dCol(ic.pin1[1] + ic.span) + '.',
        (ic.autoCuts || []).length
          ? 'Placing it inserts ' + ic.autoCuts.length + ' cuts between the pin rows. Without them ' +
@@ -3096,8 +3138,15 @@ function resolveMember(token){
 
   const ic = S.ics.find(x => (x.ref || '').toUpperCase() === ref.toUpperCase());
   if(ic){
-    const num = +leg;
-    if(!num || num < 1 || num > ic.pins) return {ok:false, why:ic.ref + ' has no pin ' + leg};
+    let num = +leg;
+    /* a module's pads answer to their names - IC1.VCC, IC1.OUT1 */
+    if(!num){
+      const pn = (IC_LIB[ic.part] || {}).padNames;
+      if(pn){ const j = pn.findIndex(nm => nm.toUpperCase() === leg.toUpperCase()); if(j >= 0) num = j + 1; }
+    }
+    if(!num || num < 1 || num > ic.pins)
+      return {ok:false, why:ic.ref + ' has no pin ' + leg +
+              ((IC_LIB[ic.part] || {}).padNames ? ' (its pads are ' + IC_LIB[ic.part].padNames.join('/') + ')' : '')};
     return {ok:true, at:pinPos(ic, num)};
   }
 
@@ -3655,7 +3704,8 @@ function render(){
       const inward = x <= (x0 + x1) / 2 ? 13 : -13;
       const role = (IC_LIB[ic.part] && IC_LIB[ic.part].roles[i]) || '';
       o.push('<text class="pin ' + (role === 'in' ? 'pin-in' : role === 'out' ? 'pin-out' : role ? 'pin-pwr' : '') +
-             '" x="' + (x + inward) + '" y="' + (y + 3) + '">' + i + '</text>');
+             '" x="' + (x + inward) + '" y="' + (y + 3) + '"' +
+             (x <= (x0 + x1) / 2 ? '' : ' text-anchor="end"') + '>' + esc(icPinName(ic, i)) + '</text>');
     }
   }
 
@@ -3906,7 +3956,7 @@ function render(){
       const q = pinPos(si, i);
       o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.26) +
              '" fill="#00FFA3" stroke="#0B0813" stroke-width="1.5"/>');
-      o.push('<text class="pin" x="' + X(q[1]) + '" y="' + (Y(q[0]) + 3) + '">' + i + '</text>');
+      o.push('<text class="pin" x="' + X(q[1]) + '" y="' + (Y(q[0]) + 3) + '">' + esc(icPinName(si, i)) + '</text>');
     }
   }
 
