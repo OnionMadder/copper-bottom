@@ -432,6 +432,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   margin:0; white-space:pre-wrap; color:#CFC8E0;
   font:12px/1.65 ui-monospace,"Cascadia Mono","Consolas",monospace;
 }
+/* the breadboard picture sits above its steps, on the same dark page */
+#bbArt{margin:0 0 16px; overflow-x:auto}
+#bbArt svg{display:block; max-width:100%; height:auto; border-radius:6px}
 .nlbody{flex:1; display:flex; min-height:0}
 .nlleft{width:46%; min-width:280px; display:flex; border-right:1px solid var(--line)}
 .nlleft textarea{
@@ -467,6 +470,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
     <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
     <button id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough</button>
+    <button id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps">breadboard</button>
     <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
   </span>
   <span class="grp">
@@ -617,6 +621,18 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="walkClose">close</button>
   </div>
   <div class="walkbody"><pre id="walkText"></pre></div>
+</div>
+
+<div class="sheet" id="bb" hidden>
+  <div class="sheetbar">
+    <b>BREADBOARD</b>
+    <span class="nlnote">the circuit re-placed on a solderless breadboard - self-checked, then written out</span>
+    <span class="sp"></span>
+    <button id="bbSvg">image .svg</button>
+    <button id="bbCopy">copy</button>
+    <button id="bbClose">close</button>
+  </div>
+  <div class="walkbody"><div id="bbArt"></div><pre id="bbText"></pre></div>
 </div>
 
 <div class="sheet" id="netl" hidden>
@@ -3695,6 +3711,593 @@ function overlayOk(T){
   return !!T && ovFinite(T.a, T.b, T.tx, T.ty) && (T.a !== 0 || T.b !== 0);
 }
 
+/* ============================================================
+   THE BREADBOARD TRANSLATION
+   A stripboard layout re-placed onto a solderless breadboard, as steps in the
+   house style of the messopedals breadboard guides: grouped by part, exact
+   letter-number holes, purposes in parentheses.
+
+   The one thing this is NOT is a copy. A stripboard strip is a full row of
+   copper you cut to shape; a breadboard tie is five holes in one column, with
+   rails down the sides and a channel for the chip. So the NETS are carried
+   over - which terminals are joined - and the geometry is worked out fresh:
+   chips straddle the channel, rail-class nets become the + and - rails, a net
+   that needs more than one column gets bridge jumpers.
+
+   Because the placement is invented rather than copied, it is re-verified
+   before anything is written down: connectivity is rebuilt from the planned
+   breadboard alone and compared against the stripboard's nets, terminal by
+   terminal. A plan that fails that check refuses to print steps. Wrong
+   instructions someone will follow with parts in hand are worse than none.
+
+   Conventions carried from the site's guides (555 Optical Theremin is the
+   model): banks A-E below the channel and F-J above, columns numbered from 1
+   at the left, the chip's notch pointing LEFT with pin 1 in row E, part legs
+   plugged STRAIGHT into a rail when their net is a rail, and lower-bank
+   drops going to the bottom rails, upper-bank drops to the top.
+   ============================================================ */
+
+/* Row letters per bank, outermost first. E and F are the channel-side rows -
+   chips live there, so everything else prefers to stay out of them. */
+const BB_LEG_ROWS  = ['CBDAE', 'HIGJF'];   // where a component leg likes to land
+const BB_WIRE_ROWS = ['ABCDE', 'JIHGF'];   // jumpers and hookup wires: outermost hole first
+const BB_BANK_OF_ROW = (ch) => 'ABCDE'.indexOf(ch) >= 0 ? 0 : 1;
+
+const bbIsRail  = (t) => !!(t && t.rail);
+const bbName    = (t) => bbIsRail(t) ? t.side + ' ' + (t.pol === 'pos' ? '+' : '-') + ' rail'
+                                     : t.row + t.col;
+const bbSameHole = (a, b) => !bbIsRail(a) && !bbIsRail(b) && a.row === b.row && a.col === b.col;
+
+/* Which nets are the rails. Positive-class pads make the + rail, ground makes
+   the - rail. A split supply has three rail-class nets and a breadboard has
+   two rails, so a negative supply gets ordinary columns and a loud note. */
+function bbRailNets(){
+  const rails = new Map();     // net.id -> {pol, label}
+  const notes = [];
+  for(const net of NET.nets){
+    const classed = padsOnNet(net).map(d => ({d:d, c:powerClass(d.label)})).filter(x => x.c);
+    if(!classed.length) continue;
+    const c = classed[0];
+    if(c.c.cls === 'pos')      rails.set(net.id, {pol:'pos', label:c.d.label});
+    else if(c.c.cls === 'gnd') rails.set(net.id, {pol:'neg', label:c.d.label});
+    else notes.push(c.d.label + ' is a negative supply. A breadboard has a + rail and a - ' +
+                    'rail, so this net rides ordinary columns - double-check it against the rails.');
+  }
+  /* no ground but a bare negative rail: that pair still maps cleanly */
+  if(![...rails.values()].some(r => r.pol === 'neg'))
+    for(const net of NET.nets){
+      const neg = padsOnNet(net).map(d => ({d:d, c:powerClass(d.label)}))
+                    .filter(x => x.c && x.c.cls === 'neg')[0];
+      if(neg){ rails.set(net.id, {pol:'neg', label:neg.d.label});
+               notes.pop(); break; }
+    }
+  return {rails:rails, notes:notes};
+}
+
+/* The working state of one placement attempt. Columns are 1-based, like the
+   numbers printed on the board. */
+function bbState(cols){
+  const mk = () => { const a = new Array(cols + 1); a.fill(null); return a; };
+  return {cols:cols, use:[mk(), mk()], netCols:new Map(), landings:[],
+          jumpers:[], railSides:{pos:new Set(), neg:new Set()}, notes:[]};
+}
+function bbClaimCol(st, bank, col, netId){
+  if(col < 1 || col > st.cols) throw {bbOverflow:true};
+  const cur = st.use[bank][col];
+  if(cur && cur.net !== netId) throw new Error('bb: column ' + col + ' serves two nets');
+  if(!cur) st.use[bank][col] = {net:netId, rows:{}};
+  if(!st.netCols.has(netId)) st.netCols.set(netId, []);
+  const list = st.netCols.get(netId);
+  if(!list.some(t => t.bank === bank && t.col === col)) list.push({bank:bank, col:col});
+  return st.use[bank][col];
+}
+function bbClaimRow(st, bank, col, pref, wish, who){
+  const cu = st.use[bank][col];
+  const order = (wish && pref.indexOf(wish) >= 0 ? wish : '') + pref;
+  for(const ch of order){
+    if(cu.rows[ch]) continue;
+    cu.rows[ch] = who;
+    return {bank:bank, row:ch, col:col};
+  }
+  throw new Error('bb: column ' + col + ' is full');   // 6 things in 5 holes - a planning bug
+}
+/* A free column as close to `near` as the part's body allows. wantMin keeps a
+   resistor from being asked to span one hole; with no anchor, leftmost wins
+   but the first column stays clear for the rail ties. */
+function bbAllocCol(st, bank, near, wantMin){
+  let best = null, bestW = Infinity;
+  for(let c = 2; c <= st.cols; c++){
+    if(st.use[bank][c]) continue;
+    let w;
+    if(near == null) w = c;
+    else { const d = Math.abs(c - near);
+           w = d < (wantMin || 1) ? 1000 + (wantMin - d) : d; }
+    if(w < bestW){ bestW = w; best = c; }
+  }
+  if(best == null) throw {bbOverflow:true};
+  return best;
+}
+/* `count` consecutive free columns in one bank - a TO-92 wants three */
+function bbAllocRun(st, bank, near, count){
+  let best = null, bestW = Infinity;
+  for(let c = 2; c + count - 1 <= st.cols; c++){
+    let free = true;
+    for(let i = 0; i < count; i++) if(st.use[bank][c + i]) free = false;
+    if(!free) continue;
+    const mid = c + (count - 1) / 2;
+    const w = near == null ? c : Math.abs(mid - near);
+    if(w < bestW){ bestW = w; best = c; }
+  }
+  if(best == null) throw {bbOverflow:true};
+  return best;
+}
+
+/* Everything already placed for a net, so a new landing can sit near it */
+function bbNetNear(st, netId){
+  const cols = st.netCols.get(netId);
+  if(!cols || !cols.length) return null;
+  return {bank:cols[0].bank, col:cols[0].col};
+}
+
+/* Land one terminal of `netId`. Rail nets take the wire straight into the
+   rail (the house move); everything else lands in a column the net already
+   owns when one has a spare hole, or claims a fresh one. */
+function bbLand(st, netId, rail, opts){
+  const who = opts.who;
+  if(rail && opts.direct !== false){
+    const side = opts.side || 'bottom';
+    st.railSides[rail.pol].add(side);
+    const t = {rail:true, side:side, pol:rail.pol, label:rail.label};
+    st.landings.push({label:who, at:t});
+    return t;
+  }
+  const pref = (opts.rows === 'wire' ? BB_WIRE_ROWS : BB_LEG_ROWS);
+  const owned = st.netCols.get(netId) || [];
+  /* an owned column with a spare hole, nearest the anchor, same bank first */
+  let pick = null, pickW = Infinity;
+  for(const t of owned){
+    const cu = st.use[t.bank][t.col];
+    /* full at FOUR: the fifth hole stays free for the bridge or rail-drop
+       jumper this column may still need. A landing that will not fit here
+       claims a fresh column instead, and the bridge pass wires it in. */
+    if(Object.keys(cu.rows).length >= 4) continue;
+    let w = opts.near == null ? 0 : Math.abs(t.col - opts.near);
+    if(opts.bank != null && t.bank !== opts.bank) w += 100;
+    if(w < pickW){ pickW = w; pick = t; }
+  }
+  if(!pick){
+    const bank = opts.bank != null ? bank0or1(opts.bank) : 0;
+    const col = bbAllocCol(st, bank, opts.near, opts.wantMin);
+    bbClaimCol(st, bank, col, netId);
+    pick = {bank:bank, col:col};
+  }
+  const h = bbClaimRow(st, pick.bank, pick.col, pref[pick.bank], opts.wish, who);
+  st.landings.push({label:who, at:h});
+  return h;
+}
+const bank0or1 = (b) => b === 1 ? 1 : 0;
+
+/* The leg label connections() would use, so the self-check compares the same
+   names on both sides. */
+function bbLegLabel(p, i){
+  const names = legLabels(p);
+  return p.ref + '.' + (names ? names[i] : (i < 2 ? 'AB'[i] : i + 1));
+}
+
+/* One placement attempt on a board of `cols` columns. Throws {bbOverflow}
+   when the board is too small - the caller retries on the full-size one. */
+function bbAttempt(cols, rails){
+  const st = bbState(cols);
+  const plan = {cols:cols, ics:[], parts:[], pads:[], jumpers:st.jumpers,
+                notes:st.notes, landings:st.landings};
+  const netAt = (r, c) => { const n = NET.netAt(r, c); return n ? n.id : null; };
+  const railOf = (netId) => rails.get(netId) || null;
+
+  /* --- chips: across the channel, notch left, in ref order --- */
+  let icCol = 8;
+  const icOrder = S.ics.slice().sort((a, b) => a.ref.localeCompare(b.ref, undefined, {numeric:true}));
+  for(const ic of icOrder){
+    const half = ic.pins / 2;
+    if(icCol + half - 1 > cols - 2) throw {bbOverflow:true};
+    const holes = {};
+    for(let pin = 1; pin <= ic.pins; pin++){
+      const bank = pin <= half ? 0 : 1;
+      const col  = pin <= half ? icCol + pin - 1 : icCol + (ic.pins - pin);
+      const at   = pinPos(ic, pin);
+      const nid  = netAt(at[0], at[1]);
+      if(nid === null) continue;                 // a pin on a cut hole is a DRC error upstream
+      bbClaimCol(st, bank, col, nid);
+      const row = bank === 0 ? 'E' : 'F';
+      st.use[bank][col].rows[row] = ic.ref + '.' + pin;
+      st.landings.push({label:ic.ref + '.' + pin, at:{bank:bank, row:row, col:col}});
+      holes[pin] = row + col;
+    }
+    plan.ics.push({ic:ic, col:icCol, holes:holes});
+    if(hasFootprint(ic))
+      st.notes.push(ic.ref + ' wears a custom footprint on the stripboard. On a breadboard ' +
+                    'the physical chip seats as a normal DIP, so the standard two rows apply here.');
+    if((IC_LIB[ic.part] || {}).module || ic.alias)
+      st.notes.push(ic.ref + ' is a module. Check its pins really are two 0.1in rows that can ' +
+                    'straddle the channel before planning around this.');
+    icCol += half + 3;
+  }
+
+  /* --- every part, in build-list order, links excluded: a link defined a
+         stripboard net, and the nets themselves travel instead --- */
+  const partRank = {trans:1, reg:2, trim:3, diode:4, res:5, cap:6, ecap:7, spst:8, spdt:9, pot:10};
+  const parts = S.parts.filter(p => p.kind !== 'link')
+    .sort((a, b) => (partRank[a.kind] || 99) - (partRank[b.kind] || 99) ||
+                    a.ref.localeCompare(b.ref, undefined, {numeric:true}));
+
+  for(const p of parts){
+    const offboard = p.kind === 'pot' || p.kind === 'spst' || p.kind === 'spdt' ||
+                     (isFlying(p) && p.fly.length === p.pins.length);
+    const targets = new Array(p.pins.length).fill(null);
+    const nid = p.pins.map(q => netAt(q[0], q[1]));
+
+    if(!offboard && p.pins.length >= 3){
+      /* a body with legs in a row: consecutive columns, package order, and a
+         leg that is flying or bent stays out of the run */
+      const seated = p.pins.map((q, i) => i).filter(i => !legFlying(p, i) && !legBent(p, i));
+      if(seated.length){
+        const anchors = seated.map(i => bbNetNear(st, nid[i])).filter(Boolean);
+        const near = anchors.length ? anchors[0].col : null;
+        const bank = anchors.length ? anchors[0].bank : 0;
+        const c0 = bbAllocRun(st, bank, near, seated.length);
+        seated.forEach((i, k) => {
+          if(nid[i] === null) return;
+          bbClaimCol(st, bank, c0 + k, nid[i]);
+          targets[i] = bbClaimRow(st, bank, c0 + k, BB_LEG_ROWS[bank], null, bbLegLabel(p, i));
+          st.landings.push({label:bbLegLabel(p, i), at:targets[i]});
+        });
+      }
+      p.pins.forEach((q, i) => {
+        if(targets[i] || legBent(p, i) || nid[i] === null) return;
+        targets[i] = bbLand(st, nid[i], railOf(nid[i]),
+          {who:bbLegLabel(p, i), rows:'wire', near:null, side:'bottom'});
+      });
+    } else {
+      /* two legs (or an off-board part's lugs): rails direct, columns for the
+         rest, the second leg placed within reach of the first */
+      const order = p.pins.map((q, i) => i)
+        .sort((a, b) => (railOf(nid[a]) ? 1 : 0) - (railOf(nid[b]) ? 1 : 0) ||
+                        (bbNetNear(st, nid[b]) ? 1 : 0) - (bbNetNear(st, nid[a]) ? 1 : 0));
+      const wantMin = offboard ? 1 : (p.kind === 'res' || p.kind === 'diode' ? 3 : 2);
+      for(const i of order){
+        if(legBent(p, i) || nid[i] === null) continue;
+        const partner = targets.find(t => t && !bbIsRail(t));
+        const rail = railOf(nid[i]);
+        targets[i] = bbLand(st, nid[i], rail, {
+          who:bbLegLabel(p, i),
+          rows:(offboard || legFlying(p, i)) ? 'wire' : 'leg',
+          near:partner ? partner.col : null,
+          bank:partner ? partner.bank : null,
+          wantMin:wantMin,
+          wish:partner && !offboard ? partner.row : null,
+          side:partner ? (partner.bank === 1 ? 'top' : 'bottom') : 'bottom',
+        });
+      }
+    }
+    plan.parts.push({part:p, offboard:offboard, targets:targets});
+  }
+
+  /* --- pads that are hookup wires (jacks, speakers, probe points) --- */
+  const padOrder = S.pads.slice().sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric:true}));
+  for(const d of padOrder){
+    const nid = netAt(d.at[0], d.at[1]);
+    if(nid === null || rails.get(nid)) continue;
+    const at = bbLand(st, nid, null, {who:'@' + d.label, rows:'wire',
+                                      near:(bbNetNear(st, nid) || {}).col});
+    plan.pads.push({pad:d, at:at, supply:false});
+  }
+
+  /* --- bridges: a net on more than one column is chained left to right, and
+         every column a rail net owns gets its drop jumper --- */
+  const owners = (bank, col) => {
+    const cu = st.use[bank][col];
+    return Object.keys(cu.rows).sort().map(k => cu.rows[k]);
+  };
+  const netIds = [...st.netCols.keys()].sort((a, b) => a - b);
+  for(const nid of netIds){
+    const colsOf = st.netCols.get(nid).slice().sort((a, b) => a.bank - b.bank || a.col - b.col);
+    const rail = rails.get(nid);
+    if(rail){
+      for(const t of colsOf){
+        const side = t.bank === 1 ? 'top' : 'bottom';
+        st.railSides[rail.pol].add(side);
+        const from = bbClaimRow(st, t.bank, t.col, BB_WIRE_ROWS[t.bank], null, 'jumper');
+        st.jumpers.push({from:from, to:{rail:true, side:side, pol:rail.pol, label:rail.label},
+                         why:owners(t.bank, t.col).filter(w => w !== 'jumper').join(' + ') +
+                             ' to ' + rail.label});
+      }
+    } else if(colsOf.length > 1){
+      const net = NET.nets[nid];
+      /* Each new column hooks to the nearest ALREADY-CONNECTED column that
+         still has a free hole - a plain left-to-right chain can ask a full
+         column for a sixth hole when a net grows past two columns. */
+      const done = [colsOf[0]];
+      const room = (t) => Object.keys(st.use[t.bank][t.col].rows).length < 5;
+      for(const b of colsOf.slice(1)){
+        let a = null, aW = Infinity;
+        for(const t of done){
+          if(!room(t)) continue;
+          const w = Math.abs(t.col - b.col) + (t.bank === b.bank ? 0 : 100);
+          if(w < aW){ aW = w; a = t; }
+        }
+        if(!a) throw new Error('bb: net ' + netName(net) + ' has no free hole left to bridge from');
+        const named = (t) => owners(t.bank, t.col).filter(w => w !== 'jumper')[0];
+        const from = bbClaimRow(st, a.bank, a.col, BB_WIRE_ROWS[a.bank], null, 'jumper');
+        const to   = bbClaimRow(st, b.bank, b.col, BB_WIRE_ROWS[b.bank], null, 'jumper');
+        st.jumpers.push({from:from, to:to,
+                         why:(named(a) && named(b)) ? named(a) + ' to ' + named(b)
+                                                    : 'both are net ' + netName(net)});
+        done.push(b);
+      }
+    }
+  }
+
+  /* --- pads on the rails, and the rail ties that make four rails two.
+         Only a pad NAMED as power is a supply clip; a speaker return that
+         happens to sit on ground is still a speaker wire. --- */
+  for(const d of padOrder){
+    const nid = netAt(d.at[0], d.at[1]);
+    const rail = nid === null ? null : rails.get(nid);
+    if(!rail) continue;
+    const sides = st.railSides[rail.pol];
+    const side = sides.size === 1 ? [...sides][0] : 'bottom';
+    sides.add(side);
+    plan.pads.push({pad:d, at:{rail:true, side:side, pol:rail.pol, label:rail.label},
+                    supply:!!powerClass(d.label)});
+    st.landings.push({label:'@' + d.label, at:{rail:true, side:side, pol:rail.pol}});
+  }
+  plan.ties = [];
+  for(const pol of ['pos', 'neg']){
+    const sides = st.railSides[pol];
+    if(sides.has('top') && sides.has('bottom'))
+      plan.ties.push({pol:pol, why:'one ' + (pol === 'pos' ? '+' : '-') +
+                      ' rail top and bottom, tied at the right-hand end'});
+  }
+  plan.railsUsed = {pos:[...st.railSides.pos].sort(), neg:[...st.railSides.neg].sort()};
+  return plan;
+}
+
+/* Rebuild connectivity from the plan alone and compare it, terminal by
+   terminal, against the stripboard's nets. This is the whole warranty. */
+function bbVerify(plan){
+  const par = new Map();
+  const key = (t) => bbIsRail(t) ? 'rail:' + t.pol + ':' + t.side : 'tie:' + t.bank + ':' + t.col;
+  const find = (k) => { while(par.get(k) !== k){ par.set(k, par.get(par.get(k))); k = par.get(k); } return k; };
+  const node = (k) => { if(!par.has(k)) par.set(k, k); return k; };
+  const union = (a, b) => { a = find(node(a)); b = find(node(b)); if(a !== b) par.set(a, b); };
+
+  for(const j of plan.jumpers) union(key(j.from), key(j.to));
+  for(const tie of plan.ties)  union('rail:' + tie.pol + ':top', 'rail:' + tie.pol + ':bottom');
+
+  const bbNetOf = new Map();
+  for(const l of plan.landings) bbNetOf.set(l.label, find(node(key(l.at))));
+
+  const stripNetOf = new Map();
+  for(const net of NET.nets)
+    for(const label of netMembers(net)) stripNetOf.set(label, net.id);
+
+  const problems = [];
+  for(const [label] of stripNetOf)
+    if(!bbNetOf.has(label)) problems.push(label + ' never lands on the breadboard');
+  for(const [label] of bbNetOf)
+    if(!stripNetOf.has(label)) problems.push(label + ' lands on the breadboard but is on no stripboard net');
+
+  /* the partitions must agree both ways: nothing split, nothing joined */
+  const fwd = new Map(), rev = new Map();
+  for(const [label, sn] of stripNetOf){
+    const bn = bbNetOf.get(label);
+    if(bn === undefined) continue;
+    if(!fwd.has(sn)) fwd.set(sn, bn);
+    else if(fwd.get(sn) !== bn)
+      problems.push('net ' + netName(NET.nets[sn]) + ' is SPLIT on the breadboard (' + label + ' is stranded)');
+    if(!rev.has(bn)) rev.set(bn, sn);
+    else if(rev.get(bn) !== sn)
+      problems.push(label + ' is JOINED to net ' + netName(NET.nets[rev.get(bn)]) +
+                    ' on the breadboard, and they are separate nets on the stripboard');
+  }
+  return {ok:problems.length === 0, problems:problems, terminals:stripNetOf.size};
+}
+
+/* The plan, made and checked. Tries the 400-point half board first and moves
+   to the 830-point full size only when the half runs out of columns. */
+function breadboardPlan(){
+  computeNets();
+  const errors = runDRC().filter(f => f.sev === 'error');
+  if(errors.length)
+    return {failed:'The board has ' + errors.length + ' DRC error' + (errors.length === 1 ? '' : 's') +
+            '. A translation of a broken board would just be the same faults in new holes - fix those first.'};
+  if(!S.parts.length && !S.ics.length && !S.pads.length)
+    return {failed:'Nothing is placed yet, so there is nothing to translate.'};
+
+  const rr = bbRailNets();
+  for(const size of [30, 63]){
+    let plan;
+    try{ plan = bbAttempt(size, rr.rails); }
+    catch(e){ if(e && e.bbOverflow) continue; throw e; }
+    plan.half = size === 30;
+    plan.notes = rr.notes.concat(plan.notes);
+    plan.check = bbVerify(plan);
+    plan.rails = rr.rails;
+    return plan;
+  }
+  return {failed:'This layout does not fit even the 830-point board (63 columns). ' +
+          'It needs splitting across two boards, which is a judgment call, not a translation.'};
+}
+
+/* ------------------------------------------------------------
+   The plan written out, grouped the way she builds: semiconductors, jumpers,
+   resistors, ceramics, electrolytics, off-board, power up - one trip to each
+   drawer. Photocells count as resistors; a diode sits with the transistors.
+   ------------------------------------------------------------ */
+function breadboardText(planArg){
+  const plan = planArg || breadboardPlan();
+  const L = [];
+  const title = (S.name || 'untitled') + ' - moved onto a solderless breadboard';
+  L.push(title);
+  if(plan.failed){
+    L.push('');
+    L.push('NOT TRANSLATED: ' + plan.failed);
+    return L.join('\n');
+  }
+
+  L.push((plan.half ? '400-point half-size board (30 columns)' : '830-point board (63 columns)') +
+         ' · banks A-E and F-J · rails top and bottom');
+  L.push('');
+  L.push('Translated net by net from the stripboard layout - re-placed, not copied,');
+  L.push('because a strip and a tie column are different shapes.');
+  if(plan.check.ok)
+    L.push('Self-check: rebuilt from these holes alone, all ' + plan.check.terminals +
+           ' terminals land on the same nets as the stripboard.');
+  L.push('');
+
+  if(!plan.check.ok){
+    L.push('*** SELF-CHECK FAILED - DO NOT BUILD FROM THIS ***');
+    for(const p of plan.check.problems) L.push('  - ' + p);
+    L.push('This is a bug in the translator, not in your layout. Please report it.');
+    return L.join('\n');
+  }
+  for(const n of plan.notes) L.push('NOTE: ' + n);
+  if(plan.notes.length) L.push('');
+
+  let n = 0;
+  const step = (head, body) => {
+    n++;
+    L.push(String(n).padStart(2) + '. ' + head);
+    if(body) for(const line of [].concat(body)) if(line) L.push('    ' + line);
+    L.push('');
+  };
+  const group = (name) => { L.push('== ' + name + ' =='); L.push(''); };
+  const val = (p) => {
+    const fam = DEV_LIB[p.kind];
+    const isDefault = fam && p.device === Object.keys(fam)[0];
+    const dev = p.device && !isDefault ? p.device : '';
+    return [p.value, dev].filter(Boolean).join(' ');
+  };
+  const seen = {};
+  const once = (kind, text) => { if(seen[kind]) return null; seen[kind] = 1; return text; };
+  const holesOf = (row) => row.targets.map(t => t ? bbName(t) : null);
+  const bbTo = (t) => t ? (bbIsRail(t) ? 'the ' : '') + bbName(t) : 'nothing - that leg stays unwired';
+  const flyNote = (p, targets) => {
+    if(!isFlying(p)) return null;
+    const ll = legLabels(p) || [];
+    return 'On flying wires: ' + p.fly.map(i => (ll[i] || 'leg ' + (i + 1)) +
+           (targets[i] ? ' to ' + bbName(targets[i]) : '')).join(', ') +
+           '. The part itself sits off the board.';
+  };
+  const bentNote = (p) => {
+    if(!Array.isArray(p.bent) || !p.bent.length) return null;
+    const ll = legLabels(p) || [];
+    return 'Leave ' + p.bent.map(i => 'leg ' + (ll[i] || (i + 1))).join(' and ') +
+           ' out of the board - deliberately unwired.';
+  };
+  const byKind = (kinds) => plan.parts.filter(row => kinds.indexOf(row.part.kind) >= 0 && !row.offboard);
+
+  /* --- semiconductors --- */
+  group('The semiconductors');
+  for(const e of plan.ics){
+    const ic = e.ic, half = ic.pins / 2;
+    step('Seat ' + ic.ref + ' (' + icShown(ic) + ') across the center channel, notch to the LEFT: ' +
+         'pin 1 in ' + e.holes[1] + ', pin ' + ic.pins + ' in ' + e.holes[ic.pins] + '.',
+      ['Pins 1-' + half + ' run ' + e.holes[1] + ' to ' + e.holes[half] +
+       '; pins ' + (half + 1) + '-' + ic.pins + ' run back ' + e.holes[half + 1] + ' to ' + e.holes[ic.pins] + '.',
+       'Anywhere in the same bank and column is the same point - ' + e.holes[1] +
+       ' and A' + e.col + ' are both pin 1.']);
+  }
+  for(const row of byKind(['diode']))
+    step('Diode ' + row.part.ref + (val(row.part) ? ' (' + val(row.part) + ')' : '') + ': ' +
+         holesOf(row)[0] + ' to ' + holesOf(row)[1] + '.',
+      [once('diode', 'The SECOND hole named gets the banded end - the cathode. Backwards, nothing works at all.'),
+       flyNote(row.part, row.targets), bentNote(row.part)]);
+  for(const row of byKind(['trans'])){
+    const p = row.part, ll = legLabels(p) || [];
+    step('Transistor ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') +
+         ': flat face toward you, legs ' + ll.join('/') + ' left to right into ' +
+         holesOf(row).filter(Boolean).join(', ') + '.',
+      [once('trans', 'The leg order is the package order, read with the flat face toward you and legs down. Check any device you are unsure of against its datasheet.'),
+       flyNote(p, row.targets), bentNote(p)]);
+  }
+  for(const row of byKind(['reg']))
+    step('Regulator ' + row.part.ref + (val(row.part) ? ' (' + val(row.part) + ')' : '') +
+         ': flat face toward you, legs ' + (legLabels(row.part) || []).join('/') +
+         ' left to right into ' + holesOf(row).filter(Boolean).join(', ') + '.',
+      [flyNote(row.part, row.targets), bentNote(row.part)]);
+  for(const row of byKind(['trim']))
+    step('Trimpot ' + row.part.ref + (val(row.part) ? ' (' + val(row.part) + ')' : '') +
+         ': lugs 1/W/3 into ' + holesOf(row).filter(Boolean).join(', ') + '.',
+      [flyNote(row.part, row.targets), bentNote(row.part)]);
+
+  /* --- jumpers --- */
+  if(plan.jumpers.length || plan.ties.length){
+    group('Jumpers');
+    for(const j of plan.jumpers)
+      step('Jumper: ' + bbName(j.from) + ' to ' + (bbIsRail(j.to) ? 'the ' : '') + bbName(j.to) +
+           (j.why ? ' (' + j.why + ')' : '') + '.');
+    for(const tie of plan.ties)
+      step('Jumper: tie the top ' + (tie.pol === 'pos' ? '+' : '-') + ' rail to the bottom ' +
+           (tie.pol === 'pos' ? '+' : '-') + ' rail at the right-hand end, so they are one rail.');
+  }
+
+  /* --- the passive drawers, one each --- */
+  const drawer = (kinds, name, head) => {
+    const rows = byKind(kinds);
+    if(!rows.length) return;
+    group(name);
+    for(const row of rows){
+      const p = row.part, h = holesOf(row).filter(Boolean);
+      if(p.kind === 'ecap')
+        step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') +
+             ': + leg into ' + bbTo(row.targets[0]) + ', - leg into ' + bbTo(row.targets[1]) + '.',
+          [once('ecap', 'The stripe on the can marks the MINUS leg. Backwards, an electrolytic eventually vents.'),
+           flyNote(p, row.targets), bentNote(p)]);
+      else
+        step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') + ': ' + h.join(' to ') + '.',
+          [flyNote(p, row.targets), bentNote(p)]);
+    }
+  };
+  drawer(['res'], 'Resistors', 'Resistor');
+  drawer(['cap'], 'Ceramics and film', 'Cap');
+  drawer(['ecap'], 'Electrolytics', 'Cap');
+
+  /* --- off-board --- */
+  const off = plan.parts.filter(row => row.offboard);
+  const wires = plan.pads.filter(e => !e.supply);
+  if(off.length || wires.length){
+    group('Off-board');
+    for(const row of off){
+      const p = row.part, ll = legLabels(p) || [];
+      const lands = row.targets.map((t, i) => t ? (ll[i] || 'leg ' + (i + 1)) + ' to ' + bbName(t) : null)
+                       .filter(Boolean).join(', ');
+      step((PART_LIB[p.kind] || {}).name + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') +
+           ', on hookup wires: ' + lands + '.',
+        [p.kind === 'pot' ? once('pot', 'The pot itself lives on the panel - these are the holes its wires land in.') : null,
+         bentNote(p)]);
+    }
+    for(const e of wires)
+      step('Wire for ' + e.pad.label + ': into ' + bbTo(e.at) + '.',
+        [e.pad.to ? 'This is where ' + e.pad.to + ' joins the board.' : null]);
+  }
+
+  /* --- power up --- */
+  group('Power up');
+  for(const e of plan.pads.filter(x => x.supply))
+    step(e.pad.label + (e.pad.to ? ' - ' + e.pad.to : '') + ': clip to the ' + bbName(e.at) + '.');
+  const checks = [];
+  checks.push('rail to rail reads open, not a short');
+  for(const j of plan.jumpers.slice(0, 8))
+    checks.push(bbName(j.from) + ' to ' + bbName(j.to) + ' beeps (' + j.why + ')');
+  step('Before the battery: meter on continuity.', checks);
+  step('Power on.');
+
+  L.push('---');
+  L.push('Translated by Copper Bottom - messopedals.com/diy/copper-bottom');
+  L.push('');
+  return L.join('\n');
+}
+
 /*#endregion model */
 /* ============================================================
    RENDER
@@ -4901,6 +5504,211 @@ function downloadSVG(side){
   a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-' + side + '.svg';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================
+   THE BREADBOARD PICTURE
+   The plan drawn as the board it describes: rails top and bottom, banks A-E
+   and F-J, the chip across the channel, every leg in the hole the steps name.
+   Same honest-footprint spirit as the build sheet - nothing decorative that
+   could be mistaken for a connection.
+   ============================================================ */
+function breadboardSVG(plan){
+  const cols = plan.cols;
+  const ML = 13, MR = 13, TOP = 16, WIRE = 9;
+  const x = (c) => ML + (c - 1) * MM;
+  /* row centers, top of the picture downward */
+  const rowY = {};
+  let yy = TOP + WIRE + 2;
+  rowY.railTopPos = yy; yy += 2.6;
+  rowY.railTopNeg = yy; yy += 4.2;
+  for(const ch of 'JIHGF'){ rowY[ch] = yy; yy += MM; }
+  yy += 1.2;                      // the channel
+  const chTop = yy - MM + 1.2;
+  rowY.channel = yy;
+  yy += 1.2;
+  for(const ch of 'EDCBA'){ rowY[ch] = yy; yy += MM; }
+  yy += 1.6;
+  rowY.railBotNeg = yy; yy += 2.6;
+  rowY.railBotPos = yy;
+  const boardB = yy + 3, boardT = rowY.railTopPos - 3;
+  const H = boardB + WIRE + 6;
+  const railY = (t) => rowY['rail' + (t.side === 'top' ? 'Top' : 'Bot') + (t.pol === 'pos' ? 'Pos' : 'Neg')];
+  const at = (t, partnerX) => bbIsRail(t) ? [partnerX == null ? x(2) : partnerX, railY(t)]
+                                          : [x(t.col), rowY[t.row]];
+  const name = S.name || 'untitled';
+  const subLine = (plan.half ? '400-point half-size breadboard, 30 columns'
+                             : '830-point breadboard, 63 columns') +
+                  '  ·  translated from the stripboard layout  ·  self-checked';
+  const lineW = (chars, size) => chars * size * 0.62;
+  const W = Math.max(ML + (cols - 1) * MM + MR,
+                     ML + Math.max(lineW(name.length, 3.4), lineW(subLine.length, 2.2), lineW(48, 2.4) + 6));
+  const o = [];
+  const T = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
+        '" font-family="monospace" ' + (extra || '') + '>' + esc(s) + '</text>';
+  const TL = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
+        '" font-family="monospace" paint-order="stroke" stroke="#fff" stroke-width="0.7" stroke-linejoin="round" ' +
+        (extra || '') + '>' + esc(s) + '</text>';
+
+  o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W.toFixed(1) + 'mm" height="' + H.toFixed(1) +
+         'mm" viewBox="0 0 ' + W.toFixed(1) + ' ' + H.toFixed(1) + '">');
+  o.push('<rect width="' + W.toFixed(1) + '" height="' + H.toFixed(1) + '" fill="#fff"/>');
+  o.push('<g fill="#000" stroke="none">');
+  o.push(T(ML, 6, name + ' - on a breadboard', 3.4, 'font-weight="bold"'));
+  o.push(T(ML, 9.6, subLine, 2.2));
+  o.push('<text x="' + ML + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
+         'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
+         '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
+  o.push('</g>');
+
+  /* the board itself */
+  o.push('<rect x="' + (x(1) - 5) + '" y="' + boardT + '" width="' + ((cols - 1) * MM + 10) +
+         '" height="' + (boardB - boardT) + '" rx="1.6" fill="#F7F4EC" stroke="#C9C2B2" stroke-width="0.3"/>');
+  o.push('<rect x="' + (x(1) - 5) + '" y="' + (rowY.channel - 1.5) + '" width="' + ((cols - 1) * MM + 10) +
+         '" height="3" fill="#EAE5D8"/>');
+  for(const [key, pol] of [['railTopPos','pos'], ['railTopNeg','neg'], ['railBotNeg','neg'], ['railBotPos','pos']]){
+    const ry = rowY[key], col = pol === 'pos' ? '#C43B3B' : '#3B62C4';
+    o.push('<line x1="' + (x(1) - 3) + '" y1="' + (ry - 1.6) + '" x2="' + (x(cols) + 3) + '" y2="' + (ry - 1.6) +
+           '" stroke="' + col + '" stroke-width="0.35"/>');
+    o.push(T(x(1) - 8.3, ry + 0.8, pol === 'pos' ? '+' : '-', 3, 'fill="' + col + '" font-weight="bold"'));
+    o.push(T(x(cols) + 5.6, ry + 0.8, pol === 'pos' ? '+' : '-', 3, 'fill="' + col + '" font-weight="bold"'));
+    for(let c = 1; c <= cols; c++)
+      if(c % 6) o.push('<circle cx="' + x(c) + '" cy="' + ry + '" r="0.5" fill="#fff" stroke="#AAA295" stroke-width="0.18"/>');
+  }
+  for(const ch of 'ABCDEFGHIJ'){
+    o.push(T(x(1) - 8.6, rowY[ch] + 0.6, ch, 1.8, 'fill="#8B8272" text-anchor="middle"'));
+    o.push(T(x(cols) + 8.6, rowY[ch] + 0.6, ch, 1.8, 'fill="#8B8272" text-anchor="middle"'));
+    for(let c = 1; c <= cols; c++)
+      o.push('<circle cx="' + x(c) + '" cy="' + rowY[ch] + '" r="0.5" fill="#fff" stroke="#AAA295" stroke-width="0.18"/>');
+  }
+  for(let c = 1; c <= cols; c++)
+    if(c === 1 || c % 5 === 0){
+      o.push(T(x(c), rowY.J - 2.6, String(c), 1.6, 'fill="#8B8272" text-anchor="middle"'));
+      o.push(T(x(c), rowY.A + 3.4, String(c), 1.6, 'fill="#8B8272" text-anchor="middle"'));
+    }
+
+  const late = [];   // labels, drawn over everything
+
+  /* chips across the channel */
+  for(const e of plan.ics){
+    const half = e.ic.pins / 2;
+    const x0 = x(e.col) - 1.1, x1 = x(e.col + half - 1) + 1.1;
+    const y0 = rowY.F - 1.3, y1 = rowY.E + 1.3;
+    o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) + '" height="' + (y1 - y0) +
+           '" rx="0.7" fill="#2B2B33" stroke="#111" stroke-width="0.2"/>');
+    o.push('<path d="M' + x0 + ' ' + (rowY.channel - 1.1) + 'a1.1 1.1 0 0 1 0 2.2" fill="#F7F4EC"/>');
+    late.push('<text x="' + ((x0 + x1) / 2) + '" y="' + (rowY.channel + 0.7) + '" font-size="2.2" ' +
+              'font-family="monospace" font-weight="bold" fill="#fff" text-anchor="middle">' +
+              esc(e.ic.ref + ' ' + icShown(e.ic)) + '</text>');
+    o.push('<circle cx="' + (x(e.col)) + '" cy="' + (rowY.E - 0.2) + '" r="0.45" fill="#fff"/>');
+  }
+
+  /* parts on the board */
+  let railSlot = 2;   // where a part living entirely on the rails gets drawn
+  for(const row of plan.parts){
+    const p = row.part;
+    if(row.offboard) continue;
+    const placed = row.targets.map((t, i) => ({t:t, i:i})).filter(e => e.t);
+    if(!placed.length) continue;
+    const anchorX = placed.map(e => e.t).filter(t => !bbIsRail(t)).map(t => x(t.col))[0];
+    const pts = placed.map(e => at(e.t, anchorX != null ? anchorX : x(railSlot)));
+    if(anchorX == null) railSlot += 2;
+    const label = p.ref + (p.value ? ' ' + p.value : '');
+
+    if(placed.length >= 3){
+      /* a TO-92 or trimpot: body sits outward of its legs */
+      const cx = pts.reduce((a, q) => a + q[0], 0) / pts.length;
+      const outer = pts[0][1] <= rowY.channel ? -1 : 1;
+      const cy = pts.reduce((a, q) => a + q[1], 0) / pts.length + outer * 4.2;
+      for(const q of pts)
+        o.push('<line x1="' + q[0] + '" y1="' + q[1] + '" x2="' + cx + '" y2="' + cy +
+               '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>');
+      o.push('<g transform="translate(' + cx + ',' + cy + ')" fill="#EDE6D6" stroke="#000" stroke-width="0.3">' +
+             '<path d="M-2.18 1.01A2.4 2.4 0 1 1 2.18 1.01Z"/></g>');
+      late.push(TL(cx, cy + 5.2, label, 1.9, 'text-anchor="middle" font-weight="bold" fill="#000"'));
+    } else {
+      const [x1, y1] = pts[0], [x2, y2] = pts.length > 1 ? pts[1] : pts[0];
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+      o.push('<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+             '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>');
+      const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + ang.toFixed(1) +
+                ')" fill="#EDE6D6" stroke="#000" stroke-width="0.3">';
+      if(p.kind === 'res')
+        o.push(g + '<rect x="-2.55" y="-1.0" width="5.1" height="2.0" rx="0.7"/>' +
+               '<line x1="-1.3" y1="-1" x2="-1.3" y2="1" stroke-width="0.3"/>' +
+               '<line x1="-0.4" y1="-1" x2="-0.4" y2="1" stroke-width="0.3"/>' +
+               '<line x1="0.5" y1="-1" x2="0.5" y2="1" stroke-width="0.3"/></g>');
+      else if(p.kind === 'ecap'){
+        o.push(g + '<circle cx="0" cy="0" r="2.1"/></g>');
+        const px = x1 + (mx - x1) * 0.45, py = y1 + (my - y1) * 0.45;
+        late.push(TL(px, py + 0.7, '+', 2.4, 'text-anchor="middle" font-weight="bold" fill="#000"'));
+      }
+      else if(p.kind === 'diode')
+        o.push(g + '<rect x="-1.65" y="-0.8" width="3.3" height="1.6" rx="0.2"/>' +
+               '<rect x="0.75" y="-0.8" width="0.55" height="1.6" fill="#000" stroke="none"/></g>');
+      else
+        o.push(g + '<circle cx="0" cy="0" r="1.75"/></g>');
+      let rot = ang % 360;
+      if(rot > 90) rot -= 180; else if(rot < -90) rot += 180;
+      late.push('<text transform="translate(' + mx + ',' + (my - 2.6) + ') rotate(' + rot.toFixed(1) + ')" ' +
+                'font-size="1.9" font-family="monospace" text-anchor="middle" font-weight="bold" fill="#000" ' +
+                'paint-order="stroke" stroke="#fff" stroke-width="0.7" stroke-linejoin="round">' + esc(label) + '</text>');
+    }
+  }
+
+  /* jumpers hop; their color is only a guide for the eye */
+  plan.jumpers.forEach((j, i) => {
+    const [x1, y1] = at(j.from), [x2, y2] = at(j.to, x1);
+    const up = Math.min(y1, y2) - (Math.abs(x1 - x2) > 6 ? 5 : 3);
+    o.push('<path d="M' + x1 + ' ' + y1 + ' Q ' + ((x1 + x2) / 2) + ' ' + up + ' ' + x2 + ' ' + y2 +
+           '" fill="none" stroke="' + netColor(i) + '" stroke-width="0.55" stroke-linecap="round" opacity="0.85"/>');
+    o.push('<circle cx="' + x1 + '" cy="' + y1 + '" r="0.55" fill="' + netColor(i) + '"/>');
+    o.push('<circle cx="' + x2 + '" cy="' + y2 + '" r="0.55" fill="' + netColor(i) + '"/>');
+  });
+  for(const tie of plan.ties){
+    const ty1 = rowY['railTop' + (tie.pol === 'pos' ? 'Pos' : 'Neg')];
+    const ty2 = rowY['railBot' + (tie.pol === 'pos' ? 'Pos' : 'Neg')];
+    const tx = x(cols) + 2.4;
+    o.push('<path d="M' + tx + ' ' + ty1 + ' Q ' + (tx + 5) + ' ' + ((ty1 + ty2) / 2) + ' ' + tx + ' ' + ty2 +
+           '" fill="none" stroke="' + (tie.pol === 'pos' ? '#C43B3B' : '#3B62C4') + '" stroke-width="0.55"/>');
+  }
+
+  /* wires that leave the board: off-board lugs, pads, supply clips */
+  const wireOut = (t, label2) => {
+    if(bbIsRail(t)){
+      const wy = railY(t);
+      late.push(TL(x(cols) + 11, wy + 0.6, label2, 1.8, 'fill="#000" font-weight="bold"'));
+      o.push('<line x1="' + (x(cols) + 3.2) + '" y1="' + wy + '" x2="' + (x(cols) + 10) + '" y2="' + wy +
+             '" stroke="#555" stroke-width="0.4" stroke-dasharray="1.2 0.9"/>');
+      return;
+    }
+    const up = t.bank === 1;
+    const hy = rowY[t.row], ey = up ? boardT - 4 : boardB + 4;
+    o.push('<line x1="' + x(t.col) + '" y1="' + hy + '" x2="' + x(t.col) + '" y2="' + ey +
+           '" stroke="#555" stroke-width="0.4" stroke-dasharray="1.2 0.9"/>');
+    o.push('<circle cx="' + x(t.col) + '" cy="' + hy + '" r="0.55" fill="#555"/>');
+    late.push(TL(x(t.col), ey + (up ? -1.2 : 2.6), label2, 1.8, 'text-anchor="middle" fill="#000" font-weight="bold"'));
+  };
+  for(const row of plan.parts){
+    if(!row.offboard) continue;
+    const ll = legLabels(row.part) || [];
+    row.targets.forEach((t, i) => {
+      if(t) wireOut(t, row.part.ref + '.' + (ll[i] || (i + 1)));
+    });
+  }
+  for(const e of plan.pads)
+    if(!e.supply) wireOut(e.at, e.pad.label);
+  for(const e of plan.pads.filter(z => z.supply)){
+    const wy = railY(e.at);
+    o.push('<line x1="' + (x(1) - 3.2) + '" y1="' + wy + '" x2="' + (ML - 11) + '" y2="' + wy +
+           '" stroke="' + (e.at.pol === 'pos' ? '#C43B3B' : '#3B62C4') + '" stroke-width="0.5"/>');
+    late.push(TL(ML - 11, wy - 1.2, e.pad.label, 1.8, 'fill="#000" font-weight="bold"'));
+  }
+
+  o.push(late.join(''));
+  o.push('</svg>');
+  return o.join('');
 }
 
 /* ============================================================
@@ -6285,6 +7093,37 @@ walkCopy.onclick  = () => {
   if(navigator.clipboard && navigator.clipboard.writeText)
     navigator.clipboard.writeText(text).then(done, () => flash('copy failed - select it by hand'));
   else flash('copy failed - select it by hand');
+};
+
+/* The breadboard view holds the plan it rendered, so the .svg download is the
+   picture on screen rather than a fresh translation of a board that may have
+   changed under it. */
+let BB_PLAN = null;
+function openBB(){
+  BB_PLAN = breadboardPlan();
+  const bad = !!(BB_PLAN.failed || !BB_PLAN.check.ok);
+  bbText.textContent = breadboardText(BB_PLAN);
+  bbArt.innerHTML = bad ? '' : breadboardSVG(BB_PLAN);
+  bbSvg.disabled = bad;
+  bb.hidden = false;
+}
+btnBB.onclick   = openBB;
+bbClose.onclick = () => { bb.hidden = true; };
+bbCopy.onclick  = () => {
+  const text = bbText.textContent;
+  const done = () => flash('breadboard steps copied');
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(text).then(done, () => flash('copy failed - select it by hand'));
+  else flash('copy failed - select it by hand');
+};
+bbSvg.onclick = () => {
+  if(!BB_PLAN || BB_PLAN.failed || !BB_PLAN.check.ok) return;
+  const blob = new Blob([breadboardSVG(BB_PLAN)], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-breadboard.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
 };
 
 btnNet.onclick     = openNetlist;

@@ -2122,6 +2122,103 @@ S.parts[1].pins = [[1,3],[5,3]];   // lug 1 to lug 3 instead - end to end
 computeNets();
 ok(runDRC().some(f => f.rule === 'part-short'), 'end lug to end lug without the wiper still errors');
 
+console.log('-- the breadboard translation --');
+/* The self-check inside breadboardPlan is the feature's own warranty: it
+   rebuilds connectivity from the planned holes alone and compares nets,
+   terminal by terminal, against the stripboard. These tests make sure that
+   warranty actually runs, and pin the invariants the plan promises on top. */
+S = demoProject(); computeNets();
+let bbp = breadboardPlan();
+ok(!bbp.failed, 'the demo fixture translates');
+ok(bbp.check && bbp.check.ok, 'demo: the self-check passes');
+ok(bbp.check.terminals > 30, 'demo: the self-check saw the whole board (' + bbp.check.terminals + ' terminals)');
+ok(bbp.half === true, 'demo: fits the 400-point half board');
+
+/* every landed hole is a real hole, named the house way, and used once */
+{
+  const seenHole = new Set();
+  let dup = false, badName = false;
+  const every = bbp.landings.map(l => l.at)
+    .concat(bbp.jumpers.map(j => j.from), bbp.jumpers.map(j => j.to));
+  for(const t of every){
+    if(t.rail) continue;
+    if(!/^[A-J]$/.test(t.row) || t.col < 1 || t.col > bbp.cols) badName = true;
+    const k = t.row + ':' + t.col;      // row letters never repeat across banks
+    if(seenHole.has(k)) dup = true;
+    seenHole.add(k);
+  }
+  ok(!badName, 'demo: every hole is A-J and on the board');
+  ok(!dup, 'demo: no hole is asked to take two things');
+}
+
+/* the steps document */
+let bbt = breadboardText(bbp);
+ok(bbt === breadboardText(breadboardPlan()), 'demo: the translation is deterministic');
+ok(bbt.indexOf('Self-check') >= 0, 'demo: the steps say they were checked');
+ok(bbt.indexOf('notch to the LEFT') >= 0, 'demo: the chip step states the orientation');
+{
+  let missing = null;
+  for(const p of S.parts.filter(q => q.kind !== 'link'))
+    if(bbt.indexOf(p.ref) < 0) missing = p.ref;
+  for(const d of S.pads)
+    if(bbt.indexOf(d.label) < 0) missing = d.label;
+  ok(!missing, 'demo: every part and pad appears in the steps' + (missing ? ' (lost ' + missing + ')' : ''));
+}
+{
+  const order = ['== The semiconductors ==', '== Jumpers ==', '== Resistors ==',
+                 '== Ceramics and film ==', '== Electrolytics ==', '== Off-board ==', '== Power up =='];
+  let last = -1, sorted = true;
+  for(const g of order){
+    const i = bbt.indexOf(g);
+    if(i < 0) continue;              // a group with nothing in it does not print
+    if(i < last) sorted = false;
+    last = i;
+  }
+  ok(sorted, 'demo: groups run semiconductors, jumpers, then drawer by drawer');
+}
+ok(/\+ leg into /.test(bbt), 'demo: electrolytics name their + leg');
+ok(bbt.indexOf('clip to the bottom + rail') >= 0, 'demo: the supply clips to a rail');
+ok(bbt.indexOf('tie the top') >= 0, 'demo: rails used on both sides get tied');
+ok(bbt.indexOf('wire link') < 0, 'demo: stripboard wire links do not travel - the nets do');
+
+S = exampleProject(); computeNets();
+bbp = breadboardPlan();
+ok(!bbp.failed && bbp.check.ok, 'the 555 example translates and self-checks');
+bbt = breadboardText(bbp);
+ok(bbt.indexOf('top + rail') >= 0, 'example: an upper-bank supply pin drops to the TOP rail');
+
+/* the refusals: a broken board and an empty one */
+S = demoProject();
+S.parts[0].pins[0] = [99, 99];       // C1 flung off the board - a DRC error
+computeNets();
+bbp = breadboardPlan();
+ok(!!bbp.failed && /DRC error/.test(bbp.failed), 'a board with DRC errors refuses to translate');
+ok(breadboardText(bbp).indexOf('NOT TRANSLATED') >= 0, 'and the steps say so instead of guessing');
+
+S = {version:2, name:'empty', board:{rows:8, cols:8}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(!!breadboardPlan().failed, 'an empty board says there is nothing to translate');
+
+/* a transistor keeps its legs adjacent, in one bank, in package order */
+S = {version:2, name:'q', board:{rows:6, cols:8}, cuts:[], parts:[
+  {id:'q1', kind:'trans', ref:'Q1', device:'2N3904', pins:[[1,1],[2,1],[3,1]]},
+  {id:'r1', kind:'res', ref:'R1', value:'10k', device:'fixed', pins:[[0,2],[3,3]]},
+], ics:[], pads:[
+  {id:'p1', label:'+9V', at:[0,0]},
+  {id:'p2', label:'GND', at:[1,5]},
+  {id:'p3', label:'OUT', at:[2,4]},
+]};
+computeNets();
+bbp = breadboardPlan();
+ok(!bbp.failed && bbp.check.ok, 'a bare transistor board translates and self-checks');
+{
+  const q = bbp.parts.find(r => r.part.ref === 'Q1');
+  const cs = q.targets.map(t => t.col);
+  ok(cs[1] === cs[0] + 1 && cs[2] === cs[1] + 1, 'Q1 legs land in three consecutive columns');
+  ok(q.targets.every(t => t.bank === q.targets[0].bank), 'Q1 legs stay in one bank');
+  ok(breadboardText(bbp).indexOf('flat face toward you') >= 0, 'the step states the package orientation');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
