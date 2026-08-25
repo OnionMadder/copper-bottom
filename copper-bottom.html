@@ -1104,6 +1104,8 @@ const DEV_PKG = {
   'DO-41': {shape:'box',  len:2.05, wid:1.06, leads:'axial'},   // plastic rectifier
   'LED5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LED
   'LED3':  {shape:'disc', dia:1.18, leads:'radial'},            // 3mm round LED
+  'CDISC': {shape:'disc', dia:1.97, leads:'radial'},            // 5mm ceramic disc
+  'BOXF':  {shape:'box',  len:2.83, wid:0.98, leads:'radial'},  // box film, WIMA MKS2-style 7.2 x 2.5 mm
   'LDR5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LDR
 };
 const DEV_LIB = {
@@ -1120,6 +1122,14 @@ const DEV_LIB = {
                   about:'a 5mm LED. Round body, both leads out the same end, and the SHORT leg is the cathode - the flat on the rim marks it too'},
     'LED 3mm':   {value:'red',    pkg:'LED3',  draw:'led',
                   about:'a 3mm LED - the small one. Same deal as the 5mm: short leg and the flat on the rim mark the cathode'},
+  },
+  cap: {
+    'film':         {pkg:null,    draw:'box',
+                     about:'a small film or ceramic square - the default body'},
+    'ceramic disc': {pkg:'CDISC', draw:'disc',
+                     about:'a ceramic disc - the thin round wafer. Tight on board space, no polarity'},
+    'box film':     {pkg:'BOXF',  draw:'box',
+                     about:'a box film cap, WIMA-style - the rectangular block on a 5mm lead pitch. Takes real room on the board'},
   },
   res: {
     'fixed': {value:'10k',  pkg:null,   draw:'axial',
@@ -2399,12 +2409,17 @@ function bom(){
 
   for(const q of S.parts){
     const lib = PART_LIB[q.kind] || {};
-    /* A diode's package changes the part you order, so DO-35 and DO-41 are
-       separate lines. How a part is MOUNTED does not - a resistor standing on
-       end is the same resistor, so mount:'vertical' deliberately does not
-       split the row. */
-    const note = q.kind === 'diode' ? diodePkg(q) : '';
-    const r = add(q.kind, lib.name || q.kind, q.device || q.value || '', note);
+    /* The value is what you order by, so it leads; the package or family
+       goes in the note, because a disc and a box of the same 100n are
+       different drawer trips. A family-default device ('fixed', 'film') says
+       nothing and notes nothing. How a part is MOUNTED still does not split
+       the row - a resistor standing on end is the same resistor. */
+    const fam = DEV_LIB[q.kind];
+    const isDef = fam && q.device === Object.keys(fam)[0];
+    const note = q.kind === 'diode'
+      ? (isDef || !q.device ? diodePkg(q) : q.device)
+      : (q.device && !isDef ? q.device : '');
+    const r = add(q.kind, lib.name || q.kind, q.value || q.device || '', note);
     r.qty++; r.refs.push(q.ref);
   }
   for(const ic of S.ics){
@@ -3749,7 +3764,6 @@ function render(){
   /* one table drives both the drawing and the collision check, so a part is
      never tested against a size it was not drawn at */
   const RW = PITCH * FOOTPRINT.res.len,   RH = PITCH * FOOTPRINT.res.wid;
-  const CW = PITCH * FOOTPRINT.cap.len,   CH = PITCH * FOOTPRINT.cap.wid;
   /* diodes are sized per part inside the loop - see DIODE_PKG */
   const ER = PITCH * FOOTPRINT.ecap.dia / 2;
   const TR = PITCH * FOOTPRINT.trans.dia / 2;
@@ -3923,13 +3937,26 @@ function render(){
         '</g>');
 
     }else if(p.kind === 'cap'){
-      tint = '#A8C6F2'; off = CH/2 + 12; half = CW/2;
-      o.push(g +
-        '<rect x="' + (-CW/2) + '" y="' + (-CH/2) + '" width="' + CW + '" height="' + CH +
-        '" rx="' + (CH*0.24) + '" fill="#3B6FC4" stroke="#0C1526" stroke-width="1.1"/>' +
-        '<rect x="' + (-CW/2) + '" y="' + (-CH/2) + '" width="' + CW + '" height="' + (CH*0.34) +
-        '" rx="' + (CH*0.17) + '" fill="#7FA9EA" fill-opacity="0.55"/>' +
-        '</g>');
+      const cfp = footprintOf(p);
+      if(cfp.shape === 'disc'){
+        /* ceramic disc: a thin tan wafer seen edge-on-ish from above */
+        const CR2 = PITCH * cfp.dia / 2;
+        tint = '#E8C89A'; off = CR2 + 12; half = CR2;
+        o.push(g +
+          '<circle cx="0" cy="0" r="' + CR2 + '" fill="#D9A45B" stroke="#6E5023" stroke-width="1.1"/>' +
+          '<circle cx="' + (-CR2*0.25) + '" cy="' + (-CR2*0.25) + '" r="' + (CR2*0.35) + '" fill="#EFC98E" fill-opacity="0.7"/>' +
+          '</g>');
+      }else{
+        const CW2 = PITCH * cfp.len, CH2 = PITCH * cfp.wid;
+        const boxy = p.device === 'box film';
+        tint = boxy ? '#F2A8A8' : '#A8C6F2'; off = CH2/2 + 12; half = CW2/2;
+        o.push(g +
+          '<rect x="' + (-CW2/2) + '" y="' + (-CH2/2) + '" width="' + CW2 + '" height="' + CH2 +
+          '" rx="' + (CH2*0.24) + '" fill="' + (boxy ? '#B03A2E' : '#3B6FC4') + '" stroke="' + (boxy ? '#3D120D' : '#0C1526') + '" stroke-width="1.1"/>' +
+          '<rect x="' + (-CW2/2) + '" y="' + (-CH2/2) + '" width="' + CW2 + '" height="' + (CH2*0.34) +
+          '" rx="' + (CH2*0.17) + '" fill="' + (boxy ? '#E07A6E' : '#7FA9EA') + '" fill-opacity="0.55"/>' +
+          '</g>');
+      }
 
     }else if(p.kind === 'diode'){
       /* cathode band at the B end, matching how the real part is printed */
@@ -4532,8 +4559,17 @@ function exportSVG(side){
                  '<line x1="' + bx2 + '" y1="-1.0" x2="' + bx2 + '" y2="1.0" stroke-width="0.35"/>').join('') +
                '</g>');
       }else if(p.kind === 'cap'){
-        half = 2.05;
-        o.push(g + '<rect x="-2.05" y="-2.05" width="4.1" height="4.1" rx="0.5"/></g>');
+        const cfp2 = footprintOf(p);
+        if(cfp2.shape === 'disc'){
+          const cr = cfp2.dia * MM / 2;
+          half = cr;
+          o.push(g + '<circle cx="0" cy="0" r="' + cr.toFixed(2) + '"/></g>');
+        }else{
+          const cl = cfp2.len * MM / 2, cw = cfp2.wid * MM / 2;
+          half = cl;
+          o.push(g + '<rect x="' + (-cl).toFixed(2) + '" y="' + (-cw).toFixed(2) + '" width="' + (2*cl).toFixed(2) +
+                 '" height="' + (2*cw).toFixed(2) + '" rx="0.5"/></g>');
+        }
       }else if(p.kind === 'diode'){
         half = 1.65;
         const zt = (dev && dev.draw === 'zener')
@@ -4785,7 +4821,7 @@ function downloadSVG(side){
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
 const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k'};
-const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed'};
+const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed', cap:'film'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',

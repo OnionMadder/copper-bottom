@@ -2036,6 +2036,27 @@ const wkShaped = walkthrough();
 ok(!/run down that column/.test(wkShaped) && /custom footprint/.test(wkShaped),
    'a shaped chip step points at the drawing instead');
 
+console.log('-- capacitor packages --');
+S = {version:2, name:'caps', board:{rows:8, cols:12}, cuts:[], pads:[], ics:[], parts:[
+  {id:'a', kind:'cap', ref:'C1', value:'100n', device:'film',         pins:[[1,1],[3,1]]},
+  {id:'b', kind:'cap', ref:'C2', value:'100n', device:'ceramic disc', pins:[[1,4],[3,4]]},
+  {id:'c', kind:'cap', ref:'C3', value:'100n', device:'box film',     pins:[[1,7],[3,7]]},
+  {id:'d', kind:'res', ref:'R1', value:'10k',  device:'fixed',        pins:[[5,1],[7,1]]},
+]};
+computeNets();
+ok(footprintOf(S.parts[0]).len === 1.60, 'the default film cap keeps the small square');
+ok(footprintOf(S.parts[1]).shape === 'disc' && footprintOf(S.parts[1]).dia === 1.97, 'a ceramic disc is a 5mm disc');
+ok(footprintOf(S.parts[2]).len === 2.83 && footprintOf(S.parts[2]).wid === 0.98, 'a box film is the 7.2 x 2.5 WIMA body');
+ok(Object.values(DEV_LIB.cap).every(d => !('value' in d)),
+   'no cap device carries a value - switching the package can never rewrite the value');
+const capBom = bom();
+const rRow = capBom.find(r => r.refs.indexOf('R1') >= 0);
+ok(rRow.what === '10k', 'a placed resistor lists as its value, not as "fixed"');
+const c2Row = capBom.find(r => r.refs.indexOf('C2') >= 0);
+ok(c2Row.what === '100n' && c2Row.note === 'ceramic disc', 'a ceramic 100n is value plus package note');
+const c1Row = capBom.find(r => r.refs.indexOf('C1') >= 0);
+ok(c1Row.note === '' && c1Row.refs.indexOf('C2') < 0, 'the default film 100n notes nothing and rows apart from the disc');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
