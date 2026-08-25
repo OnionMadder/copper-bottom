@@ -240,10 +240,15 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 }
 
 /* ---- board ---- */
-.stage{flex:1; min-width:0; min-height:0; overflow:auto; padding:22px; background:var(--void)}
+/* A flex row so the back of the board can sit beside the front. With one
+   board it lays out exactly as the block it used to be; with two they wrap,
+   which on a narrow screen stacks the back below the front. */
+.stage{flex:1; min-width:0; min-height:0; overflow:auto; padding:22px; background:var(--void);
+  display:flex; flex-wrap:wrap; gap:26px; align-items:flex-start; align-content:flex-start}
 .stage.aligning{cursor:crosshair}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
+.bhit{fill:transparent; cursor:pointer}
 .phit{cursor:move}
 .pinhit{cursor:crosshair}
 
@@ -252,6 +257,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   flex:1 1 auto; width:auto; background:var(--panel);
   display:flex; flex-direction:column; min-height:0;
 }
+/* the drawer handle exists only where the panel IS a drawer */
+.side .grab{display:none}
 /* The right-hand column: what you are editing, then what is wrong with it.
    A wrapper rather than one panel, because below 900px these two want
    completely different treatment and a shared parent takes one down with the
@@ -355,6 +362,14 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     border-top:1px solid var(--mint); box-shadow:0 -10px 26px rgba(0,0,0,.7);
   }
   .side[hidden]{display:none}
+  /* the drawer's handle - the sheet needs something that says "I move".
+     Sticky, so it stays reachable however far the findings scroll. */
+  .side .grab{
+    display:flex; position:sticky; top:0; z-index:1;
+    justify-content:center; padding:8px 0 6px; cursor:grab;
+    touch-action:none; background:var(--panel);
+  }
+  .side .grab span{width:46px; height:5px; border-radius:3px; background:var(--line2)}
   .rail{width:52px}
   /* no keyboard on a phone, so the shortcut is dead weight in a 52px rail.
      The icon takes the middle on its own. */
@@ -590,6 +605,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <div class="ctx" id="ctx"></div>
     </div>
   <div class="side" id="side">
+    <div class="grab" id="sideGrab" title="drag down or tap to put the panel away"><span></span></div>
     <h2 id="drchdr">Checks</h2>
     <div class="drcwrap" id="drclist"></div>
     <h2>Inspector</h2>
@@ -676,6 +692,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>cols <button id="cDn" title="one column fewer - hold to keep going">&minus;</button><input id="cols" type="number" min="2" max="80" value="20"><button id="cUp" title="one column more - hold to keep going">+</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
+  <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <div class="sp"></div>
   <span id="stat"></span>
   <span id="netbadge"></span>
@@ -4872,7 +4889,7 @@ function render(){
     '.pol{fill:#fff;font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:3}' +
     '</style></svg>');
 
-  stage.innerHTML = o.join('');
+  stage.innerHTML = o.join('') + (FLIP ? renderSolderView(hl) : '');
   if(typeof startup !== 'undefined')
     startup.hidden = !!(S.parts.length || S.ics.length || S.pads.length || S.cuts.length);
   document.getElementById('zlvl').textContent = Math.round(Z * 100) + '%';
@@ -4880,6 +4897,128 @@ function render(){
   renderDRC();
   renderReadout();
   renderStatus();
+}
+
+/* ------------------------------------------------------------
+   THE BACK OF THE BOARD, beside the front and synced with it.
+
+   This is a VIEW, not a second editor: the copper faces you, columns are
+   mirrored the way the board is when you turn it over, and the things that
+   matter at the solder side are the things drawn boldly - strips, cuts,
+   holes. Parts live on the far side, so only their shadows appear: a chip's
+   dashed footprint with its pin-1 corner, a link's dashed run, a pad's ring.
+   Hover lights the same net in both views because both read the same
+   hoverHole; clicking a hole pins its net, whatever tool is active, because
+   pointing at copper is all a back view is for. Editing stays on the front,
+   where the parts are - a cut placed on a mirrored view is the classic way
+   to cut the wrong hole, which is the mistake this pane exists to prevent.
+   ------------------------------------------------------------ */
+let FLIP = false;
+function renderSolderView(hl){
+  const rows = S.board.rows, cols = S.board.cols;
+  const W = MARGIN * 2 + (cols - 1) * PITCH;
+  const H = MARGIN * 2 + (rows - 1) * PITCH;
+  const mX = c => X(cols - 1 - c);
+  const cutSet = new Set(S.cuts);
+  const o = [];
+
+  o.push('<svg id="board2" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
+         '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
+  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="#100C1B" stroke="#241F36"/>');
+  o.push('<text class="bk" x="' + (MARGIN - 24) + '" y="13">BACK - mirrored, copper facing you</text>');
+
+  /* rulers keep the layout's own numbering, so a coordinate from the cut
+     list lands on the same hole in both views */
+  for(let c = 0; c < cols; c++)
+    o.push('<text class="rule" x="' + mX(c) + '" y="' + (MARGIN - 17) + '">' + dCol(c) + '</text>');
+  for(let r = 0; r < rows; r++)
+    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
+
+  /* copper, bright - on this side it is what you are looking at */
+  for(let r = 0; r < rows; r++){
+    let c = 0;
+    while(c < cols){
+      if(cutSet.has(K(r,c))){ c++; continue; }
+      let e = c;
+      while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
+      const net = NET.netAt(r, c);
+      const col = net ? net.color : '#555';
+      const on  = net && net.id === hl;
+      const x0 = Math.min(mX(c), mX(e)) - PITCH * 0.44;
+      const w  = Math.abs(mX(e) - mX(c)) + PITCH * 0.88;
+      const bar = (f, fo, s, so, sw) =>
+        o.push('<rect x="' + x0 + '" y="' + (Y(r) - 9.5) + '" width="' + w + '" height="19" rx="9.5" fill="' + f +
+               '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
+      if(on)             bar(col, 0.34, col, 1, 1.6);
+      else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+      else               bar('#B0703A', 0.30, '#C98B4B', 0.55, 1);
+      c = e + 1;
+    }
+  }
+
+  for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
+    if(cutSet.has(K(r,c))) continue;
+    const net = NET.netAt(r, c);
+    const col = net ? net.color : '#555';
+    const on  = net && net.id === hl;
+    if(on) o.push('<circle cx="' + mX(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
+    o.push('<circle cx="' + mX(c) + '" cy="' + Y(r) + '" r="5" fill="#07050D" stroke="' + (on ? col : '#C98B4B') +
+           '" stroke-opacity="' + (on ? 1 : 0.75) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
+  }
+
+  /* the far side's shadows: chip footprints, links, pad rings */
+  for(const ic of S.ics){
+    const ex = icExtent(ic);
+    const xa = mX(ex.c0), xb = mX(ex.c1);
+    const x0 = Math.min(xa, xb) - 9, x1 = Math.max(xa, xb) + 9;
+    const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
+    o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
+           '" rx="4" fill="none" stroke="#8B849E" stroke-width="1.2" stroke-dasharray="5 4"/>');
+    const p1 = pinPos(ic, 1);
+    o.push('<rect x="' + (mX(p1[1]) - 4) + '" y="' + (Y(p1[0]) - 4) +
+           '" width="8" height="8" fill="none" stroke="#fff" stroke-width="1.4"/>');
+    o.push('<text class="bk" x="' + mX(p1[1]) + '" y="' + (Y(p1[0]) - 14) +
+           '" text-anchor="middle">pin1</text>');
+  }
+  for(const p of S.parts){
+    if(p.kind !== 'link') continue;
+    o.push('<line x1="' + mX(p.pins[0][1]) + '" y1="' + Y(p.pins[0][0]) +
+           '" x2="' + mX(p.pins[1][1]) + '" y2="' + Y(p.pins[1][0]) +
+           '" stroke="#8B849E" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>');
+  }
+  for(const d of S.pads){
+    if(d.at[0] >= rows || d.at[1] >= cols) continue;
+    o.push('<circle cx="' + mX(d.at[1]) + '" cy="' + Y(d.at[0]) +
+           '" r="8" fill="none" stroke="#FFB300" stroke-width="1.6"/>');
+    o.push('<text class="pad" fill="#FFB300" x="' + (mX(d.at[1]) + 11) + '" y="' + (Y(d.at[0]) + 3.5) + '">' +
+           esc(d.label) + '</text>');
+  }
+
+  /* cuts last and boldest - they are what the back is FOR */
+  for(const k of S.cuts){
+    const p = k.split(','), r = +p[0], c = +p[1];
+    if(r >= rows || c >= cols) continue;
+    const x = mX(c), y = Y(r), s = 7.5;
+    const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
+                  'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="#FF3DBE" fill-opacity="0.14"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="#050409" stroke="#FF3DBE" stroke-width="1.8"/>');
+    o.push('<path d="' + cross + '" stroke="#0B0813" stroke-width="6" stroke-linecap="round"/>');
+    o.push('<path d="' + cross + '" stroke="#FF6FD0" stroke-width="3.2" stroke-linecap="round"/>');
+  }
+
+  /* which corner is row 1, col 1 once the board is turned over - everyone
+     gets this wrong once, so the back says it out loud */
+  o.push('<text class="bk" x="' + (mX(0) + 9) + '" y="' + (Y(0) - 14) + '">&#9660; row 1, col 1</text>');
+
+  /* the hit layer carries MODEL coordinates, so the shared hover and click
+     handlers never have to know which view the pointer is in */
+  for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++)
+    o.push('<rect class="bhit" data-r="' + r + '" data-c="' + c + '" x="' + (mX(c) - PITCH/2) +
+           '" y="' + (Y(r) - PITCH/2) + '" width="' + PITCH + '" height="' + PITCH + '" fill="transparent"/>');
+
+  o.push('<style>.bk{fill:#8B849E;font:9px ui-monospace,monospace}</style></svg>');
+  return o.join('');
 }
 
 function renderNets(hl){
@@ -6402,8 +6541,15 @@ function flash(msg){
 /* ---- event wiring ---- */
 stage.addEventListener('pointermove', e => {
   if(drag) return;
-  const q = holeFromEvent(e);
-  const next = (q && q[0] >= 0 && q[1] >= 0 && q[0] < S.board.rows && q[1] < S.board.cols) ? q : null;
+  let next = null;
+  /* the back view's hit rects carry model coordinates, so a pointer there
+     needs no mirror math - and must not go through the front board's CTM */
+  if(e.target && e.target.classList && e.target.classList.contains('bhit')){
+    next = [+e.target.dataset.r, +e.target.dataset.c];
+  } else if(!(e.target.closest && e.target.closest('#board2'))){
+    const q = holeFromEvent(e);
+    next = (q && q[0] >= 0 && q[1] >= 0 && q[0] < S.board.rows && q[1] < S.board.cols) ? q : null;
+  }
   const same = (!next && !hoverHole) ||
     (next && hoverHole && next[0] === hoverHole[0] && next[1] === hoverHole[1]);
   if(same) return;
@@ -6413,7 +6559,15 @@ stage.addEventListener('pointermove', e => {
 stage.addEventListener('pointerleave', () => { if(hoverHole){ hoverHole = null; render(); } });
 stage.addEventListener('click', e => {
   const t = e.target;
-  if(t && t.classList && t.classList.contains('hit')) onHole(+t.dataset.r, +t.dataset.c);
+  if(!t || !t.classList) return;
+  if(t.classList.contains('hit')){ onHole(+t.dataset.r, +t.dataset.c); return; }
+  /* the back view only points at copper: a click pins the net, whatever the
+     active tool - editing from a mirrored view is how the wrong hole gets cut */
+  if(t.classList.contains('bhit')){
+    const net = NET.netAt(+t.dataset.r, +t.dataset.c);
+    pinnedNet = (net && pinnedNet === net.id) ? null : (net ? net.id : null);
+    render();
+  }
 });
 stage.addEventListener('pointerdown', e => {
   if(TOOL !== 'select') return;
@@ -6528,6 +6682,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if(k === 'n'){ tnet.click(); return; }
+  if(k === 'm'){ tflip.click(); return; }
   if(k === '[' ){ zoom(-1); return; }
   if(k === ']' ){ zoom(1);  return; }
   if(KEYMAP[k]){ e.preventDefault(); setTool(KEYMAP[k]); }
@@ -6555,6 +6710,7 @@ function holdable(btn, fn){
 
 function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
+tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 holdable(zin,  () => zoom(1));
 holdable(zout, () => zoom(-1));
 
@@ -7003,6 +7159,35 @@ btnChecks.onclick = () => { side.hidden = !side.hidden; syncChecksButton(); };
 /* start closed on a narrow screen so it does not cover the board on arrival */
 if(NARROW()) side.hidden = true;
 window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syncChecksButton(); });
+
+/* The drawer's handle. A tap puts the sheet away; so does dragging it down
+   past its own top quarter. While the finger is down the sheet follows it,
+   because a drawer that only teleports does not read as a drawer. */
+(function(){
+  let startY = null, dy = 0;
+  const settle = (close) => {
+    side.style.transform = '';
+    side.style.transition = '';
+    if(close){ side.hidden = true; syncChecksButton(); }
+  };
+  sideGrab.addEventListener('pointerdown', e => {
+    startY = e.clientY; dy = 0;
+    try{ sideGrab.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  sideGrab.addEventListener('pointermove', e => {
+    if(startY === null) return;
+    dy = Math.max(0, e.clientY - startY);
+    side.style.transform = 'translateY(' + dy + 'px)';
+  });
+  const up = () => {
+    if(startY === null) return;
+    const gone = dy > Math.min(70, side.offsetHeight / 4) || dy < 5;  // a real pull, or a plain tap
+    settle(gone);
+    startY = null;
+  };
+  sideGrab.addEventListener('pointerup', up);
+  sideGrab.addEventListener('pointercancel', () => { if(startY !== null){ settle(false); startY = null; } });
+})();
 
 /* A layout turned into prose BY THE TOOL cannot disagree with the tool - it
    converts the coordinates the same way the board draws them. That is the
