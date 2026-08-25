@@ -411,10 +411,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .tick input:checked + span{background:#333; box-shadow:inset 0 0 0 2px #fff}
 
 @media print{
-  /* the paper needs a margin of its own - with the screen padding zeroed,
-     the brand rule was landing flush on the sheet's edge */
-  @page{margin:12mm 14mm}
-  .hdr,.main,.foot,.sheetbar{display:none !important}
+  .hdr,.main,.foot,.sheetbar,.thanks{display:none !important}
   .sheet{position:static; background:#fff}
   .sheet[hidden]{display:none}
   .sheetdoc{overflow:visible; padding:0; color:#000}
@@ -423,7 +420,14 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .sheetdoc .svgwrap{page-break-inside:avoid}
   tr,h1{page-break-inside:avoid}
 }
-@page{ margin:12mm; }
+/* The paper needs a margin of its own - with the screen padding zeroed, the
+   brand rule was landing flush on the sheet's edge. ONE @page rule, at the
+   top level: there used to be a second inside the media block above, and
+   @page rules cascade, so whichever came later silently won and the sides
+   printed 12mm instead of the intended 14. Note the browser only honors this
+   while the print dialog's margins are on "Default" - a sticky "None" from an
+   earlier print beats any CSS. */
+@page{ margin:12mm 14mm; }
 
 /* ---- netlist overlay ---- */
 .nlnote{color:var(--soft); font-size:11.5px}
