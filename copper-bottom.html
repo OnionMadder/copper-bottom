@@ -33,7 +33,7 @@
   --gray:#B0B0B0; --soft:#9C94B4; --dim:#6B6580;
 
   /* Two families, and the split is not decorative. Monospace is for anything
-     you would COUNT or type back — coordinates, refs, values, netlists, the
+     you would COUNT or type back - coordinates, refs, values, netlists, the
      board itself. Prose is prose: a DRC finding explaining what your board
      will do is a sentence, and sentences set in a terminal font are why this
      read as utility software rather than as an instrument.
@@ -44,7 +44,7 @@
 }
 *{box-sizing:border-box}
 
-/* Windows draws a wide light-grey scrollbar that sits on this palette like a
+/* Windows draws a wide light-gray scrollbar that sits on this palette like a
    strip of masking tape. Firefox takes the two-property form, everything else
    takes the pseudo-elements; the header sets scrollbar-width:none separately
    and still wins, because it is the more specific rule. */
@@ -111,8 +111,8 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 }
 .tool:hover{background:#171325; color:#fff; border-color:var(--line2)}
 .tool.on{background:#1c1630; border-color:var(--mint); color:var(--mint)}
-/* The icon is the part as the BOARD draws it — a resistor with bands, an
-   electrolytic as a disc with a +, a DIP with its notch — not the schematic
+/* The icon is the part as the BOARD draws it - a resistor with bands, an
+   electrolytic as a disc with a +, a DIP with its notch - not the schematic
    symbol. This tool exists for people who cannot read schematics; the rail is
    the wrong place to make them start. The letter stays, moved to the right and
    dimmed, because it is still the shortcut. */
@@ -204,11 +204,11 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 /* ---- the one-time thank-you ---- */
 /* Shown once, dismissed forever. [hidden] is spelled out because an author
    display:flex beats the attribute, which is the mistake this file has made
-   before. If localStorage is unavailable the banner simply shows again — a
+   before. If localStorage is unavailable the banner simply shows again - a
    nuisance, never a blocker, and never a reason to stop the app starting. */
 .thanks[hidden]{display:none}
 /* wraps, so the close button drops to its own line on a narrow screen
-   rather than being pushed off the right edge — a banner you cannot dismiss
+   rather than being pushed off the right edge - a banner you cannot dismiss
    is worse than no banner */
 .thanks{
   display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; flex:0 0 auto;
@@ -267,7 +267,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 /* wrap, and give the consequence a row of its own. Without this the .why
    block is just another flex item on the same line: it takes its content
    width, .msg shrinks to min-content, and a finding renders one word per
-   line. It did exactly that from the day consequences shipped — and every
+   line. It did exactly that from the day consequences shipped - and every
    finding carries one, so the panel was never right. */
 .f{display:flex; flex-wrap:wrap; align-items:flex-start; gap:7px;
    padding:8px 12px 9px 10px; cursor:pointer;
@@ -306,7 +306,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .foot input{width:44px; padding:1px 4px; text-align:center}
 #saved{color:var(--mint)}
 /* Narrow layout. The rail keeps its tool icons and loses its text labels, and
-   the net/DRC side panel goes away — both are readable losses.
+   the net/DRC side panel goes away - both are readable losses.
 
    The context panel must NOT go away with them, though it used to. It is the
    only place in the whole app you can name a pad, type a value, pick a chip,
@@ -326,7 +326,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .ovbar b,.ovbar .rd{display:none}
 
   /* The side panel used to be display:none here, which took the DRC, the net
-     list and the inspector with it — on a tool whose whole point is telling you
+     list and the inspector with it - on a tool whose whole point is telling you
      what is wrong, that is the last thing to hide. It becomes a sheet you pull
      up from the footer instead, so the findings are always one tap away. */
   .side{
@@ -419,6 +419,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   background:#171325; border:1px solid var(--line2); color:var(--gray);
   font-family:var(--mono); font-size:11px;
 }
+
 </style>
 </head>
 
@@ -430,7 +431,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <!-- Two groups, because these were four unrelated jobs wearing one coat:
        things you open while working, and things you do to the whole board.
        'new' sat next to 'demo', one misclick apart from wiping the board. It
-       is last now, and tinted. (Both are undoable — load() pushes undo.) -->
+       is last now, and tinted. (Both are undoable - load() pushes undo.) -->
   <span class="grp">
     <button id="btnRef" title="keep a schematic or layout photo beside the board, or behind it">reference</button>
     <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
@@ -442,7 +443,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="btnImport">import</button>
     <button id="btnExport">export .json</button>
     <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
-    <button id="btnNew" class="danger" title="clear the board and start again — ctrl+z brings it back">new</button>
+    <button id="btnNew" class="danger" title="clear the board and start again - ctrl+z brings it back">new</button>
   </span>
   <input type="file" id="file" accept=".json,application/json" style="display:none">
   <input type="file" id="refFile" accept="image/*" style="display:none">
@@ -452,7 +453,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span class="msg">Thank you to <b>Paul Stevenson</b> of
     <a href="https://paulinthelab.blogspot.com/" target="_blank" rel="noopener noreferrer">Paul in the Lab</a>,
     for being my inspiration to keep burning my fingertips.</span>
-  <button id="thanksClose" title="close — this only appears once">close</button>
+  <button id="thanksClose" title="close - this only appears once">close</button>
 </div>
 
 <div class="main">
@@ -473,6 +474,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="diode"><kbd>D</kbd><span class="lbl">diode</span></button>
       <button class="tool" data-tool="trans"><kbd>Q</kbd><span class="lbl">transistor</span></button>
       <button class="tool" data-tool="trim"><kbd>W</kbd><span class="lbl">trimpot</span></button>
+      <button class="tool" data-tool="pot"><kbd>O</kbd><span class="lbl">potentiometer</span></button>
       <button class="tool" data-tool="reg"><kbd>G</kbd><span class="lbl">regulator</span></button>
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
@@ -507,7 +509,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <div class="stage" id="stage"></div>
     <div class="startup" id="startup" hidden>
       <div class="t">Nothing on the board yet</div>
-      <p>Pick a part on the left and click the holes it sits in &mdash;
+      <p>Pick a part on the left and click the holes it sits in -
          <kbd>U</kbd> a chip, <kbd>R</kbd> a resistor, <kbd>J</kbd> a wire link,
          <kbd>X</kbd> a track cut.</p>
       <p>Copying a layout you found somewhere? Open <b>reference</b>, load the
@@ -538,7 +540,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     </div>
   </div>
   <!-- Edit sits directly above Checks on purpose. They are the pair you work
-       in — change a thing, read what it did — and they used to be in opposite
+       in - change a thing, read what it did - and they used to be in opposite
        corners of the window, which is a diagonal your eyes make hundreds of
        times an hour. Inspector and Nets are reference, so they go below. -->
   <div class="rightcol">
@@ -560,7 +562,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 <div class="sheet" id="parts" hidden>
   <div class="sheetbar">
     <b>PARTS</b>
-    <span class="nlnote">optional — paste the list the build came with</span>
+    <span class="nlnote">optional - paste the list the build came with</span>
     <span class="sp"></span>
     <span id="partsVerdict"></span>
     <button id="partsClose">close</button>
@@ -576,7 +578,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 <div class="sheet" id="walk" hidden>
   <div class="sheetbar">
     <b>WALKTHROUGH</b>
-    <span class="nlnote">this layout as steps — for sharing, or for placing it again</span>
+    <span class="nlnote">this layout as steps - for sharing, or for placing it again</span>
     <span class="sp"></span>
     <button id="walkCopy">copy</button>
     <button id="walkClose">close</button>
@@ -587,7 +589,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 <div class="sheet" id="netl" hidden>
   <div class="sheetbar">
     <b>NETLIST</b>
-    <span class="nlnote">optional — a second opinion, never required</span>
+    <span class="nlnote">optional - a second opinion, never required</span>
     <span class="sp"></span>
     <span id="nlVerdict"></span>
     <button id="nlFromBoard" title="write out the circuit the copper currently has, as a starting point">from my board</button>
@@ -620,7 +622,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>rows <input id="rows" type="number" min="2" max="60" value="13"></span>
   <span>cols <input id="cols" type="number" min="2" max="80" value="20"></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
-  <span>strips <button id="tnet" title="N — colour every net, or leave the board quiet">copper</button></span>
+  <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
   <div class="sp"></div>
   <span id="stat"></span>
   <span id="netbadge"></span>
@@ -629,7 +631,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 
 <script>
 "use strict";
-/*#region model — extracted verbatim by test/fixture.test.js */
+/*#region model - extracted verbatim by test/fixture.test.js */
 /* ============================================================
    MODEL
    ============================================================ */
@@ -647,6 +649,7 @@ const PART_LIB = {
   diode: {legs:2, name:'diode',        prefix:'D', polarized:true},
   trans: {legs:3, name:'transistor',   prefix:'Q'},
   trim:  {legs:3, name:'trimpot',      prefix:'VR'},
+  pot:   {legs:3, name:'potentiometer', prefix:'VR'},
   reg:   {legs:3, name:'regulator',    prefix:'U'},
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
@@ -668,6 +671,7 @@ const LEG_LIB = {
   reg:{ '78L05':['O','G','I'], '78L09':['O','G','I'], '78L12':['O','G','I'],
         'TO-92':['1','2','3'] },
   trim:{ 'trimpot':['1','W','3'] },
+  pot:{ 'potentiometer':['1','W','3'] },
 };
 function legLabels(p){
   const fam = LEG_LIB[p.kind];
@@ -690,7 +694,7 @@ const clampInt = (v, lo, hi, dflt) => {
 
 /* migrate() used to default only the TOP level and trust everything under it.
    A file with a part missing its pins, a pad missing its hole, or a null in the
-   cut list would sail through and then throw during the first render — by which
+   cut list would sail through and then throw during the first render - by which
    point S had already been replaced, so the board on screen was gone and the app
    was wedged. That is what a truncated download or a hand-edited file looks
    like, and it is the worst possible moment to fall over.
@@ -764,32 +768,32 @@ function migrate(obj){
   return o;
 }
 
-/* IC library. `roles` drives pin labelling now and the floating-input DRC later.
+/* IC library. `roles` drives pin labeling now and the floating-input DRC later.
    in = logic input, out = output, vdd/gnd = supply. */
 /* Pin names and what each pin is for, in words a builder can act on.
 
    Shared per family exactly as `roles` is, and for the same reason: a name
    that drifts from its twin is a lie told confidently. A pin absent from these
-   tables falls back to showing its role, which is what the panel did before —
+   tables falls back to showing its role, which is what the panel did before -
    missing detail degrades to less detail, never to wrong detail.
 
    `n` is the datasheet's name for the pin. `d` is optional, and only earns its
    place where knowing the name still leaves you stuck. */
 const PINS_NE555 = {
   1: {n:'GND',  d:'the negative supply, and the reference everything else is measured against'},
-  2: {n:'TRIG', d:'starts the pulse — fires when this pin falls below a third of the supply'},
+  2: {n:'TRIG', d:'starts the pulse - fires when this pin falls below a third of the supply'},
   3: {n:'OUT',  d:'the output, swinging nearly rail to rail; it can drive a small load directly'},
   4: {n:'RESET',d:'holds the timer off while it is low, so tie it to the supply when unused'},
   5: {n:'CTRL', d:'sets the comparator threshold; normally left open, or 10n to ground if the supply is noisy'},
-  6: {n:'THR',  d:'ends the pulse — fires when this pin rises above two thirds of the supply'},
+  6: {n:'THR',  d:'ends the pulse - fires when this pin rises above two thirds of the supply'},
   7: {n:'DIS',  d:'dumps the timing capacitor to ground; it can only pull down, never up'},
   8: {n:'V+',   d:'the positive supply'},
 };
 const inA = (g, out) => ({n:g + 'A', d:'input of inverter ' + g + '; its output is pin ' + out});
-const inY = (g, inp) => ({n:g + 'Y', d:'output of inverter ' + g + ' — it goes high when pin ' + inp + ' goes low'});
+const inY = (g, inp) => ({n:g + 'Y', d:'output of inverter ' + g + ' - it goes high when pin ' + inp + ' goes low'});
 const PINS_INV_HEX = {
   1:inA(1,2),  2:inY(1,1),  3:inA(2,4),  4:inY(2,3),  5:inA(3,6),  6:inY(3,5),
-  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  7:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   8:inY(4,9),  9:inA(4,8),  10:inY(5,11), 11:inA(5,10), 12:inY(6,13), 13:inA(6,12),
   14:{n:'VDD', d:'the positive supply'},
 };
@@ -800,15 +804,15 @@ const gOut = (g, a, b) =>
 const PINS_GATE_QUAD2 = {
   1:gIn(1,'A',2,3), 2:gIn(1,'B',1,3), 3:gOut(1,1,2),
   4:gOut(2,5,6),    5:gIn(2,'A',6,4), 6:gIn(2,'B',5,4),
-  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  7:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   8:gIn(3,'A',9,10), 9:gIn(3,'B',8,10), 10:gOut(3,8,9),
   11:gOut(4,12,13), 12:gIn(4,'A',13,11), 13:gIn(4,'B',12,11),
   14:{n:'VDD', d:'the positive supply'},
 };
 const PINS_BUF_HEX = {
-  1:{n:'VDD', d:'the positive supply — note it is pin 1 here, not the usual top corner'},
+  1:{n:'VDD', d:'the positive supply - note it is pin 1 here, not the usual top corner'},
   2:{n:'1Y'}, 3:{n:'1A'}, 4:{n:'2Y'}, 5:{n:'2A'}, 6:{n:'3Y'}, 7:{n:'3A'},
-  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   9:{n:'4A'}, 10:{n:'4Y'}, 11:{n:'5A'}, 12:{n:'5Y'},
   13:{n:'NC', d:'not connected inside the chip; nothing you do to this pin matters'},
   14:{n:'6Y'}, 15:{n:'6A'},
@@ -816,14 +820,14 @@ const PINS_BUF_HEX = {
 };
 const PINS_OPAMP_DUAL = {
   1:{n:'OUT A'}, 2:{n:'IN\u2212 A'}, 3:{n:'IN+ A'},
-  4:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  4:{n:'V\u2212', d:'the negative supply - ground on a single-rail pedal'},
   5:{n:'IN+ B'}, 6:{n:'IN\u2212 B'}, 7:{n:'OUT B'},
   8:{n:'V+', d:'the positive supply'},
 };
 const PINS_OPAMP_SINGLE = {
   1:{n:'OFFSET', d:'offset null; left open on almost every audio build'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
-  4:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  4:{n:'V\u2212', d:'the negative supply - ground on a single-rail pedal'},
   5:{n:'OFFSET', d:'offset null; left open on almost every audio build'},
   6:{n:'OUT'},
   7:{n:'V+', d:'the positive supply'},
@@ -834,7 +838,7 @@ const PINS_OPAMP_QUAD = {
   4:{n:'V+', d:'the positive supply'},
   5:{n:'IN+ B'}, 6:{n:'IN\u2212 B'}, 7:{n:'OUT B'},
   8:{n:'OUT C'}, 9:{n:'IN\u2212 C'}, 10:{n:'IN+ C'},
-  11:{n:'V\u2212', d:'the negative supply — ground on a single-rail pedal'},
+  11:{n:'V\u2212', d:'the negative supply - ground on a single-rail pedal'},
   12:{n:'IN+ D'}, 13:{n:'IN\u2212 D'}, 14:{n:'OUT D'},
 };
 /* --- counters, dividers and switches ---
@@ -846,12 +850,12 @@ const PINS_OPAMP_QUAD = {
 const q4017 = n => ({n:'Q' + n, d:'goes high on count ' + n + ' and low again on the next clock'});
 const PINS_CD4017 = {
   1:q4017(5), 2:q4017(1), 3:q4017(0), 4:q4017(2), 5:q4017(6), 6:q4017(7), 7:q4017(3),
-  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   9:q4017(8), 10:q4017(4), 11:q4017(9),
   12:{n:'CARRY', d:'high for counts 0 to 4, so it can clock a second 4017 and count past ten'},
   13:{n:'CLK INH', d:'freezes the count while it is high; tie it to ground when you are not using it'},
   14:{n:'CLK', d:'advances the count one step on each rising edge'},
-  15:{n:'RESET', d:'sends the count back to Q0 while high — wire it to a Q output and the ' +
+  15:{n:'RESET', d:'sends the count back to Q0 while high - wire it to a Q output and the ' +
         'sequence stops there, which is how you count fewer than ten'},
   16:{n:'VDD', d:'the positive supply'},
 };
@@ -860,7 +864,7 @@ const PINS_CD4017 = {
 const q4040 = n => ({n:'Q' + n, d:'the clock divided by ' + Math.pow(2, n)});
 const PINS_CD4040 = {
   1:q4040(12), 2:q4040(6), 3:q4040(5), 4:q4040(7), 5:q4040(4), 6:q4040(3), 7:q4040(2),
-  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   9:q4040(1),
   10:{n:'CLK', d:'counts on each falling edge'},
   11:{n:'RESET', d:'clears every output while high; tie it to ground when unused'},
@@ -874,11 +878,11 @@ const PINS_CD4013 = {
   2:{n:'/Q1', d:'the opposite of pin 1, always'},
   3:{n:'CLK1', d:'on each rising edge the flip-flop takes whatever is sitting on D (pin 5)'},
   4:{n:'RESET1', d:'forces Q low while high; tie it to ground when unused'},
-  5:{n:'D1', d:'data in — wire it back to /Q (pin 2) and the flip-flop halves the clock'},
+  5:{n:'D1', d:'data in - wire it back to /Q (pin 2) and the flip-flop halves the clock'},
   6:{n:'SET1', d:'forces Q high while high; tie it to ground when unused'},
-  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  7:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   8:{n:'SET2', d:'forces Q high while high; tie it to ground when unused'},
-  9:{n:'D2', d:'data in — wire it back to /Q (pin 12) to halve the clock'},
+  9:{n:'D2', d:'data in - wire it back to /Q (pin 12) to halve the clock'},
   10:{n:'RESET2', d:'forces Q low while high; tie it to ground when unused'},
   11:{n:'CLK2', d:'on each rising edge the second flip-flop takes D (pin 9)'},
   12:{n:'/Q2', d:'the opposite of pin 13, always'},
@@ -890,11 +894,11 @@ const PINS_CD4046 = {
   1:{n:'PHASE PULSES', d:'high while the loop is locked'},
   2:{n:'PC1 OUT', d:'output of the XOR phase comparator'},
   3:{n:'COMP IN', d:'the feedback going back into the comparator'},
-  4:{n:'VCO OUT', d:'the oscillator itself — a square wave whose pitch follows pin 9'},
+  4:{n:'VCO OUT', d:'the oscillator itself - a square wave whose pitch follows pin 9'},
   5:{n:'INHIBIT', d:'stops the VCO while high; tie it to ground to leave it running'},
-  6:{n:'C1A', d:'the VCO timing capacitor goes between here and pin 7 — bigger means lower'},
+  6:{n:'C1A', d:'the VCO timing capacitor goes between here and pin 7 - bigger means lower'},
   7:{n:'C1B', d:'the other end of the timing capacitor'},
-  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   9:{n:'VCO IN', d:'the control voltage; this is the pin that sets the pitch'},
   10:{n:'DEMOD OUT', d:'a buffered copy of pin 9, for reading the control voltage back'},
   11:{n:'R1', d:'to ground; sets how far the VCO sweeps'},
@@ -905,17 +909,17 @@ const PINS_CD4046 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
-const ch4051 = n => ({n:'CH' + n, d:'channel ' + n + ' — joined to the common pin 3 when A, B and C read ' + n});
+const ch4051 = n => ({n:'CH' + n, d:'channel ' + n + ' - joined to the common pin 3 when A, B and C read ' + n});
 const PINS_CD4051 = {
   1:ch4051(4), 2:ch4051(6),
   3:{n:'COM', d:'the common end; whichever channel is selected joins here, and signal flows either way'},
   4:ch4051(7), 5:ch4051(5),
   6:{n:'INH', d:'disconnects every channel while high; tie it to ground when unused'},
-  7:{n:'VEE', d:'the negative supply for the signal itself — tie it to ground on a single-rail build'},
-  8:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  7:{n:'VEE', d:'the negative supply for the signal itself - tie it to ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   9:{n:'C', d:'select bit worth 4'},
   10:{n:'B', d:'select bit worth 2'},
-  11:{n:'A', d:'select bit worth 1 — A, B and C read together as a number from 0 to 7'},
+  11:{n:'A', d:'select bit worth 1 - A, B and C read together as a number from 0 to 7'},
   12:ch4051(3), 13:ch4051(0), 14:ch4051(1), 15:ch4051(2),
   16:{n:'VDD', d:'the positive supply'},
 };
@@ -923,12 +927,12 @@ const PINS_CD4051 = {
 const sw = (letter, other) =>
   ({n:'SW' + letter, d:'one end of switch ' + letter + '; it conducts both ways, so either end can be the input'});
 const ctl = (letter, a, b) =>
-  ({n:'CTRL ' + letter, d:'closes switch ' + letter + ' (pins ' + a + ' and ' + b + ') while high — ' +
+  ({n:'CTRL ' + letter, d:'closes switch ' + letter + ' (pins ' + a + ' and ' + b + ') while high - ' +
       'note the control pin sits nowhere near the switch it works'});
 const PINS_CD4066 = {
   1:sw('A'), 2:sw('A'), 3:sw('B'), 4:sw('B'),
   5:ctl('B', 3, 4), 6:ctl('C', 8, 9),
-  7:{n:'VSS', d:'the negative supply — ground on a single-rail build'},
+  7:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
   8:sw('C'), 9:sw('C'), 10:sw('D'), 11:sw('D'),
   12:ctl('D', 10, 11), 13:ctl('A', 1, 2),
   14:{n:'VDD', d:'the positive supply'},
@@ -941,26 +945,26 @@ const PINS_LM386 = {
   5:{n:'OUT', d:'the speaker output; it sits at half the supply, so it needs a coupling cap'},
   6:{n:'V+', d:'the positive supply'},
   7:{n:'BYPASS', d:'internal reference; 10u to ground quietens it, or leave it open'},
-  8:{n:'GAIN', d:'the other end of the gain network — see pin 1'},
+  8:{n:'GAIN', d:'the other end of the gain network - see pin 1'},
 };
 const PINS_LM13700 = {
-  1:{n:'IABC A', d:'amplifier bias current for A — this is the control input; the chip does what this current tells it'},
+  1:{n:'IABC A', d:'amplifier bias current for A - this is the control input; the chip does what this current tells it'},
   2:{n:'DIODE A'}, 3:{n:'IN+ A'}, 4:{n:'IN\u2212 A'},
-  5:{n:'OUT A', d:'a current output, not a voltage — it wants a resistor to ground to become a signal'},
+  5:{n:'OUT A', d:'a current output, not a voltage - it wants a resistor to ground to become a signal'},
   6:{n:'BUF IN A'}, 7:{n:'BUF OUT A'},
   8:{n:'V\u2212', d:'the negative supply'},
   9:{n:'BUF OUT B'}, 10:{n:'BUF IN B'},
-  11:{n:'OUT B', d:'a current output, not a voltage — see pin 5'},
+  11:{n:'OUT B', d:'a current output, not a voltage - see pin 5'},
   12:{n:'IN\u2212 B'}, 13:{n:'IN+ B'}, 14:{n:'DIODE B'},
-  15:{n:'IABC B', d:'amplifier bias current for B — the control input for the second half'},
+  15:{n:'IABC B', d:'amplifier bias current for B - the control input for the second half'},
   16:{n:'V+', d:'the positive supply'},
 };
 const PINS_PT2399 = {
-  1:{n:'VCC', d:'5V only — this chip does not take 9V, so it needs its own regulator'},
+  1:{n:'VCC', d:'5V only - this chip does not take 9V, so it needs its own regulator'},
   2:{n:'REF', d:'half-supply reference the audio swings around'},
   3:{n:'AGND', d:'analog ground'}, 4:{n:'DGND', d:'digital ground'},
   5:{n:'CLK OUT'},
-  6:{n:'VCO', d:'sets the delay time — this is the pin the delay pot works on'},
+  6:{n:'VCO', d:'sets the delay time - this is the pin the delay pot works on'},
   7:{n:'CC1', d:'clock capacitor; normally left open'},
   8:{n:'CC0', d:'clock capacitor; normally left open'},
   9:{n:'OP1 OUT'}, 10:{n:'OP1 IN'}, 11:{n:'OP2 IN'}, 12:{n:'OP2 OUT'},
@@ -978,7 +982,7 @@ const PINS_PT2399 = {
    'vee' is a NEGATIVE supply pin, distinct from 'gnd'. An earlier version of this
    file folded the two together on the grounds that nothing here runs split rails.
    That was pedal thinking. Eurorack is +-12V, and on a +-12V module a TL072's
-   pin 4 goes to -12V, not to ground — calling it ground would have been wrong on
+   pin 4 goes to -12V, not to ground - calling it ground would have been wrong on
    34 chips at once. CMOS logic keeps 'gnd', because its VSS really does sit at
    0V on the racks and the pedals alike. */
 const OPAMP_DUAL   = {1:'out',2:'in',3:'in',4:'vee',5:'in',6:'in',7:'out',8:'vdd'};
@@ -992,7 +996,7 @@ const INV_HEX      = {1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',
 const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gnd',
                       9:'in',10:'out',11:'in',12:'out',14:'out',15:'in'};  // 13,16 nc
 
-/* IC library. `roles` drives pin labelling and the floating-input DRC.
+/* IC library. `roles` drives pin labeling and the floating-input DRC.
    `ties` lists pin groups the datasheet itself joins -- see NE555.
    A pin left out of `roles` is one whose direction the tool does not claim to
    know: an analog switch throw, a timing cap leg, a trim pin. Saying nothing is
@@ -1012,8 +1016,8 @@ const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
 /* Two-lead parts that come in visibly different bodies.
 
    LEG_LIB names the legs of a three-leg part. This is a different job: it says
-   what the part physically IS — its package, whether it has a polarity at all,
-   and how it should be drawn — for kinds where one schematic symbol covers
+   what the part physically IS - its package, whether it has a polarity at all,
+   and how it should be drawn - for kinds where one schematic symbol covers
    several real components.
 
    An LDR lives under `res`, not under `diode`, however much it looks like one
@@ -1032,24 +1036,24 @@ const DEV_LIB = {
     'switching': {value:'1N4148', pkg:'DO-35', draw:'axial',
                   about:'a small-signal diode. Fast, tiny, and what most clipping and logic jobs want'},
     'rectifier': {value:'1N4001', pkg:'DO-41', draw:'axial',
-                  about:'a power rectifier. Bigger body, handles real current — reverse-polarity protection lives here'},
+                  about:'a power rectifier. Bigger body, handles real current - reverse-polarity protection lives here'},
     'Schottky':  {value:'1N5817', pkg:'DO-41', draw:'axial',
                   about:'a Schottky. Drops about 0.3V instead of 0.7V, which matters when you are protecting a 9V rail'},
     'zener':     {value:'5V1',    pkg:'DO-35', draw:'zener',
-                  about:'a zener. Fitted BACKWARDS on purpose — it conducts in reverse at its rated voltage, which is how it clamps a rail'},
+                  about:'a zener. Fitted BACKWARDS on purpose - it conducts in reverse at its rated voltage, which is how it clamps a rail'},
     'LED':       {value:'red',    pkg:'LED5',  draw:'led',
-                  about:'an LED. Round body, both leads out the same end, and the SHORT leg is the cathode — the flat on the rim marks it too'},
+                  about:'an LED. Round body, both leads out the same end, and the SHORT leg is the cathode - the flat on the rim marks it too'},
   },
   res: {
     'fixed': {value:'10k',  pkg:null,   draw:'axial',
               about:'an ordinary resistor'},
     'LDR':   {value:'LDR',  pkg:'LDR5', draw:'ldr',
-              about:'a light-dependent resistor. No polarity — it is a resistor whose value falls as light rises, which is what makes an optical theremin work'},
+              about:'a light-dependent resistor. No polarity - it is a resistor whose value falls as light rises, which is what makes an optical theremin work'},
   },
 };
 /* the device a part is actually using, or null when it has none */
-/* An LED's value is its colour, so the drawing may as well use it. Anything
-   unrecognised gets the red body, which is what is in the drawer. */
+/* An LED's value is its color, so the drawing may as well use it. Anything
+   unrecognized gets the red body, which is what is in the drawer. */
 const LED_TINT = {
   red:['#E8452F','#FF8A78'], green:['#3FBF57','#8CF0A0'], blue:['#3A7BE0','#8FB6FF'],
   yellow:['#E5C13A','#FFE894'], white:['#DCD8E8','#FFFFFF'], amber:['#E09A2E','#FFC978'],
@@ -1067,16 +1071,16 @@ function devOf(part){
 
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
-  CD40106:{pins:14, about:"six Schmitt inverters. One inverter, a resistor and a capacitor is an oscillator — the standard Lunetta voice, and six of them come in the one chip", name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
+  CD40106:{pins:14, about:"six Schmitt inverters. One inverter, a resistor and a capacitor is an oscillator - the standard Lunetta voice, and six of them come in the one chip", name:'hex Schmitt inverter', cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX,
     note:'The inputs are Schmitt triggers: they snap over rather than drift, which is why a ' +
          'resistor and capacitor on one input turns an inverter into an oscillator.'},
   CD4069 :{pins:14, about:"six plain inverters. Without the Schmitt trigger they will not oscillate as reliably as a 40106, so use them for logic rather than for voices", name:'hex inverter',         cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX},
   CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
   CD4050 :{pins:16, name:'hex buffer',           cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
 
-  CD4011 :{pins:14, about:"four plain NAND gates, for logic rather than oscillators — no Schmitt trigger on the inputs", name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4011 :{pins:14, about:"four plain NAND gates, for logic rather than oscillators - no Schmitt trigger on the inputs", name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4093 :{pins:14, about:"four Schmitt NAND gates. Like a 40106 voice, but each gate has a second input, so you can gate the oscillator on and off without extra parts", name:'quad Schmitt NAND',    cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
-    note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does — ' +
+    note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does - ' +
          'with the second input left as a gate to switch the whole thing on and off.'},
   CD4001 :{pins:14, about:"four NOR gates. Two of them cross-coupled makes a latch, which is the usual way to build a set-reset from logic", name:'quad NOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4071 :{pins:14, name:'quad OR',              cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
@@ -1101,7 +1105,7 @@ const IC_LIB = {
      claims a direction only for the control pins and the rails. */
   CD4051 :{pins:16, about:"passes one of eight signals through to a common pin, chosen by three logic inputs. The switch at the heart of a sequencer", name:'8-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4051,
     roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
-  CD4066 :{pins:14, about:"four switches you open and close with logic instead of your fingers — voltage-controlled routing", name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
+  CD4066 :{pins:14, about:"four switches you open and close with logic instead of your fingers - voltage-controlled routing", name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
 
   /* ---- timers ---- */
@@ -1123,7 +1127,7 @@ const IC_LIB = {
   NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
-  TL072  :{pins:8, about:"the default audio op-amp — quiet, cheap, and in more pedals than any other part",  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL072  :{pins:8, about:"the default audio op-amp - quiet, cheap, and in more pedals than any other part",  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
@@ -1136,7 +1140,7 @@ const IC_LIB = {
   TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  LM324  :{pins:14, about:"four op-amps in one package, and it will run from a single low rail — handy when board space matters more than noise", name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM324  :{pins:14, about:"four op-amps in one package, and it will run from a single low rail - handy when board space matters more than noise", name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
   /* ---- the odd-shaped ones ---- */
@@ -1144,7 +1148,7 @@ const IC_LIB = {
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
-  LM13700:{pins:16, about:"two OTAs — amplifiers whose gain is set by a current rather than a resistor. This is the chip a voltage-controlled filter or amplifier is built around", name:'dual OTA', cmos:false,
+  LM13700:{pins:16, about:"two OTAs - amplifiers whose gain is set by a current rather than a resistor. This is the chip a voltage-controlled filter or amplifier is built around", name:'dual OTA', cmos:false,
     volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
     roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'vee',
            9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}, pinInfo:PINS_LM13700},
@@ -1167,7 +1171,7 @@ const IC_LIB = {
    A package that is not a plain DIP carries `pinMap`: one [dRow,dCol] offset
    per pin, measured from `pin1`. Once a map exists `pin1` is really just the
    anchor the whole footprint hangs off, so moving, duplicating and shifting a
-   row all keep working unchanged — they only ever move the anchor. */
+   row all keep working unchanged - they only ever move the anchor. */
 function defaultPinMap(ic){
   const half = ic.pins / 2, out = [];
   for(let i = 1; i <= ic.pins; i++)
@@ -1240,7 +1244,7 @@ function icPinAt(ic, r, c){
 
    The middle is only the DEFAULT. Somebody else's layout cuts where it cuts,
    and which column the break falls in decides what stays joined to what on
-   either side of it — so the line moves, and individual strips can be left
+   either side of it - so the line moves, and individual strips can be left
    whole. Both are stored on the chip, in chip-relative terms, so they survive
    it being picked up and moved: an offset from pin 1's column, and a list of
    row offsets the chip is deliberately not cutting.
@@ -1348,7 +1352,7 @@ function computeNets(){
     if(A !== null && B !== null) union(A, B);
   }
 
-  /* step 3 - roots become nets, ordered top-left first so colours stay stable */
+  /* step 3 - roots become nets, ordered top-left first so colors stay stable */
   const byRoot = new Map();
   for(let s = 0; s < n; s++){
     const root = find(s);
@@ -1425,7 +1429,7 @@ function uid(){ return 'e' + (++_uid).toString(36) + Math.floor(Math.random() * 
    Kept apart from demoProject() on purpose: that one is the test fixture and
    the suite is written against its exact holes. Point this at any sound
    layout and nothing in the tests moves. Whatever it returns has to survive
-   the opening-example check in test/checks.js — no DRC errors, no parts lost
+   the opening-example check in test/checks.js - no DRC errors, no parts lost
    to migrate, and if it declares a netlist, the board has to match it. */
 function exampleProject(){
   const P = (kind, ref, value, a, b) => ({id:uid(), kind:kind, ref:ref, value:value, pins:[a, b]});
@@ -1479,7 +1483,7 @@ function exampleProject(){
   };
 }
 
-/* THE TEST FIXTURE. 692 checks know these holes by heart — pin 1 at [3,7],
+/* THE TEST FIXTURE. 692 checks know these holes by heart - pin 1 at [3,7],
    seven cuts down column 8, pads named on known nets. Change the geometry
    here and the suite goes with it. To change what a VISITOR sees, edit
    exampleProject() above instead. */
@@ -1566,7 +1570,7 @@ function connections(){
 /* What actually happens if you build it.
 
    A finding says WHAT is wrong. On its own that only helps someone who already
-   knows why the rule exists — and they were not the one who needed telling.
+   knows why the rule exists - and they were not the one who needed telling.
    These say what the board does on the bench, because cause and effect is the
    part that carries over to the next circuit. The rule you can restate is worth
    nothing; the consequence you can picture is worth everything.
@@ -1578,13 +1582,13 @@ const DRC_WHY = {
     'There is no board out there. That lead has nothing to solder to.',
   'on-cut':
     'The copper under that hole has been cut away from the rest of its strip. ' +
-    'The lead solders to a stub that goes nowhere — it looks connected and is not.',
+    'The lead solders to a stub that goes nowhere - it looks connected and is not.',
   'power-short':
     'Two different supplies joined together is a short straight across your power. ' +
     'Best case a blown fuse; worst case a cooked chip and a battery that gets hot in your hand.',
   'pin-short':
     'Two pins of one chip sharing a strip. If either is an output it is fighting whatever ' +
-    'else is on there — whichever pulls harder wins, and both of them get hot.',
+    'else is on there - whichever pulls harder wins, and both of them get hot.',
   'part-short':
     'Both ends on the same strip means the copper carries the current straight past the part. ' +
     'It is still soldered in, and it is doing nothing at all.',
@@ -1667,7 +1671,7 @@ function runDRC(){
      Narrowed from the original plan, which fired five times on the CD40106
      fixture: pin 7 plus the four tied-off unused inputs all correctly land on
      ground. A net carrying a supply pad is a rail, and multiple pins on a rail
-     is how CMOS is supposed to be built. Only unlabelled nets are flagged. */
+     is how CMOS is supposed to be built. Only unlabeled nets are flagged. */
   for(const ic of S.ics){
     const pinsByNet = new Map();
     for(let i = 1; i <= ic.pins; i++){
@@ -1710,7 +1714,7 @@ function runDRC(){
           p.ref + ' ' + (p.pins.length > 2 ? 'legs ' : 'leads ') +
           (legs.length > 2 ? legs.slice(0, -1).join(', ') + ' and ' + legs[legs.length-1]
                            : legs.join(' and ')) +
-          ' are on the same net — shorted out', p.pins[0], id);
+          ' are on the same net - shorted out', p.pins[0], id);
     }
   }
 
@@ -1721,7 +1725,7 @@ function runDRC(){
      face, so a wider span is just splaying the legs.
 
      This is a warning, not an error, and the wording matters. The part is not
-     unbuildable — standing an axial part on end is ordinary practice and takes
+     unbuildable - standing an axial part on end is ordinary practice and takes
      two adjacent holes. What the builder needs told is that this one cannot lie
      flat, because that decides how tall the board ends up, which is the thing
      that bites inside an enclosure. Say `mount:'vertical'` on the part once
@@ -1741,7 +1745,7 @@ function runDRC(){
     if(span >= fp.len) continue;
     add('warn', 'lead-span',
         p.ref + (p.kind === 'diode' ? ' (' + diodePkg(p) + ')' : '') +
-        ' will not lie flat — a ' + holesMM(fp.len) + ' body across ' +
+        ' will not lie flat - a ' + holesMM(fp.len) + ' body across ' +
         holesMM(span) + ' of holes. Stand it up, or give it ' +
         Math.ceil(fp.len - span) + ' more hole' +
         (Math.ceil(fp.len - span) === 1 ? '' : 's') + '.',
@@ -1753,14 +1757,14 @@ function runDRC(){
      the maximum is an error: a PT2399 on 9V is a dead PT2399. Under the minimum
      is a warning, because the board simply will not work and nothing burns.
 
-     Only fires where both rails resolve to a stated voltage, so a rail labelled
+     Only fires where both rails resolve to a stated voltage, so a rail labeled
      "VIN" or fed from an on-board regulator is left alone rather than guessed at. */
   for(const ic of S.ics){
     const def = IC_LIB[ic.part];
     if(!def || !def.volts) continue;
     const sup = icSupply(ic);
     if(!sup) continue;
-    const tail = def.volts.note ? ' — ' + def.volts.note : '';
+    const tail = def.volts.note ? ' - ' + def.volts.note : '';
     const runs = ic.ref + ' (' + ic.part + ') wants ' + def.volts.min + '-' + def.volts.max +
                  'V and this board gives it ' + sup.total + 'V';
     if(sup.total > def.volts.max)      add('error', 'supply-range', runs + tail, pinPos(ic, 1));
@@ -1788,7 +1792,7 @@ function runDRC(){
     }));
     if(nets.size > 1)
       add('error', 'pad-name',
-          ds.length + ' pads are called ' + ds[0].label + ' and they are not on the same net — ' +
+          ds.length + ' pads are called ' + ds[0].label + ' and they are not on the same net - ' +
           'a netlist saying @' + ds[0].label + ' can only ever mean one of them', ds[0].at);
     else
       add('warn', 'pad-name',
@@ -1801,7 +1805,7 @@ function runDRC(){
      going on. Only pairs that cannot slide clear of each other are reported. */
   for(const clash of checkBodies())
     add('warn', 'body-clash',
-        clash.a + ' and ' + clash.b + ' bodies overlap — ' + clash.why,
+        clash.a + ' and ' + clash.b + ' bodies overlap - ' + clash.why,
         clash.at);
 
   /* --- DIP straddling an uncut strip --- */
@@ -1845,7 +1849,7 @@ function runDRC(){
       if(others.length === 0){
         floatingNets.add(net.id);
         add('warn', 'floating',
-            ic.ref + ' pin ' + i + ' is a CMOS input connected to nothing — tie it to a rail',
+            ic.ref + ' pin ' + i + ' is a CMOS input connected to nothing - tie it to a rail',
             p, net.id);
       }
     }
@@ -1861,7 +1865,7 @@ function runDRC(){
     if(cs.length !== 1) continue;
     const only = cs[0];
     if(only.kind === 'pin' && (only.role === 'out' || only.role === 'nc')) continue;
-    add('warn', 'orphan', only.label + ' is the only thing on its net — connects nowhere', only.at, net.id);
+    add('warn', 'orphan', only.label + ' is the only thing on its net - connects nowhere', only.at, net.id);
   }
 
   const order = {error:0, warn:1};
@@ -1872,13 +1876,13 @@ function runDRC(){
 }
 
 /* ============================================================
-   RESISTOR COLOUR BANDS
+   RESISTOR COLOR BANDS
    Decoding the value into real bands means the drawing matches the
    part in your hand -- you can check one against the other without
    reading a single number.
    ============================================================ */
 const BAND      = ['#1A1A1A','#7A4A22','#D32F2F','#E8712A','#F2D024','#3EA34A','#2E6FD9','#8E44AD','#9E9E9E','#F5F5F5'];
-const BAND_NAME = ['black','brown','red','orange','yellow','green','blue','violet','grey','white'];
+const BAND_NAME = ['black','brown','red','orange','yellow','green','blue','violet','gray','white'];
 const multColour = m => m === -1 ? '#C9A227' : m === -2 ? '#C0C0C0' : BAND[m];
 const multName   = m => m === -1 ? 'gold'    : m === -2 ? 'silver'  : BAND_NAME[m];
 
@@ -1941,7 +1945,7 @@ function cutList(){
 
 /* Rows and columns count from 0 in the model because that is what array indices
    do, and from 1 everywhere a person reads them because that is what fingers do.
-   Nothing stored ever changes — this is a display layer and only a display layer,
+   Nothing stored ever changes - this is a display layer and only a display layer,
    so a saved .json from before this still means exactly what it meant.
 
    It matters at the bench. Told "column 3", you cut the fourth hole along and the
@@ -1952,11 +1956,11 @@ function dRow(r){ return r + 1; }
 function dCol(c){ return c + 1; }
 /* the long form, for anywhere there is room to be unambiguous */
 function holeText(r, c){ return 'row ' + dRow(r) + ' \u00b7 col ' + dCol(c); }
-/* the short form, still labelled, for table cells and lists */
+/* the short form, still labeled, for table cells and lists */
 function holeShort(r, c){ return 'r' + dRow(r) + ' c' + dCol(c); }
 
 /* Solder the flat things first or you will not be able to reach them later. */
-const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9};
+const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9, pot:10};
 
 function buildList(){
   const items = [];
@@ -1982,13 +1986,13 @@ function buildList(){
 
 /* What a chip is ACTUALLY sitting across, read off the board rather than assumed.
 
-   The voltage is taken from the chip's own supply pins — follow VDD to its net,
+   The voltage is taken from the chip's own supply pins - follow VDD to its net,
    find a pad there whose label names a voltage, then do the same for VEE, or for
    GND if the part has no negative rail. Total is the difference, so a +-12V rack
    reads 24 and a 9V pedal reads 9.
 
    Deliberately narrow. If either rail lands on a pad the tool cannot read a
-   number from — a bare "VIN", or a rail fed from an on-board regulator — this
+   number from - a bare "VIN", or a rail fed from an on-board regulator - this
    returns null and no check runs. A module can perfectly well carry +-12V for
    the op-amps and a regulated 5V for a PT2399, and a board-wide guess would
    condemn that board wrongly. Silence beats a false accusation, especially to
@@ -2020,7 +2024,7 @@ function icSupply(ic){
 
 /* Where the decoupling cap goes, worked out from the pinout instead of written
    down forty times. The cap bridges the chip's positive rail and its negative
-   one, and the library already knows which pins those are — deriving it means
+   one, and the library already knows which pins those are - deriving it means
    it cannot drift from the pin table the way a hand-copied note would, and it
    covers every part in the library including ones added later. */
 function decoupling(part){
@@ -2033,7 +2037,7 @@ function decoupling(part){
   const pos = find('vdd'), neg = find('vee') !== null ? find('vee') : find('gnd');
   if(pos === null || neg === null) return null;
   return '100n between pins ' + pos + ' and ' + neg +
-         ', as close to the chip as it will go' + (def.decoupleNote ? ' — ' + def.decoupleNote : '') + '.';
+         ', as close to the chip as it will go' + (def.decoupleNote ? ' - ' + def.decoupleNote : '') + '.';
 }
 
 /* ============================================================
@@ -2058,7 +2062,7 @@ function pinInfoOf(ic, pin){
   const d = IC_LIB[ic.part];
   return (d && d.pinInfo && d.pinInfo[pin]) || null;
 }
-/* "IC1 pin 3 (OUT)" — the shortest phrase that is still unambiguous */
+/* "IC1 pin 3 (OUT)" - the shortest phrase that is still unambiguous */
 function pinPhrase(ic, pin){
   const info = pinInfoOf(ic, pin);
   return ic.ref + ' pin ' + pin + (info ? ' (' + info.n + ')' : '');
@@ -2071,7 +2075,7 @@ function explainCut(r, c){
   if(owner){
     const n = owner.pins;
     return 'This cut belongs to ' + owner.ref + '. A chip sits astride its strips, so without ' +
-           'the cut each pin would be joined straight to the one facing it — pin 1 to pin ' + n + '.';
+           'the cut each pin would be joined straight to the one facing it - pin 1 to pin ' + n + '.';
   }
   return 'The strip is cut here, so the holes on either side are no longer the same net.';
 }
@@ -2092,7 +2096,7 @@ function explainNet(net, self){
   const railPad = pads.map(d => ({pad:d, cls:powerClass(d.label)})).filter(x => x.cls)[0];
   if(railPad){
     if(railPad.cls.cls === 'gnd')
-      return 'This is the ground rail — the side every part returns to.';
+      return 'This is the ground rail - the side every part returns to.';
     return 'This is the ' + railPad.pad.label + ' supply rail, feeding ' +
            (members - 1) + ' thing' + (members - 1 === 1 ? '' : 's') + ' on the board.';
   }
@@ -2122,7 +2126,7 @@ function explainNet(net, self){
     return 'It shares this strip with ' + list(otherListeners) +
            '. Nothing here drives it but the parts sitting on it.';
   if(!drivers.length && listeners.length)
-    return 'Nothing on this strip drives it — it is fed by the parts sitting on it.';
+    return 'Nothing on this strip drives it - it is fed by the parts sitting on it.';
   return members + ' things share this run of copper.';
 }
 
@@ -2142,11 +2146,11 @@ function explainHole(r, c){
          which is where the cap actually lands. */
       /* `about` is what the part is for, `note` is how it works. Both are
          about the whole chip rather than this pin, so both are said once, on
-         pin 1 — the pin you look at anyway to work out which way round it goes.
+         pin 1 - the pin you look at anyway to work out which way round it goes.
          Repeating them on all sixteen pins buried the line that was actually
          about the pin under the cursor. */
       if(oc.pin === 1){
-        if(def.about) lines.push(oc.ic.part + ' — ' + def.about + '.');
+        if(def.about) lines.push(oc.ic.part + ' - ' + def.about + '.');
         if(def.note)  lines.push(def.note);
       }
       const role = pinRoleOf(oc.ic, oc.pin);
@@ -2157,7 +2161,7 @@ function explainHole(r, c){
       const info = pinInfoOf(oc.ic, oc.pin);
       if(info)
         lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is ' + info.n +
-                   (info.d ? ' — ' + info.d : '') + '.');
+                   (info.d ? ' - ' + info.d : '') + '.');
       else {
         const role = pinRoleOf(oc.ic, oc.pin);
         if(role) lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is an ' + role + ' pin.');
@@ -2172,7 +2176,7 @@ function explainHole(r, c){
     if(oc.type === 'part' && oc.part.polarized){
       const lg = legLabels(oc.part);
       if(!lg) lines.push(oc.part.ref + ' is polarised, and this is its ' +
-        (oc.leg === 0 ? 'positive' : 'negative') + ' end — backwards it will not work.');
+        (oc.leg === 0 ? 'positive' : 'negative') + ' end - backwards it will not work.');
     }
   }
 
@@ -2187,7 +2191,7 @@ function explainHole(r, c){
   return lines;
 }
 
-/* Bill of materials — the build order collapsed into what you actually buy.
+/* Bill of materials - the build order collapsed into what you actually buy.
    The build order answers "what do I solder next"; this answers "do I own all
    of this", which is the question you want settled the night before, not with
    an iron already hot. */
@@ -2195,7 +2199,7 @@ function explainHole(r, c){
 /* Engineering notation to a number, so a parts list sorts 10n before 100n
    rather than putting 100n first because '1' precedes '9'. Handles both
    4.7k and the European 4k7, where the multiplier stands in for the point.
-   Anything unparseable sorts last rather than pretending to be zero — a
+   Anything unparseable sorts last rather than pretending to be zero - a
    value we cannot read is not a value of nothing. */
 function engMult(ch){
   switch(ch){
@@ -2230,7 +2234,7 @@ function bom(){
   for(const q of S.parts){
     const lib = PART_LIB[q.kind] || {};
     /* A diode's package changes the part you order, so DO-35 and DO-41 are
-       separate lines. How a part is MOUNTED does not — a resistor standing on
+       separate lines. How a part is MOUNTED does not - a resistor standing on
        end is the same resistor, so mount:'vertical' deliberately does not
        split the row. */
     const note = q.kind === 'diode' ? diodePkg(q) : '';
@@ -2262,13 +2266,13 @@ function bom(){
 
    This exists because of a mistake. Handing someone a list of positions read
    off the JSON gave them 0-indexed coordinates while the screen counted from
-   1 — twice, by the person who had just changed the screen. A layout turned
+   1 - twice, by the person who had just changed the screen. A layout turned
    into prose BY THE TOOL cannot disagree with the tool, because it does the
    conversion the same way the board does.
 
    It is also the layout in a form that travels. A .json is for the app; a
    numbered list is for a forum post, a message, or somebody who finds a grid
-   of coloured holes harder to read than a sentence. And each step can carry
+   of colored holes harder to read than a sentence. And each step can carry
    the reason it is that way, which a grid never can.
    ============================================================ */
 
@@ -2276,8 +2280,9 @@ function bom(){
 const WALK_NOTES = {
   link:  'A plain wire joining two strips. Links are the only thing that merges nets.',
   ecap:  'The FIRST click is the + leg. Backwards, an electrolytic eventually vents.',
-  diode: 'The SECOND click is the banded end — the cathode. Backwards, nothing works at all.',
+  diode: 'The SECOND click is the banded end - the cathode. Backwards, nothing works at all.',
   trans: 'The clicks go in leg order, so watch the letters the panel puts on them.',
+  pot:   'Three clicks: lug 1, wiper, lug 3. These are the holes its flying leads land in - the pot itself lives on the panel, not the board.',
   res:   null, cap: null, trim: null, reg: null,
 };
 
@@ -2293,13 +2298,13 @@ function walkthrough(){
     L.push('');
   };
 
-  L.push((S.name || 'untitled') + ' — placing it step by step');
+  L.push((S.name || 'untitled') + ' - placing it step by step');
   L.push(S.board.rows + ' rows of ' + S.board.cols + ' holes · ' +
          S.parts.length + ' parts · ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
          ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's') +
          ' · ' + S.pads.length + ' pad' + (S.pads.length === 1 ? '' : 's'));
   L.push('');
-  L.push('Every part crosses the strips — watch the ROW change between clicks.');
+  L.push('Every part crosses the strips - watch the ROW change between clicks.');
   L.push('All the holes in one row are a single piece of copper, so a part with');
   L.push('both legs on one row is bypassed by the strip and does nothing.');
   L.push('');
@@ -2309,14 +2314,14 @@ function walkthrough(){
   for(const ic of S.ics){
     const def = IC_LIB[ic.part] || {};
     const half = ic.pins / 2;
-    step('U — chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
+    step('U - chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
       ['Pins 1-' + half + ' run down that column and ' + (half + 1) + '-' + ic.pins +
        ' back up column ' + dCol(ic.pin1[1] + ic.span) + '.',
        (ic.autoCuts || []).length
          ? 'Placing it inserts ' + ic.autoCuts.length + ' cuts between the pin rows. Without them ' +
-           'each pin would be joined to the one facing it — pin 1 straight to pin ' + ic.pins + '.'
+           'each pin would be joined to the one facing it - pin 1 straight to pin ' + ic.pins + '.'
          : null,
-       def.about ? ic.part + ' — ' + def.about + '.' : null].filter(Boolean));
+       def.about ? ic.part + ' - ' + def.about + '.' : null].filter(Boolean));
   }
 
   /* cuts the builder has to make by hand, as opposed to the ones a chip brought */
@@ -2324,11 +2329,11 @@ function walkthrough(){
   for(const ic of S.ics) for(const k of ic.autoCuts || []) owned.add(k);
   const hand = S.cuts.filter(k => !owned.has(k));
   if(hand.length)
-    step('X — cut track. ' + hand.length + ' cut' + (hand.length === 1 ? '' : 's') + ' to make by hand.',
+    step('X - cut track. ' + hand.length + ' cut' + (hand.length === 1 ? '' : 's') + ' to make by hand.',
       hand.map(k => { const q = k.split(',').map(Number); return at(q); })
         .concat(['A cut breaks one strip into two separate nets at that hole.']));
 
-  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G'};
+  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O'};
   for(const it of buildList()){
     if(it.kind === 'ic') continue;
     const part = S.parts.find(x => x.id === (it.key || '').replace('part:', '')) ||
@@ -2346,7 +2351,7 @@ function walkthrough(){
     if(part.device && !isDefault)
       bits.push((LEG_LIB[part.kind] ? 'DEVICE ' : 'TYPE ') + part.device);
     if(part.value) bits.push('VALUE ' + part.value);
-    const head = k + ' — ' + (PART_LIB[part.kind] || {}).name + ' ' + part.ref +
+    const head = k + ' - ' + (PART_LIB[part.kind] || {}).name + ' ' + part.ref +
                  (bits.length ? ', ' + bits.join(', ') : '') + '.';
     const body = [part.pins.map(at).join('   then   ')];
     if(!seen[part.kind] && WALK_NOTES[part.kind]){ body.push(WALK_NOTES[part.kind]); seen[part.kind] = 1; }
@@ -2355,7 +2360,7 @@ function walkthrough(){
   }
 
   for(const d of S.pads)
-    step('P — pad. Click ' + at(d.at) + ', type ' + d.label + ', press Enter.',
+    step('P - pad. Click ' + at(d.at) + ', type ' + d.label + ', press Enter.',
       d.to ? ['This is where ' + d.to + ' joins the board.'] : null);
 
   if(S.netlist){
@@ -2372,7 +2377,7 @@ function walkthrough(){
    WRITING THE NETLIST OUT
    The check reads a netlist. This writes one, from the board in front of you.
 
-   It is not a verification — checking a board against a netlist derived from
+   It is not a verification - checking a board against a netlist derived from
    that same board can only ever pass. What it produces is the circuit
    SEPARATED from this particular arrangement of it: something you can carry to
    a different board size, hand to somebody else, or lay out a second time and
@@ -2383,7 +2388,7 @@ function walkthrough(){
    on a list that already has the right members beats facing an empty pane.
    ============================================================ */
 
-/* A name a builder would recognise, in descending order of how much it tells
+/* A name a builder would recognize, in descending order of how much it tells
    them: what the wire off the board is called, then what drives the net, then
    a bare number when there is genuinely nothing better to say. */
 function netName(net){
@@ -2399,7 +2404,7 @@ function netName(net){
     return driver.ic.ref + '_' + (info ? info.n.replace(/[^A-Za-z0-9]+/g, '') : 'PIN' + driver.pin);
   }
   if(pins.length){
-    /* not driven by anything on this net — name it after the pin anyway, but
+    /* not driven by anything on this net - name it after the pin anyway, but
        use the datasheet's word for it: IC1_TRIG says more than IC1_2 */
     const info = pinInfoOf(pins[0].ic, pins[0].pin);
     return pins[0].ic.ref + '_' + (info ? info.n.replace(/[^A-Za-z0-9]+/g, '') : pins[0].pin);
@@ -2446,7 +2451,7 @@ function netlistFromBoard(){
   };
   rows.sort((a, b) => rank(a) - rank(b) || a.net.id - b.net.id);
 
-  /* two nets can want the same name — the pad-name rule flags that as a fault,
+  /* two nets can want the same name - the pad-name rule flags that as a fault,
      but a file that silently used one name twice would be worse than one that
      shows the collision. */
   const used = new Map();
@@ -2464,13 +2469,13 @@ function netlistFromBoard(){
            '# nothing is placed yet, so there is no circuit to write down.';
   const pad = Math.min(14, Math.max(...rows.map(r => r.name.length), 4) + 2);
   const out = [
-    '# ' + (S.name || 'untitled') + ' — written from the board',
+    '# ' + (S.name || 'untitled') + ' - written from the board',
     '# ' + S.board.rows + ' strips of ' + S.board.cols + ' holes, ' +
       S.parts.length + ' parts, ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
       ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's'),
     '#',
     '# This is the circuit as the copper currently has it. Checking the board',
-    '# against it can only pass — its use is to carry the circuit somewhere else.',
+    '# against it can only pass - its use is to carry the circuit somewhere else.',
     '',
   ];
   let lastRank = rank(rows[0] || {net:{id:0}});
@@ -2487,14 +2492,14 @@ function netlistFromBoard(){
    A parts list is on every build page, every kit bag and every forum post, and
    you can paste it without understanding any of it.
 
-   It answers a weaker question — do I have the right PARTS — and says nothing
+   It answers a weaker question - do I have the right PARTS - and says nothing
    about whether they are in the right places. A board with every correct
    component wired wrongly passes this perfectly. That is worth saying out loud
    rather than letting anyone mistake a tick here for a working circuit. But a
    weaker check you can actually run beats a stronger one you cannot.
    ============================================================ */
 
-/* A quantity is a token that is ONLY digits — so the 2 in "2 x 10n" counts and
+/* A quantity is a token that is ONLY digits - so the 2 in "2 x 10n" counts and
    the 100 in "100k" does not. A value is either an engineering value with a
    multiplier, or a part number. Everything else on the line is ignored, which
    is how "R1 - 100k 1/4W 5%" reduces to one 100k. */
@@ -2503,7 +2508,7 @@ const BOM_CODE  = /^\d?[A-Za-z]{1,4}\d{2,5}[A-Za-z]?\d?$/;
 
 /* Parts lists write the unit and layouts do not: a board says 100n, a BOM says
    0.1uF. Strip a trailing farad or ohm so the two can be compared at all. R is
-   left alone, because on a resistor R IS the multiplier — 470R is 470 ohms. */
+   left alone, because on a resistor R IS the multiplier - 470R is 470 ohms. */
 function stripUnit(word){
   const bare = word.replace(/(?:F|Fd|\u03a9|\u2126|ohms?)$/i, '');
   return bare && BOM_VALUE.test(bare) ? bare : word;
@@ -2512,7 +2517,7 @@ function stripUnit(word){
 /* Values are what identify a part in a list, and the same value gets written
    several ways: 0.1uF and 100n are one capacitor, 4k7 and 4.7k one resistor.
    Comparing by magnitude rather than by spelling makes all of those agree.
-   Anything with no readable magnitude — 2N3904, NE555 — is matched as text. */
+   Anything with no readable magnitude - 2N3904, NE555 - is matched as text. */
 function bomKey(value){
   const v = String(value == null ? '' : value).trim();
   if(!v) return 'link';
@@ -2894,7 +2899,7 @@ function rotateRegion(reg, turns){
   const src = regionContents(reg);
   if(src.ics.length)
     return {ok:false, reason:src.ics.map(i => i.ref).join(', ') +
-            ' cannot turn — a DIP straddles its strips one way only'};
+            ' cannot turn - a DIP straddles its strips one way only'};
 
   const H = reg.r1 - reg.r0 + 1, W = reg.c1 - reg.c0 + 1;
   const nH = (turns % 2) ? W : H, nW = (turns % 2) ? H : W;
@@ -2946,7 +2951,7 @@ function parseNetlist(text){
     const line = raw.replace(/#.*$/, '').trim();
     if(!line) return;
     const at = line.indexOf(':');
-    if(at < 0){ errors.push({line:i + 1, msg:'no colon — expected "name: member member"', raw:raw.trim()}); return; }
+    if(at < 0){ errors.push({line:i + 1, msg:'no colon - expected "name: member member"', raw:raw.trim()}); return; }
     const name = line.slice(0, at).trim();
     if(!name){ errors.push({line:i + 1, msg:'net has no name', raw:raw.trim()}); return; }
     const members = line.slice(at + 1).trim().split(/\s+/).filter(Boolean);
@@ -2961,7 +2966,7 @@ function resolveMember(token){
   if(token[0] === '@'){
     const label = token.slice(1);
     const pad = S.pads.find(d => d.label.toUpperCase() === label.toUpperCase());
-    return pad ? {ok:true, at:pad.at} : {ok:false, why:'no pad labelled "' + label + '"'};
+    return pad ? {ok:true, at:pad.at} : {ok:false, why:'no pad labeled "' + label + '"'};
   }
   const dot = token.lastIndexOf('.');
   if(dot < 0) return {ok:false, why:'expected REF.LEG or @PAD'};
@@ -3001,7 +3006,7 @@ function checkNetlist(text){
     for(const token of dn.members){
       const r = resolveMember(token);
       if(!r.ok){
-        findings.push({sev:'error', rule:'netlist-unknown', msg:token + ' — ' + r.why, net:dn.name});
+        findings.push({sev:'error', rule:'netlist-unknown', msg:token + ' - ' + r.why, net:dn.name});
         continue;
       }
       const net = NET.netAt(r.at[0], r.at[1]);
@@ -3052,7 +3057,7 @@ function checkNetlist(text){
 
      "share copper" rather than "are joined", because joined is not always
      true. When a leg is simply on the wrong strip the two nets remain quite
-     separate — it is only the membership that crossed over. Listing which
+     separate - it is only the membership that crossed over. Listing which
      tokens landed together says what actually happened either way. */
   const shared = new Map();
   for(const [netId, g] of byActual){
@@ -3071,7 +3076,7 @@ function checkNetlist(text){
                        sh.places.join('; '),
                    net:sh.names[0], at:sh.at});
 
-  /* what the netlist never mentioned — worth knowing, not worth failing over */
+  /* what the netlist never mentioned - worth knowing, not worth failing over */
   const named = new Set(placed.map(m => m.token.toUpperCase()));
   const unmentioned = connections()
     .filter(c => !named.has(c.label.toUpperCase()) && !named.has(('@' + c.label).toUpperCase()))
@@ -3087,13 +3092,13 @@ function checkNetlist(text){
 }
 
 /* ============================================================
-   BODIES — the space a part takes up, not just its holes
+   BODIES - the space a part takes up, not just its holes
    Two parts can be electrically perfect and still refuse to share the board.
    ============================================================ */
 
 /* Footprints in hole units (1 = 0.1in = 2.54mm), from real package sizes.
    These drive the drawing as well as the check, so what you see is what gets
-   tested — a body the tool draws smaller than it tests would be a lie. */
+   tested - a body the tool draws smaller than it tests would be a lie. */
 const FOOTPRINT = {
   link:  null,                                                  // bare wire, lies flat, takes no room
   res:   {shape:'box',  len:2.48, wid:0.94, leads:'axial'},     // 1/4W, 6.3 x 2.4 mm
@@ -3103,11 +3108,13 @@ const FOOTPRINT = {
   trans: {shape:'disc', dia:1.90, leads:'radial'},              // TO-92
   reg:   {shape:'disc', dia:1.90, leads:'radial'},              // TO-92
   trim:  {shape:'box',  len:1.90, wid:1.71, leads:'radial'},    // small square trimmer
+  pot:   {shape:'disc', dia:1.90, leads:'radial'},              // panel pot: only its leads
+                                                                // land here, the body is off-board
 };
 
 /* 'axial' means the leads leave opposite ends of the body, so the holes have
    to be at least a body apart. 'radial' means they leave the same face on a
-   fixed pitch, and spreading them wider is just bending the legs — normal, and
+   fixed pitch, and spreading them wider is just bending the legs - normal, and
    not something to complain about. That distinction is the whole reason the
    lead-span check below can be strict without being wrong. */
 
@@ -3121,7 +3128,7 @@ const DIODE_PKG = {
   'DO-41': {len:2.05, wid:1.06},    // plastic rectifier / Schottky, 5.2 x 2.7 mm
 };
 
-/* Only families that can be named with confidence. An unrecognised value keeps
+/* Only families that can be named with confidence. An unrecognized value keeps
    DO-35 and can be overridden with an explicit `pkg` on the part: guessing the
    bigger body for an unknown diode would invent errors that are not real, and
    a DRC that cries wolf gets switched off. */
@@ -3221,7 +3228,7 @@ function boxesOverlap(A, B){
   return true;
 }
 function discBoxOverlap(d, b){
-  /* nearest point on the box to the disc centre, measured in the box's frame */
+  /* nearest point on the box to the disc center, measured in the box's frame */
   const c = Math.cos(-b.ang), s = Math.sin(-b.ang);
   const dx = d.cx - b.cx, dy = d.cy - b.cy;
   const lx = dx*c - dy*s, ly = dx*s + dy*c;
@@ -3317,11 +3324,11 @@ function overlayFrom(p1, q1, p2, q2){
   const du = u2 - u1, dv = v2 - v1;
   const den = du * du + dv * dv;
   if(Math.sqrt(den) < OV_MIN_PX)
-    return {why:'those two spots on the picture are too close together to set the scale — pick one near each opposite corner'};
+    return {why:'those two spots on the picture are too close together to set the scale - pick one near each opposite corner'};
 
   const dx = c2 - c1, dy = r2 - r1;
   if(Math.hypot(dx, dy) < OV_MIN_HOLES)
-    return {why:'those two holes are too close together to set the scale — pick one near each opposite corner'};
+    return {why:'those two holes are too close together to set the scale - pick one near each opposite corner'};
 
   const a = (du * dx + dv * dy) / den;
   const b = (du * dy - dv * dx) / den;
@@ -3331,7 +3338,7 @@ function overlayFrom(p1, q1, p2, q2){
 }
 
 /* Where a picture goes before anybody has aligned it: whole thing inside the
-   grid, square on, centred. A starting point you can see all of, not a guess
+   grid, square on, centered. A starting point you can see all of, not a guess
    at where it belongs -- alignment is still the person's to make. */
 function overlayFitBox(iw, ih, rows, cols){
   if(!ovFinite(iw, ih, rows, cols) || iw <= 0 || ih <= 0) return null;
@@ -3520,7 +3527,7 @@ function render(){
      never tested against a size it was not drawn at */
   const RW = PITCH * FOOTPRINT.res.len,   RH = PITCH * FOOTPRINT.res.wid;
   const CW = PITCH * FOOTPRINT.cap.len,   CH = PITCH * FOOTPRINT.cap.wid;
-  /* diodes are sized per part inside the loop — see DIODE_PKG */
+  /* diodes are sized per part inside the loop - see DIODE_PKG */
   const ER = PITCH * FOOTPRINT.ecap.dia / 2;
   const TR = PITCH * FOOTPRINT.trans.dia / 2;
   const labels = [];
@@ -3554,6 +3561,16 @@ function render(){
           '" rx="' + (TR*0.16) + '" fill="#2C6E4C" stroke="#0B2418" stroke-width="1.2"/>' +
           '<circle cx="0" cy="0" r="' + (TR*0.48) + '" fill="#E6E0C6" stroke="#0B2418" stroke-width="1"/>' +
           '<rect x="' + (-TR*0.42) + '" y="-1.7" width="' + (TR*0.84) + '" height="3.4" fill="#0B2418"/>' +
+          '</g>');
+      }else if(p.kind === 'pot'){
+        /* Panel pot: a round body with a shaft. Deliberately not the trimpot's
+           square, because one of these lives on the board and one does not. */
+        o.push(g3 +
+          '<circle cx="0" cy="0" r="' + TR + '" fill="#3A3550" stroke="#0B0A12" stroke-width="1.2"/>' +
+          '<circle cx="0" cy="0" r="' + (TR*0.44) + '" fill="#C9C3DA" stroke="#0B0A12" stroke-width="1"/>' +
+          '<rect x="' + (-TR*0.13) + '" y="' + (-TR*1.62) + '" width="' + (TR*0.26) +
+          '" height="' + (TR*0.66) + '" rx="' + (TR*0.06) +
+          '" fill="#C9C3DA" stroke="#0B0A12" stroke-width="0.8"/>' +
           '</g>');
       }else{
         /* TO-92 from above: a circle with one flat, the flat facing the legs */
@@ -3595,7 +3612,7 @@ function render(){
 
     if(dev && dev.draw === 'ldr'){
       /* face-on: a light window with the serpentine track across it. No band,
-         no polarity — the whole point of filing this under `res`. */
+         no polarity - the whole point of filing this under `res`. */
       const LR = PITCH * footprintOf(p).dia / 2;
       tint = '#D9D2B4'; off = LR + 12; half = LR;
       o.push(g +
@@ -3873,7 +3890,7 @@ function renderNets(hl){
            '</span></div>');
   }
   netlist.innerHTML = o.join('');
-  document.getElementById('nethdr').textContent = 'Nets — ' + NET.nets.length;
+  document.getElementById('nethdr').textContent = 'Nets - ' + NET.nets.length;
 }
 
 function renderReadout(){
@@ -3888,12 +3905,12 @@ function renderReadout(){
     const net = NET.netAt(r, c);
     /* "[3,3]" tells you nothing about which number is the row. Everyone reads a
        coordinate pair as across-then-down, and the column ruler across the top
-       reinforces it — so a walkthrough saying [3,3] then [4,3] gets built along
+       reinforces it - so a walkthrough saying [3,3] then [4,3] gets built along
        one strip instead of across three. Name the axes and the trap is gone. */
     o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">row ' + dRow(r) +
            ' <span style="color:#6B6580">·</span> col ' + dCol(c) + '</div>');
     o.push('<div class="row">' + (net ? 'net ' + net.id + ' · <b>' + net.holes.length + '</b> holes · <b>' +
-           net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> — dead hole') + '</div>');
+           net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> - dead hole') + '</div>');
     for(const oc of occupants(r, c)){
       if(oc.type === 'part'){
         const bn = oc.part.kind === 'res' ? resistorBandNames(oc.part.value) : null;
@@ -3952,12 +3969,12 @@ function renderDRC(){
 
   const hdr = document.getElementById('drchdr');
   if(!FINDINGS.length){
-    hdr.innerHTML = 'Checks — <span style="color:#00FFA3">clean</span>';
+    hdr.innerHTML = 'Checks - <span style="color:#00FFA3">clean</span>';
   }else{
     const bits = [];
     if(errs)  bits.push('<span style="color:#D926A9">' + errs + ' error' + (errs > 1 ? 's' : '') + '</span>');
     if(warns) bits.push('<span style="color:#A46BE8">' + warns + ' warning' + (warns > 1 ? 's' : '') + '</span>');
-    hdr.innerHTML = 'Checks — ' + bits.join(' · ');
+    hdr.innerHTML = 'Checks - ' + bits.join(' · ');
   }
 
   if(!FINDINGS.length){
@@ -4031,8 +4048,8 @@ drclist.addEventListener('mouseleave', () => { if(listNet !== null){ listNet = n
 
 
 /* ============================================================
-   EXPORT — a printable sheet at true 1:1
-   Drawn in millimetres so the SVG carries real physical size. A browser
+   EXPORT - a printable sheet at true 1:1
+   Drawn in millimeters so the SVG carries real physical size. A browser
    printing at 100% then produces a sheet you can lay the board on.
    ============================================================ */
 const MM = 2.54;      // 0.1in hole pitch
@@ -4072,7 +4089,7 @@ function exportSVG(side){
   o.push('<rect width="' + W + '" height="' + H + '" fill="#fff"/>');
   o.push('<g fill="#000" stroke="none">');
   o.push(T(EDGE, 6, (S.name || 'untitled'), 3.4, 'font-weight="bold"'));
-  o.push(T(EDGE, 9.6, (solder ? 'SOLDER SIDE — mirrored, as you look at the back of the board'
+  o.push(T(EDGE, 9.6, (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
                               : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
            '  ·  0.1in pitch  ·  1:1', 2.2));
   o.push('</g>');
@@ -4122,6 +4139,10 @@ function exportSVG(side){
         if(p.kind === 'trim')
           o.push(g + '<rect x="' + (-R) + '" y="' + (-R*0.9) + '" width="' + (2*R) + '" height="' + (R*1.8) +
                  '" rx="0.4"/><circle cx="0" cy="0" r="' + (R*0.45) + '"/></g>');
+        else if(p.kind === 'pot')
+          o.push(g + '<circle cx="0" cy="0" r="' + R + '"/><circle cx="0" cy="0" r="' +
+                 (R*0.42) + '"/><rect x="' + (-R*0.13) + '" y="' + (-R*1.6) + '" width="' +
+                 (R*0.26) + '" height="' + (R*0.62) + '"/></g>');
         else
           o.push(g + '<path d="M' + (-R*0.9075) + ' ' + (R*0.42) + 'A' + R + ' ' + R + ' 0 1 1 ' +
                  (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
@@ -4303,7 +4324,7 @@ function renderSheet(){
     '</td><td>' + esc(r.refs.join(' ')) + '</td></tr>').join('');
   const itemRows = items.map((it, i) =>
     '<tr><td>' + box(it.key) + '</td><td>' + (i+1) + '</td><td><b>' + esc(it.ref) + '</b></td><td>' +
-    esc(it.name) + '</td><td>' + esc(it.what || '—') + '</td><td class="mono">' + esc(it.holes) +
+    esc(it.name) + '</td><td>' + esc(it.what || '-') + '</td><td class="mono">' + esc(it.holes) +
     '</td></tr>').join('');
   const wireRows = wires.map(w =>
     '<tr><td><b>' + esc(w.label) + '</b></td><td class="mono">[' + w.row + ',' + w.col + ']</td><td>' +
@@ -4316,13 +4337,13 @@ function renderSheet(){
       '</b> done</p>' +
     '<h2>Component side</h2>' +
     '<div class="svgwrap">' + exportSVG('component') + '</div>' +
-    '<h2>Solder side — mirrored</h2>' +
+    '<h2>Solder side - mirrored</h2>' +
     '<p>The board as you see it with the copper facing you. Column numbers are still ' +
       'those of the layout, so a coordinate from the cut list lands on the same hole in both views.</p>' +
     '<div class="svgwrap">' + exportSVG('solder') + '</div>' +
     '<h2>Cuts <span class="n">' + cuts.length + '</span></h2>' +
     '<p>Made on the solder side. <b>from left (back)</b> counts holes from the left edge as you ' +
-      'look at the back of the board — the mirror flip is already done for you.</p>' +
+      'look at the back of the board - the mirror flip is already done for you.</p>' +
     '<table><thead><tr><th></th><th>row</th><th>col</th><th>from left (back)</th></tr></thead>' +
       '<tbody>' + (cutRows || '<tr><td colspan="4">no cuts</td></tr>') + '</tbody></table>' +
     '<h2>Parts <span class="n">' + totalParts + '</span></h2>' +
@@ -4351,7 +4372,7 @@ function renderNetlist(){
   if(!text.trim()){
     nlVerdict.innerHTML = '<span class="nldim">no netlist</span>';
     o.push('<div class="nldim">Nothing declared, so nothing to check. The board is still ' +
-           'checked by the DRC either way — a netlist only adds a second opinion about what ' +
+           'checked by the DRC either way - a netlist only adds a second opinion about what ' +
            '<em>should</em> be connected.</div>');
   }else if(r.findings.length){
     const errs = r.findings.length;
@@ -4368,7 +4389,7 @@ function renderNetlist(){
 
   if(text.trim() && r.unmentioned.length){
     o.push('<div class="grp"><h4>ON THE BOARD, NOT IN THE NETLIST</h4>');
-    o.push('<div class="nldim" style="margin-bottom:6px">Not errors — you may be describing ' +
+    o.push('<div class="nldim" style="margin-bottom:6px">Not errors - you may be describing ' +
            'only part of the circuit. Listed so you can see what is unchecked.</div>');
     for(const u of r.unmentioned) o.push('<span class="nlchip">' + esc(u) + '</span>');
     o.push('</div>');
@@ -4406,13 +4427,13 @@ function downloadSVG(side){
    ============================================================ */
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
-const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k'};
-const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', diode:'switching', res:'fixed'};
+const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k'};
+const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', diode:'switching', res:'fixed'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
-                e:'ecap', d:'diode', q:'trans', w:'trim', g:'reg', u:'ic', p:'pad'};
-/* 20x20, currentColor, no fills that would fight the row's own colour. Drawn
+                e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad'};
+/* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
   inspect:'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M12.8 12.8 17 17"/><path d="M6.5 9h5" stroke-width="2"/></svg>',
@@ -4427,6 +4448,7 @@ const TOOL_ICON = {
   diode  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 10h3.5M15 10h3.5"/><rect x="5" y="6.5" width="10" height="7" rx="1.6"/><path d="M12.6 6.5v7" stroke-width="2.4"/></svg>',
   trans  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 9.5a5.5 5.5 0 0 1 11 0z"/><path d="M4.5 9.5h11"/><path d="M7 9.5v6M10 9.5v6M13 9.5v6"/></svg>',
   trim   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="3.5" width="11" height="9" rx="1.4"/><path d="M7.5 8h5" stroke-width="1.8"/><path d="M7 12.5v4M10 12.5v4M13 12.5v4"/></svg>',
+  pot    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="9" r="4.6"/><path d="M10 4.4V1.6" stroke-width="1.8"/><path d="M7 13.4v4M10 13.6v4M13 13.4v4"/></svg>',
   reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
   ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
   pad    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="12" r="4"/><circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M10.9 9.1 16 4M13 4h3v3" stroke-linecap="round"/></svg>',
@@ -4438,7 +4460,7 @@ const HINTS = {
   select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. arrows nudge · , and . turn it · del removes.',
   area   :'click two opposite corners to box off a block. only whole parts inside it count. , and . turn it.',
   line   :'click any hole to pick its row and column, then add or remove one.',
-  cut    :'click a hole to cut the track there, or again to undo it. under a chip, click one of its own cuts to leave that strip whole \u2014 and move the whole line with the buttons on the left.',
+  cut    :'click a hole to cut the track there, or again to undo it. under a chip, click one of its own cuts to leave that strip whole - and move the whole line with the buttons on the left.',
   link   :'two clicks: start hole, end hole. links are the only thing that merges nets.',
   res    :'two clicks: lead A, lead B.',
   cap    :'two clicks: lead A, lead B.',
@@ -4446,8 +4468,9 @@ const HINTS = {
   diode  :'two clicks. the SECOND hole is the cathode, the banded end.',
   trans  :'three clicks, in leg order. the leg names are drawn on the board.',
   trim   :'three clicks: pin 1, wiper, pin 3.',
+  pot    :'three clicks: lug 1, wiper, lug 3 - where its flying leads land.',
   reg    :'three clicks, in leg order.',
-  ic     :'click where pin 1 goes. cuts between the pin rows are added automatically \u2014 the X tool moves them afterwards if the layout cuts elsewhere.',
+  ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
   erase  :'click a hole to remove the part, IC, pad or cut sitting there.',
 };
@@ -4489,7 +4512,7 @@ function renderCtx(){
     }else{
       for(const ic of dips){
         const half = ic.pins / 2, whole = icCutSkip(ic).length;
-        o.push('<label>' + esc(ic.ref) + ' — CUTS IN COLUMN ' +
+        o.push('<label>' + esc(ic.ref) + ' - CUTS IN COLUMN ' +
                dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
         o.push('<button data-cut="' + esc(ic.id) + '" data-dir="-1"' +
                (canMoveIcCuts(ic, -1) ? '' : ' disabled') + '>&#9664; move</button>' +
@@ -4512,7 +4535,7 @@ function renderCtx(){
       o.push('<button id="lnIC">insert col left of ' + LINE[1] + '</button>');
       o.push('<button id="lnDC">delete col ' + LINE[1] + '</button>');
       o.push('<div class="hint">inserting stretches anything spanning the line. deleting takes ' +
-             'whatever sits on it — undo brings it back.</div>');
+             'whatever sits on it - undo brings it back.</div>');
     }
   }else if(TOOL === 'area'){
     if(!REGION){
@@ -4550,7 +4573,7 @@ function renderCtx(){
       const sameLegs = Object.keys(PART_LIB).filter(k => legsOf(k) === p.pins.length);
       o.push('<label>KIND</label><select id="edKind">' + sameLegs.map(k =>
         '<option value="' + k + '"' + (k === p.kind ? ' selected' : '') + '>' + PART_LIB[k].name + '</option>').join('') + '</select>');
-      o.push('<label>TURN — about leg one</label>');
+      o.push('<label>TURN - about leg one</label>');
       o.push('<button id="edRotCW">turn &#8635;</button><button id="edRotCCW">turn &#8634;</button>');
     }else if(pd){
       o.push('<label>PAD LABEL</label><input id="edPadLabel" value="' + esc(pd.label) + '">');
@@ -4561,20 +4584,20 @@ function renderCtx(){
     }else if(ic){
       o.push('<label>REF</label><input id="edRef" value="' + esc(ic.ref) + '">');
       o.push('<label>PART</label><select id="edIc">' + opts(Object.keys(IC_LIB), ic.part) + '</select>');
-      o.push('<label>FOOTPRINT — ' + (hasFootprint(ic) ? 'custom' : 'standard DIP') + '</label>');
+      o.push('<label>FOOTPRINT - ' + (hasFootprint(ic) ? 'custom' : 'standard DIP') + '</label>');
       o.push('<button id="edFoot">' + (FOOT ? 'done shaping' : 'edit footprint') + '</button>');
       if(hasFootprint(ic)) o.push('<button id="edFootReset">back to a DIP</button>');
       if(FOOT) o.push('<div class="hint">drag any numbered pin to a new hole. a shaped chip ' +
-                      'manages its own cuts — the auto-cut column no longer applies.</div>');
+                      'manages its own cuts - the auto-cut column no longer applies.</div>');
       if(!hasFootprint(ic)){
         const half = ic.pins / 2, whole = icCutSkip(ic).length;
-        o.push('<label>CUTS — column ' + dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
+        o.push('<label>CUTS - column ' + dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
         o.push('<button id="edCutL"' + (canMoveIcCuts(ic, -1) ? '' : ' disabled') + '>&#9664; move cuts</button>' +
                '<button id="edCutR"' + (canMoveIcCuts(ic,  1) ? '' : ' disabled') + '>move cuts &#9654;</button>');
         o.push('<div class="hint">' + (half - whole) + ' of ' + half + ' strips cut' +
                (whole ? ', ' + whole + ' left whole' : '') +
                '. the line only moves between the pin rows. click one of its holes with ' +
-               '<b>X</b> to leave that strip whole — it stays that way when the chip moves.</div>');
+               '<b>X</b> to leave that strip whole - it stays that way when the chip moves.</div>');
       }
     }else{
       o.push('<div class="hint">nothing selected.<br>click a part or an IC.</div>');
@@ -4583,7 +4606,7 @@ function renderCtx(){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
     if(LEG_LIB[TOOL] && Object.keys(LEG_LIB[TOOL]).length > 1)
       o.push('<label>DEVICE</label><select id="ctxDev">' + opts(Object.keys(LEG_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
-    if(TOOL === 'trim') o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES.trim) + '">');
+    if(TOOL === 'trim' || TOOL === 'pot') o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES[TOOL]) + '">');
     const ll = LEG_LIB[TOOL] && (LEG_LIB[TOOL][DEVICE[TOOL]] || LEG_LIB[TOOL][Object.keys(LEG_LIB[TOOL])[0]]);
     if(ll) o.push('<div class="hint">legs in click order: <b style="color:#00F0FF">' + ll.join(' · ') + '</b></div>');
   }else if(TOOL === 'res' || TOOL === 'cap' || TOOL === 'ecap' || TOOL === 'diode'){
@@ -4750,7 +4773,7 @@ function selObj(){
 /* ---- undo: flat snapshot stack ---- */
 const UNDO = [], REDO = [];
 /* The block marquee and the picked row/column live outside S, but an edit can
-   move them — rotating a block transposes it, duplicating walks it along. Undo
+   move them - rotating a block transposes it, duplicating walks it along. Undo
    has to put them back too, or you are left with an outline describing a shape
    the board no longer has. */
 function snapshot(){ return JSON.stringify({s:S, region:REGION, line:LINE}); }
@@ -4801,7 +4824,7 @@ function onHole(r, c){
     pushUndo();
     /* A hole on a chip's own cut line belongs to the chip. Clicking it there
        says "this chip does not cut that strip", which survives the chip being
-       moved — where deleting the cut on its own would simply be reinstated the
+       moved - where deleting the cut on its own would simply be reinstated the
        next time it was picked up. */
     const owner = S.ics.find(x => icCutRowAt(x, r, c) >= 0);
     if(owner){
@@ -4837,7 +4860,7 @@ function onHole(r, c){
     if(!PAD_LABEL.trim()) return;
     pushUndo();
     /* Naming is the point of a pad, and the label field used to live in a
-       panel you only saw after switching tools and clicking the thing again —
+       panel you only saw after switching tools and clicking the thing again -
        so pads stayed called GND, which the netlist then resolves to whichever
        one happens to come first. Select the new pad, show its panel, and put
        the cursor in the name with the text already selected: type, Enter, done.
@@ -5079,7 +5102,7 @@ document.addEventListener('keydown', e => {
 });
 
 function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
-tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net colour' : 'copper'; render(); };
+tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
 zin.onclick  = () => zoom(1);
 zout.onclick = () => zoom(-1);
 
@@ -5109,7 +5132,7 @@ function load(obj){
   pushUndo();
   S = migrate(obj);
   if(MIGRATE_NOTES.length && typeof flash === 'function')
-    flash('dropped ' + MIGRATE_NOTES.join(', ') + ' — ctrl+z to go back');
+    flash('dropped ' + MIGRATE_NOTES.join(', ') + ' - ctrl+z to go back');
   projname.value = S.name;
   rows.value = S.board.rows;
   cols.value = S.board.cols;
@@ -5133,7 +5156,7 @@ btnExport.onclick = () => {
 
    Deliberately NOT part of the layout. It lives under its own storage key and
    is never written into the exported .json, because it is a thing you read
-   while building rather than a thing the board is made of — and because a
+   while building rather than a thing the board is made of - and because a
    1MB photo baked into every export would make layouts unshareable.
 
    The board's own autosave is protected from it: the image is capped well
@@ -5310,7 +5333,7 @@ refFile.onchange = (e) => {
 
    Two things it deliberately does not do:
 
-   - it does not read the picture. No hole detection, no colour matching,
+   - it does not read the picture. No hole detection, no color matching,
      nothing that could put a part somewhere nobody chose to put it.
    - it does not claim to be aligned. The fit is reported as pixels per hole
      and degrees of turn, and the person can see the grid over the photo,
@@ -5380,7 +5403,7 @@ function ovSet(on){
     if(!overlayOk(OV.T)){ OV.on = false; ovSync(); return; }
     OV.on = true;
     refToggle(false);
-    ovTell(fresh ? 'square on and centred, which is almost certainly not aligned \u2014 press align'
+    ovTell(fresh ? 'dropped in square on and centered. if that is a photo of a board, press align'
                  : 'back where you left it');
   }else{
     OV.on = false;
@@ -5398,7 +5421,7 @@ function ovSet(on){
    whatever transform is current, so the sequence works however badly the
    picture is placed when it starts -- including the very first time. */
 const OV_ASK = [
-  'click a spot on the picture you can name \u2014 a hole near one corner',
+  'click a spot on the picture you can name - a hole near one corner',
   'now click the board hole that spot is',
   'click a second spot on the picture, as far from the first as you can',
   'and the board hole that one is'
@@ -5429,7 +5452,7 @@ function ovAlignClick(e){
   if(ALIGN.step === 1 || ALIGN.step === 3){
     const q = [Math.round(p[0]), Math.round(p[1])];
     if(q[0] < 0 || q[1] < 0 || q[0] >= S.board.rows || q[1] >= S.board.cols){
-      ovTell('that is off the edge of the board \u2014 click a hole', true);
+      ovTell('that is off the edge of the board - click a hole', true);
       return;
     }
     if(ALIGN.step === 1){ ALIGN.q1 = q; ALIGN.step = 2; ovTell(OV_ASK[2]); render(); return; }
@@ -5446,7 +5469,7 @@ function ovAlignClick(e){
       return;
     }
     OV.T = T;
-    ovAlignStop('aligned on those two holes \u2014 check the grid against the picture before you trace it');
+    ovAlignStop('aligned on those two holes - check the grid against the picture before you trace it');
     refSave();
     return;
   }
@@ -5456,7 +5479,7 @@ function ovAlignClick(e){
   const sz = ovSize();
   if(!uv || !sz){ ovTell('that pick did not land anywhere', true); return; }
   if(uv[0] < 0 || uv[1] < 0 || uv[0] > sz[0] || uv[1] > sz[1]){
-    ovTell('that is off the picture \u2014 click somewhere on the photo itself', true);
+    ovTell('that is off the picture - click somewhere on the photo itself', true);
     return;
   }
   if(ALIGN.step === 0){ ALIGN.p1 = uv; ALIGN.step = 1; }
@@ -5509,7 +5532,7 @@ btnChecks.onclick = () => { side.hidden = !side.hidden; syncChecksButton(); };
 if(NARROW()) side.hidden = true;
 window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syncChecksButton(); });
 
-/* A layout turned into prose BY THE TOOL cannot disagree with the tool — it
+/* A layout turned into prose BY THE TOOL cannot disagree with the tool - it
    converts the coordinates the same way the board draws them. That is the
    whole reason this exists: handing somebody positions read off the JSON gave
    them 0-indexed numbers against a 1-indexed screen, twice. */
@@ -5518,7 +5541,7 @@ function renderParts(){
   const o = [];
   if(!text.trim()){
     o.push('<div class="grp nldim">Paste the parts list the build came with. ' +
-           'A quantity and a value on each line is enough — everything else on the ' +
+           'A quantity and a value on each line is enough - everything else on the ' +
            'line is ignored, so "R1 - 100k 1/4W resistor 5%" reads as one 100k.</div>');
     partsVerdict.textContent = '';
     partsOut.innerHTML = o.join('');
@@ -5547,7 +5570,7 @@ function renderParts(){
       else if(x.status === 'short') says = 'the list wants ' + x.want + ', the board has ' + x.got;
       else if(x.status === 'over')  says = 'the board has ' + x.got + ', the list only wants ' + x.want;
       else says = 'on the board (' + x.got + '), never mentioned in the list';
-      o.push('<div class="nlbad"><b>' + esc(x.value) + '</b> — ' + says +
+      o.push('<div class="nlbad"><b>' + esc(x.value) + '</b> - ' + says +
              (x.refs && x.refs.length ? ' <span class="nldim">' + esc(x.refs.join(' ')) + '</span>' : '') +
              '</div>');
     }
@@ -5572,7 +5595,7 @@ function renderParts(){
   /* the limit, said where it cannot be missed */
   o.push('<div class="grp"><h4>WHAT THIS DOES NOT CHECK</h4>' +
          '<div class="nldim">Only that the right parts are on the board. Nothing here ' +
-         'says they are in the right places — a board with every correct component wired ' +
+         'says they are in the right places - a board with every correct component wired ' +
          'wrongly passes this perfectly. The netlist is the check that answers that.</div></div>');
 
   partsOut.innerHTML = o.join('');
@@ -5600,16 +5623,16 @@ walkCopy.onclick  = () => {
   const text = walkText.textContent;
   const done = () => flash('walkthrough copied');
   if(navigator.clipboard && navigator.clipboard.writeText)
-    navigator.clipboard.writeText(text).then(done, () => flash('copy failed — select it by hand'));
-  else flash('copy failed — select it by hand');
+    navigator.clipboard.writeText(text).then(done, () => flash('copy failed - select it by hand'));
+  else flash('copy failed - select it by hand');
 };
 
 btnNet.onclick     = openNetlist;
 nlClose.onclick    = closeNetlist;
 
 /* Facing an empty pane is the hardest part of writing one of these. This fills
-   it with the circuit the board already has — right members, right spelling,
-   right shape — so the job becomes renaming and regrouping rather than
+   it with the circuit the board already has - right members, right spelling,
+   right shape - so the job becomes renaming and regrouping rather than
    recalling a syntax. It replaces what is there, so it asks first when that
    would throw away something you typed. */
 nlFromBoard.onclick = () => {
@@ -5632,7 +5655,7 @@ nlCopy.onclick = () => {
   else fallback();
   function fallback(){
     nlText.select();
-    try{ document.execCommand('copy'); done(); }catch(err){ flash('copy failed — select and copy by hand'); }
+    try{ document.execCommand('copy'); done(); }catch(err){ flash('copy failed - select and copy by hand'); }
   }
 };
 nlText.oninput     = () => {
