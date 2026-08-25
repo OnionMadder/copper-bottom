@@ -4381,6 +4381,11 @@ function exportSVG(side){
   const o = [];
   const T = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
         '" font-family="monospace" ' + (extra || '') + '>' + esc(s) + '</text>';
+  /* the same, wearing a white halo - labels sit among linework, and the halo
+     is what keeps them readable there without pushing them somewhere else */
+  const TL = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
+        '" font-family="monospace" paint-order="stroke" stroke="#fff" stroke-width="0.8" stroke-linejoin="round" ' +
+        (extra || '') + '>' + esc(s) + '</text>';
 
   o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + 'mm" height="' + H +
          'mm" viewBox="0 0 ' + W + ' ' + H + '">');
@@ -4472,8 +4477,12 @@ function exportSVG(side){
         }
         const ll = legLabels(p);
         if(ll) p.pins.forEach((q, i) =>
-          late.push(T(xs[i] + 1.3, ys[i] + 0.7, ll[i] || '', 1.9, 'font-weight="bold"')));
-        late.push(T(cx, cy - R*2.1, p.ref + ' ' + (p.device || p.value || ''), 2.1, 'text-anchor="middle"'));
+          late.push(TL(xs[i] + 1.3, ys[i] + 0.7, ll[i] || '', 1.9, 'font-weight="bold"')));
+        /* the ref sits ON the body where nothing else can be; what it is goes
+           just below, haloed against the legs and strips it crosses */
+        late.push(TL(cx, cy + 0.7, p.ref, 1.9, 'text-anchor="middle" font-weight="bold"'));
+        const what3 = p.device || p.value || '';
+        if(what3) late.push(TL(cx, cy + R + 2.2, what3, 1.5, 'text-anchor="middle"'));
         continue;
       }
 
@@ -4543,13 +4552,14 @@ function exportSVG(side){
         late.push(T(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'text-anchor="middle" font-weight="bold"'));
       }
       }
+      /* ON the body, along it, sized to it, haloed - and never upside down */
       const label = p.ref + (p.value ? ' ' + p.value : '');
-      const len = Math.hypot(bx-ax, by-ay);
-      let tx, ty;
-      if(len > 2*half + MM*1.25){ tx = mx + Math.cos(ang)*(half+2.2); ty = my + Math.sin(ang)*(half+2.2) + 0.7; }
-      else { const s = ((p.pins[0][0] + p.pins[0][1]) % 2) ? 1 : -1;
-             tx = mx + nx*(half+2.4)*s; ty = my + ny*(half+2.4)*s + 0.7; }
-      late.push(T(tx, ty, label, 2.1, 'text-anchor="middle"'));
+      let rot = deg % 360;
+      if(rot > 90) rot -= 180; else if(rot < -90) rot += 180;
+      const fit = Math.max(1.2, Math.min(2.0, (2*half + 2.6) / (label.length * 0.62)));
+      late.push('<text transform="translate(' + mx + ',' + my + ') rotate(' + rot.toFixed(1) + ')" y="0.6" ' +
+                'font-size="' + fit.toFixed(2) + '" font-family="monospace" text-anchor="middle" font-weight="bold" ' +
+                'paint-order="stroke" stroke="#fff" stroke-width="0.8" stroke-linejoin="round">' + esc(label) + '</text>');
     }
   }
 
@@ -4601,7 +4611,7 @@ function exportSVG(side){
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.7" fill="none" stroke="#000" stroke-width="0.35"/>');
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="0.45" fill="#000"/>');
     const leftish = solder ? d.at[1] < cols/2 : d.at[1] > cols/2;
-    late.push(T(cx + (leftish ? -2.2 : 2.2), cy - 1.9, d.label, 2.1,
+    late.push(TL(cx + (leftish ? -2.2 : 2.2), cy - 1.9, d.label, 2.1,
                 'text-anchor="' + (leftish ? 'end' : 'start') + '" font-weight="bold"'));
   }
 
