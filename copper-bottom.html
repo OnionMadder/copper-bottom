@@ -1428,7 +1428,55 @@ function uid(){ return 'e' + (++_uid).toString(36) + Math.floor(Math.random() * 
    the opening-example check in test/checks.js — no DRC errors, no parts lost
    to migrate, and if it declares a netlist, the board has to match it. */
 function exampleProject(){
-  return demoProject();
+  const P = (kind, ref, value, a, b) => ({id:uid(), kind:kind, ref:ref, value:value, pins:[a, b]});
+  const cuts = [3, 4, 5, 6].map(r => K(r, 6));      /* the chip's own, column 7 on the ruler */
+  return {
+    version:2, name:'555 Theremin', board:{rows:10, cols:18},
+    cuts: cuts.slice(),
+    parts:[
+      /* rails to the chip's four strips, and the tie that makes it oscillate */
+      P('link','J1','',[1,2],[3,2]),                /* ground  -> pin 1 */
+      P('link','J2','',[0,11],[3,11]),              /* supply  -> pin 8 */
+      P('link','J3','',[0,1],[6,1]),                /* supply  -> pin 4, reset held high */
+      P('link','J4','',[4,3],[5,10]),               /* pin 2 <-> pin 6 */
+      P('link','J5','',[1,16],[7,16]),              /* ground down the board */
+      Object.assign(P('res','R1','1k',[0,13],[4,13]),   {device:'fixed'}),
+      /* diagonal on purpose: straight down is one hole, and a quarter-watt
+         body is 6.3mm across 2.54mm of holes */
+      Object.assign(P('res','R2','100R',[8,1],[9,4]),   {device:'fixed'}),
+      P('cap','C1','10n',[6,14],[7,14]),            /* steadies the control pin */
+      P('cap','C2','100n',[5,12],[7,12]),           /* the timing cap */
+      Object.assign(P('ecap','C3','100u',[5,0],[8,0]),  {polarized:true}),   /* + on pin 3 */
+      Object.assign(P('ecap','C4','100u',[0,15],[1,15]),{polarized:true}),   /* supply */
+    ],
+    ics:[{id:uid(), ref:'IC1', part:'NE555', pins:8, pin1:[3,5], span:3, autoCuts:cuts.slice()}],
+    pads:[
+      {id:uid(), label:'+5V',   at:[0,0],  to:'power module + (set to 5V)'},
+      {id:uid(), label:'GND',   at:[1,0],  to:'power module - / speaker return'},
+      {id:uid(), label:'LDR_A', at:[4,17], to:'photocell, pin-7 end'},
+      {id:uid(), label:'LDR_B', at:[5,16], to:'photocell, pin-6 end'},
+      {id:uid(), label:'SPK_B', at:[7,0],  to:'speaker, return leg'},
+      {id:uid(), label:'SPK_A', at:[9,0],  to:'speaker, hot leg'},
+    ],
+    netlist: [
+      "# 555 Theremin - from the Mess o' Pedals breadboard build sheet.",
+      '# The photocell IS the timing resistor, so the pitch follows the light.',
+      '# Pin 4 (reset) must be tied high, or the chip sits silent with nothing',
+      '# visibly wrong. Both 100u cans are polarised - the stripe is minus.',
+      '#',
+      '# Press netlist and this is checked against the copper, hole by hole.',
+      '',
+      'V+:     @+5V IC1.8 IC1.4 R1.A C4.A',
+      'GND:    @GND IC1.1 C1.B C2.B C4.B @SPK_B',
+      '',
+      'DIS:    IC1.7 R1.B @LDR_A',
+      'TIM:    IC1.2 IC1.6 C2.A @LDR_B',
+      'CTRL:   IC1.5 C1.A',
+      'OUT:    IC1.3 C3.A',
+      'SPK1:   C3.B R2.A',
+      'SPK2:   R2.B @SPK_A',
+    ].join(String.fromCharCode(10)),
+  };
 }
 
 /* THE TEST FIXTURE. 692 checks know these holes by heart — pin 1 at [3,7],
