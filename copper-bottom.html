@@ -121,6 +121,9 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .tool .lbl{order:1; flex:1 1 auto; min-width:0}
 /* the shortcut sits at the far end, where a menu would put it */
 .tool kbd{order:2}
+.tool .tbadge{order:3; flex:0 0 auto; display:none; min-width:15px; padding:0 4px; height:15px; line-height:15px; text-align:center; font-family:var(--mono); font-size:10.5px; border-radius:8px; background:#2c2410; color:#E0B870; border:1px solid #7a6636}
+.tool .tbadge.show{display:block}
+.tool.has-fly:not(.on){color:#E0B870}
 .tool kbd{
   font:11.5px/1.4 var(--mono); min-width:18px; text-align:center; padding:1px 4px; border-radius:3px;
   background:#241F36; color:var(--soft); border:1px solid var(--line2);
@@ -481,7 +484,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
       <div class="sect">Edit</div>
-      <button class="tool" data-tool="fly"><kbd>F</kbd><span class="lbl">flying lead</span></button>
+      <button class="tool" data-tool="fly"><kbd>F</kbd><span class="lbl">flying lead</span><span class="tbadge" id="flyBadge" title="off-board leads on the board - one hookup wire each"></span></button>
       <button class="tool" data-tool="erase"><kbd>Del</kbd><span class="lbl">erase</span></button>
     </div>
     <div class="ctx"><div class="hint" id="hint"></div></div>
@@ -3485,6 +3488,17 @@ function highlightedNet(){
 
 function render(){
   computeNets();
+  /* the fly tool wears a count of off-board leads - one hookup wire each,
+     handy to total before cutting wire. Kept live here so it tracks every edit. */
+  {
+    const flyLeads = S.parts.reduce((n, p) => n + (Array.isArray(p.fly) ? p.fly.length : 0), 0);
+    const flyBtn = document.querySelector('.tool[data-tool="fly"]');
+    if(flyBtn){
+      const fb = flyBtn.querySelector('.tbadge');
+      if(fb){ fb.textContent = flyLeads || ''; fb.classList.toggle('show', flyLeads > 0); }
+      flyBtn.classList.toggle('has-fly', flyLeads > 0);
+    }
+  }
   const rows = S.board.rows, cols = S.board.cols;
   const W = MARGIN * 2 + (cols - 1) * PITCH;
   const H = MARGIN * 2 + (rows - 1) * PITCH;
