@@ -1103,6 +1103,7 @@ const DEV_PKG = {
   'DO-35': {shape:'box',  len:1.40, wid:0.70, leads:'axial'},   // glass small-signal
   'DO-41': {shape:'box',  len:2.05, wid:1.06, leads:'axial'},   // plastic rectifier
   'LED5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LED
+  'LED3':  {shape:'disc', dia:1.18, leads:'radial'},            // 3mm round LED
   'LDR5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LDR
 };
 const DEV_LIB = {
@@ -1116,7 +1117,9 @@ const DEV_LIB = {
     'zener':     {value:'5V1',    pkg:'DO-35', draw:'zener',
                   about:'a zener. Fitted BACKWARDS on purpose - it conducts in reverse at its rated voltage, which is how it clamps a rail'},
     'LED':       {value:'red',    pkg:'LED5',  draw:'led',
-                  about:'an LED. Round body, both leads out the same end, and the SHORT leg is the cathode - the flat on the rim marks it too'},
+                  about:'a 5mm LED. Round body, both leads out the same end, and the SHORT leg is the cathode - the flat on the rim marks it too'},
+    'LED 3mm':   {value:'red',    pkg:'LED3',  draw:'led',
+                  about:'a 3mm LED - the small one. Same deal as the 5mm: short leg and the flat on the rim mark the cathode'},
   },
   res: {
     'fixed': {value:'10k',  pkg:null,   draw:'axial',
@@ -3886,20 +3889,27 @@ function render(){
     }else if(dev && dev.draw === 'led'){
       /* round body with a flat on the cathode rim, and the two arrows that say
          it emits rather than merely conducts */
+      /* The collision check tests the full flange (LR), so the full flange is
+         drawn - but only as a faint ring. The bright dome inside it is what
+         the eye reads, sized to sit with its neighbors instead of over them,
+         and the emission arrows stay inside the ring. */
       const LR = PITCH * footprintOf(p).dia / 2;
+      const LD = LR * 0.72;
       const col = ledTint(p.value);
       tint = col[1]; off = LR + 12; half = LR;
-      const fx = LR*0.94, fy = LR*0.34;
+      const fx = LD*0.94, fy = LD*0.34;
       o.push(g +
-        '<path d="M' + fx + ' ' + (-fy) + 'A' + LR + ' ' + LR + ' 0 1 0 ' + fx + ' ' + fy +
+        '<circle cx="0" cy="0" r="' + LR + '" fill="none" stroke="' + col[0] +
+          '" stroke-opacity="0.4" stroke-width="1"/>' +
+        '<path d="M' + fx + ' ' + (-fy) + 'A' + LD + ' ' + LD + ' 0 1 0 ' + fx + ' ' + fy +
           'Z" fill="' + col[0] + '" stroke="#141020" stroke-width="1.2"/>' +
         '<line x1="' + fx + '" y1="' + (-fy) + '" x2="' + fx + '" y2="' + fy +
           '" stroke="#141020" stroke-width="1.6"/>' +
-        '<circle cx="' + (-LR*0.2) + '" cy="' + (-LR*0.2) + '" r="' + (LR*0.3) +
+        '<circle cx="' + (-LD*0.2) + '" cy="' + (-LD*0.2) + '" r="' + (LD*0.3) +
           '" fill="' + col[1] + '" fill-opacity="0.75"/>' +
-        '<path d="M' + (-LR*0.5) + ' ' + (-LR*1.15) + 'l' + (LR*0.55) + ' ' + (-LR*0.55) +
-          'M' + (LR*0.05) + ' ' + (-LR*1.15) + 'l' + (LR*0.55) + ' ' + (-LR*0.55) +
-          '" stroke="' + col[0] + '" stroke-width="1.6" stroke-linecap="round"/>' +
+        '<path d="M' + (-LD*0.5) + ' ' + (-LD*0.95) + 'l' + (LD*0.45) + ' ' + (-LD*0.45) +
+          'M' + (LD*0.05) + ' ' + (-LD*0.95) + 'l' + (LD*0.45) + ' ' + (-LD*0.45) +
+          '" stroke="' + col[0] + '" stroke-width="1.4" stroke-linecap="round"/>' +
         '</g>');
 
     }else if(p.kind === 'res'){
