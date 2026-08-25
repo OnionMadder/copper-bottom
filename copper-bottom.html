@@ -411,6 +411,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .tick input:checked + span{background:#333; box-shadow:inset 0 0 0 2px #fff}
 
 @media print{
+  /* the paper needs a margin of its own - with the screen padding zeroed,
+     the brand rule was landing flush on the sheet's edge */
+  @page{margin:12mm 14mm}
   .hdr,.main,.foot,.sheetbar{display:none !important}
   .sheet{position:static; background:#fff}
   .sheet[hidden]{display:none}
@@ -5649,6 +5652,16 @@ function load(obj){
 }
 btnDemo.onclick = () => load(exampleProject());
 btnNew.onclick  = () => load({name:'untitled', board:{rows:13, cols:20}});
+/* A printed-to-PDF sheet inherits the tab title as its file name, so every
+   layout used to save as the same file. While printing - the button or
+   ctrl+P - the tab wears the layout's own name instead. */
+let TITLE_BEFORE_PRINT = document.title;
+window.addEventListener('beforeprint', () => {
+  TITLE_BEFORE_PRINT = document.title;
+  document.title = (S.name || 'layout') + ' - build sheet';
+});
+window.addEventListener('afterprint', () => { document.title = TITLE_BEFORE_PRINT; });
+
 btnExport.onclick = () => {
   const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
