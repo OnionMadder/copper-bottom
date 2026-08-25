@@ -204,6 +204,9 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 /* tighter than the app's other buttons on purpose: the whole set has to fit
    one line above the board, and a second line is 26px of board gone */
 .ovbar button{padding:2px 6px}
+/* the eight adjust buttons are pressed over and over while lining a photo
+   up - they get real targets, and holding one repeats it */
+.ovbar .grp button{min-width:30px; padding:5px 0; font-size:13px; line-height:1}
 .ovbar input[type=range]{width:82px; vertical-align:middle}
 .ovbar .rd{color:var(--gray); font-family:var(--mono)}
 /* The message takes a whole row of its own rather than competing with the
@@ -316,6 +319,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .foot #stat,.foot #saved{font-family:var(--mono)}
 .foot .sp{flex:1}
 .foot input{width:44px; padding:1px 4px; text-align:center}
+/* the -/+ steppers do the job the native spinners were too small for */
+.foot input[type=number]{-moz-appearance:textfield; appearance:textfield}
+.foot input[type=number]::-webkit-outer-spin-button,
+.foot input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none; margin:0}
+.foot span{display:flex; align-items:center; gap:4px}
 #saved{color:var(--mint)}
 /* Narrow layout. The rail keeps its tool icons and loses its text labels, and
    the net/DRC side panel goes away - both are readable losses.
@@ -634,8 +642,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 
 <div class="foot">
   <button id="btnChecks" class="checkstoggle" title="show the checks panel">checks</button>
-  <span>rows <input id="rows" type="number" min="2" max="60" value="13"></span>
-  <span>cols <input id="cols" type="number" min="2" max="80" value="20"></span>
+  <span>rows <button id="rDn" title="one row fewer - hold to keep going">&minus;</button><input id="rows" type="number" min="2" max="60" value="13"><button id="rUp" title="one row more - hold to keep going">+</button></span>
+  <span>cols <button id="cDn" title="one column fewer - hold to keep going">&minus;</button><input id="cols" type="number" min="2" max="80" value="20"><button id="cUp" title="one column more - hold to keep going">+</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
   <div class="sp"></div>
@@ -5407,10 +5415,30 @@ document.addEventListener('keydown', e => {
   if(KEYMAP[k]){ e.preventDefault(); setTool(KEYMAP[k]); }
 });
 
+/* Press-and-hold: a tap is one step, holding walks it - the cure for controls
+   that used to take twenty clicks. Fires once on the press, then repeats
+   while held. Keyboard activation still lands as a click with detail 0, so
+   Enter and Space keep working one step at a time. */
+function holdable(btn, fn){
+  let t = null, iv = null;
+  const stop = () => { clearTimeout(t); clearInterval(iv); t = iv = null; };
+  btn.addEventListener('pointerdown', e => {
+    if(e.button !== 0) return;
+    e.preventDefault();
+    fn();
+    t = setTimeout(() => { iv = setInterval(fn, 60); }, 350);
+    try{ btn.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointercancel', stop);
+  btn.addEventListener('lostpointercapture', stop);
+  btn.addEventListener('click', e => { if(e.detail === 0) fn(); });
+}
+
 function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
-zin.onclick  = () => zoom(1);
-zout.onclick = () => zoom(-1);
+holdable(zin,  () => zoom(1));
+holdable(zout, () => zoom(-1));
 
 projname.oninput = () => { S.name = projname.value; autosave(); };
 function resize(){
@@ -5423,6 +5451,15 @@ function resize(){
 }
 rows.onchange = resize;
 cols.onchange = resize;
+const stepBoard = (which, d) => () => {
+  const el = which === 'r' ? rows : cols;
+  el.value = (+el.value || (which === 'r' ? 13 : 20)) + d;
+  resize();   // clamps to the board limits
+};
+holdable(rUp, stepBoard('r',  1));
+holdable(rDn, stepBoard('r', -1));
+holdable(cUp, stepBoard('c',  1));
+holdable(cDn, stepBoard('c', -1));
 
 /* ---- persistence ---- */
 const LS = 'stripboard.autosave.v1';
@@ -5811,14 +5848,15 @@ refOverlay.onclick = () => ovSet(true);
 ovOff.onclick      = () => ovSet(false);
 ovOpen.onclick     = () => refFile.click();
 ovAlign.onclick    = () => { ALIGN ? ovAlignStop('') : ovAlignStart(); };
-ovLeft.onclick     = () => ovMove(0, -OV_NUDGE);
-ovRight.onclick    = () => ovMove(0,  OV_NUDGE);
-ovUp.onclick       = () => ovMove(-OV_NUDGE, 0);
-ovDown.onclick     = () => ovMove( OV_NUDGE, 0);
-ovSmall.onclick    = () => ovZoom(1 / OV_STEP);
-ovBig.onclick      = () => ovZoom(OV_STEP);
-ovCCW.onclick      = () => ovSpin(-OV_SPIN);
-ovCW.onclick       = () => ovSpin( OV_SPIN);
+/* held, these repeat - lining a photo up used to be a click per 0.1 hole */
+holdable(ovLeft,  () => ovMove(0, -OV_NUDGE));
+holdable(ovRight, () => ovMove(0,  OV_NUDGE));
+holdable(ovUp,    () => ovMove(-OV_NUDGE, 0));
+holdable(ovDown,  () => ovMove( OV_NUDGE, 0));
+holdable(ovSmall, () => ovZoom(1 / OV_STEP));
+holdable(ovBig,   () => ovZoom(OV_STEP));
+holdable(ovCCW,   () => ovSpin(-OV_SPIN));
+holdable(ovCW,    () => ovSpin( OV_SPIN));
 ovFade.oninput     = () => { OV.op = Math.max(0.1, Math.min(1, (+ovFade.value || 55) / 100)); render(); };
 ovFade.onchange    = () => refSave();
 
