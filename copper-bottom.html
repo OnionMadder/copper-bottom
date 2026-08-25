@@ -3386,10 +3386,10 @@ function bodies(){
       const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
       const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
       const ang = Math.atan2(ys[ys.length-1] - ys[0], xs[xs.length-1] - xs[0]);
-      /* the package sits off to one side of its legs, as drawn */
-      const k = 0.8 * (fp.dia ? fp.dia / 2 : fp.wid / 2);
+      /* the package sits centered on its legs, exactly as drawn - a TO-92 or
+         a trimmer on stripboard sits over its own holes, not beside them */
       out.push(Object.assign({}, fp, {ref:p.ref, kind:p.kind, part:p, ang:ang, pinned:true,
-        cx:cx + k * Math.sin(ang), cy:cy - k * Math.cos(ang)}));
+        cx:cx, cy:cy}));
       continue;
     }
 
@@ -3799,7 +3799,7 @@ function render(){
       }
       if(!allFly3){
       const g3 = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a3*180/Math.PI) +
-                 ') translate(0,' + (-TR*0.8) + ')">';
+                 ')">';   // centered on the legs, matching the collision body
       if(p.kind === 'trim'){
         o.push(g3 +
           '<rect x="' + (-TR) + '" y="' + (-TR*0.9) + '" width="' + (2*TR) + '" height="' + (TR*1.8) +
@@ -4444,7 +4444,7 @@ function exportSVG(side){
         const R = 2.4;
         if(!allFlyS){
         const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + a3 +
-                  ') translate(0,' + (-R*0.8) + ')" fill="#fff" stroke="#000" stroke-width="0.3">';
+                  ')" fill="#fff" stroke="#000" stroke-width="0.3">';   // centered, like the board
         if(p.kind === 'trim')
           o.push(g + '<rect x="' + (-R) + '" y="' + (-R*0.9) + '" width="' + (2*R) + '" height="' + (R*1.8) +
                  '" rx="0.4"/><circle cx="0" cy="0" r="' + (R*0.45) + '"/></g>');
