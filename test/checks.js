@@ -1936,6 +1936,35 @@ ok(String(LEG_LIB.trans['2N5458']) === 'D,S,G', '2N5458 matches the 2N5457 JFET 
 // left out on purpose: its datasheets disagreed on pin order
 ok(!('PN2907A' in LEG_LIB.trans), 'PN2907A is deliberately absent - sources disagreed');
 
+console.log('-- bent legs --');
+// a transistor with two legs on one strip is shorted; bending one of them clears it
+S = {version:2, name:'bent', board:{rows:6, cols:8}, cuts:[], parts:[
+  {id:'q', kind:'trans', ref:'Q1', device:'2N3904', pins:[[1,1],[1,3],[3,3]]},
+], ics:[], pads:[]};
+computeNets();
+ok(runDRC().some(f => f.rule === 'part-short'), 'two legs on one strip short');
+S.parts[0].bent = [0]; computeNets();
+ok(!runDRC().some(f => f.rule === 'part-short'), 'bending one of them clears the short');
+
+// a bent leg frees its hole: another lead in the same hole raises no shared-hole
+S = {version:2, name:'bent2', board:{rows:6, cols:8}, cuts:[], parts:[
+  {id:'q', kind:'trans', ref:'Q1', device:'2N3904', pins:[[1,1],[2,2],[3,3]], bent:[2]},
+  {id:'r', kind:'res', ref:'R1', value:'10k', pins:[[3,3],[5,3]]},
+], ics:[], pads:[]};
+computeNets();
+ok(!runDRC().some(f => f.rule === 'shared-hole'), 'a bent leg leaves its hole free for another lead');
+
+// the netlist is told the truth about a bent leg
+const bentRes = resolveMember('Q1.C');
+ok(!bentRes.ok && /bent/.test(bentRes.why), 'a netlist naming a bent leg is told it is unwired');
+ok(resolveMember('Q1.B').ok, 'while an unbent leg of the same part still resolves');
+
+// migrate: bent sanitized like fly, and a leg in both lists keeps only bent
+const bm = migrate({version:2, board:{rows:6,cols:8}, cuts:[], ics:[], pads:[],
+  parts:[{id:'q', kind:'trans', ref:'Q1', pins:[[1,1],[2,2],[3,3]], bent:[2,2,7,-1], fly:[1,2]}]});
+ok(String(bm.parts[0].bent) === '2', 'migrate de-dupes and range-checks bent');
+ok(String(bm.parts[0].fly) === '1', 'a leg both bent and flying keeps only bent');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

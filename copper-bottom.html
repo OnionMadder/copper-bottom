@@ -138,6 +138,9 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .ctx .flyleg{flex:0 0 auto; width:auto; min-width:30px; padding:3px 9px; font-family:var(--mono); font-size:12px; border:1px solid var(--line2); border-radius:5px; background:var(--panel); color:var(--gray); cursor:pointer}
 .ctx .flyleg:hover{border-color:var(--soft); color:#fff}
 .ctx .flyleg.on{border-color:#E0B870; color:#E0B870; background:#2c2410}
+.ctx .bentleg{flex:0 0 auto; width:auto; min-width:30px; padding:3px 9px; font-family:var(--mono); font-size:12px; border:1px solid var(--line2); border-radius:5px; background:var(--panel); color:var(--gray); cursor:pointer}
+.ctx .bentleg:hover{border-color:var(--soft); color:#fff}
+.ctx .bentleg.on{border-color:var(--soft); color:#C9C3DA; background:#221E30; text-decoration:line-through}
 .hint{color:var(--soft); font-size:12.5px; line-height:1.6; padding:0 2px}
 
 /* ---- reference pane ---- */
@@ -674,6 +677,11 @@ const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
 const isFlying  = p => Array.isArray(p.fly) && p.fly.length > 0;
 const legFlying = (p, i) => Array.isArray(p.fly) && p.fly.indexOf(i) >= 0;
 
+/* A bent leg is folded up out of the way and left unwired: it is not in its
+   hole, it is on no net, and the hole under it is free. The opposite deal to
+   a flying lead, which is off the board but still connected. */
+const legBent = (p, i) => Array.isArray(p.bent) && p.bent.indexOf(i) >= 0;
+
 /* Three-leg pinouts, read left to right with the flat face toward you and the
    legs pointing down. Getting this backwards is the classic stripboard
    build-killer, so the legs are lettered on the board. Check any device you
@@ -768,7 +776,16 @@ function migrate(obj){
       const n = r.pins.length;
       let fly = Array.isArray(r.fly) ? r.fly.filter(i => Number.isInteger(i) && i >= 0 && i < n) : [];
       fly = [...new Set(fly)].sort((a, b) => a - b);
-      if(fly.length || ('fly' in r)){ r = Object.assign({}, r); if(fly.length) r.fly = fly; else delete r.fly; }
+      let bent = Array.isArray(r.bent) ? r.bent.filter(i => Number.isInteger(i) && i >= 0 && i < n) : [];
+      bent = [...new Set(bent)].sort((a, b) => a - b);
+      /* a leg cannot be both bent away and flying; bent wins - it is the
+         stronger claim (definitely not wired) */
+      fly = fly.filter(i => bent.indexOf(i) < 0);
+      if(fly.length || ('fly' in r) || bent.length || ('bent' in r)){
+        r = Object.assign({}, r);
+        if(fly.length) r.fly = fly; else delete r.fly;
+        if(bent.length) r.bent = bent; else delete r.bent;
+      }
     }
     /* 'vertical' is the only mount the checks read; anything else is dropped
        rather than carried, so a file cannot smuggle in a value nothing honours. */
@@ -1601,9 +1618,12 @@ function connections(){
   for(const p of S.parts){
     if(p.kind === 'link') continue;
     const names = legLabels(p);
-    p.pins.forEach((at, i) => list.push({
-      label:p.ref + '.' + (names ? names[i] : (i < 2 ? 'AB'[i] : i + 1)),
-      at:at, kind:'lead', part:p}));
+    p.pins.forEach((at, i) => {
+      if(legBent(p, i)) return;   // folded up and unwired: not a connection
+      list.push({
+        label:p.ref + '.' + (names ? names[i] : (i < 2 ? 'AB'[i] : i + 1)),
+        at:at, kind:'lead', part:p});
+    });
   }
   for(const ic of S.ics)
     for(let i = 1; i <= ic.pins; i++)
@@ -1681,6 +1701,7 @@ function runDRC(){
   for(const p of S.parts){
     const names = legLabels(p);
     p.pins.forEach((at, i) => {
+      if(legBent(p, i)) return;   // not in the hole, so the hole is free
       const nm = names ? 'leg ' + names[i] : (i < 2 ? 'lead ' + 'AB'[i] : 'lead ' + (i + 1));
       sites.push({who:p.ref + ' ' + nm, at:at});
     });
@@ -1753,6 +1774,7 @@ function runDRC(){
     const names = legLabels(p);
     const byNet = new Map();
     p.pins.forEach((at, i) => {
+      if(legBent(p, i)) return;
       const net = NET.netAt(at[0], at[1]);
       if(!net) return;
       if(!byNet.has(net.id)) byNet.set(net.id, []);
@@ -2442,6 +2464,11 @@ function walkthrough(){
       const which = part.fly.map(i => (ll[i] ? ll[i] : 'leg ' + (i + 1)) + ' at ' + at(part.pins[i])).join(', ');
       body.push('Off the board on flying leads: ' + which + '. Those holes are only where its wires land - the part itself sits off the board.');
     }
+    if(Array.isArray(part.bent) && part.bent.length){
+      const ll = legLabels(part) || [];
+      const which = part.bent.map(i => ll[i] ? ll[i] : 'leg ' + (i + 1)).join(', ');
+      body.push('Bend ' + (part.bent.length === 1 ? 'leg ' : 'legs ') + which + ' up out of the way - ' + (part.bent.length === 1 ? 'it is' : 'they are') + ' deliberately unwired.');
+    }
     if(part.mount === 'vertical') body.push('This one stands on end rather than lying flat.');
     step(head, body);
   }
@@ -3076,6 +3103,8 @@ function resolveMember(token){
   if(idx < 0 || idx >= part.pins.length)
     return {ok:false, why:part.ref + ' has no leg "' + leg + '"' +
             (names ? ' (try ' + names.join('/') + ')' : ' (try A/B)')};
+  if(legBent(part, idx))
+    return {ok:false, why:part.ref + '.' + leg + ' is bent away and unwired - the netlist says it connects'};
   return {ok:true, at:part.pins[idx]};
 }
 
@@ -3641,6 +3670,17 @@ function render(){
     /* A flying lead: a ring where it solders to the board, and a short stub
        running off toward wherever the part actually sits. Gold, because a cut
        is magenta, selection mint and focus cyan - a flying wire is none of those. */
+    /* A bent leg: a stub from the body that stops well short of the hole and
+       hooks upward - folded out of the way, touching nothing. Dim, because it
+       is deliberately not part of the circuit. */
+    const bentStub = (hx, hy, fx, fy) => {
+      const mx2 = fx + (hx - fx) * 0.45, my2 = fy + (hy - fy) * 0.45;
+      let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+      const tx = mx2 - dy * PITCH * 0.4, ty = my2 + dx * PITCH * 0.4;
+      return wire(fx, fy, mx2, my2, '#07050D', 4.2) + wire(fx, fy, mx2, my2, '#6B6580', 1.5) +
+        wire(mx2, my2, tx, ty, '#07050D', 4.2) + wire(mx2, my2, tx, ty, '#6B6580', 1.5) +
+        '<circle cx="' + tx + '" cy="' + ty + '" r="2" fill="#6B6580"/>';
+    };
     const flyTerm = (hx, hy, fx, fy) => {
       let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
       const ex = hx + dx * PITCH * 0.72, ey = hy + dy * PITCH * 0.72;
@@ -3662,6 +3702,7 @@ function render(){
       const a3 = Math.atan2(ys[ys.length-1] - ys[0], xs[xs.length-1] - xs[0]);
       const allFly3 = isFlying(p) && p.fly.length === xs.length;
       for(let i = 0; i < xs.length; i++){
+        if(legBent(p, i)){ o.push(bentStub(xs[i], ys[i], cx, cy)); continue; }
         if(legFlying(p, i)){ o.push(flyTerm(xs[i], ys[i], cx, cy)); continue; }
         o.push(wire(xs[i], ys[i], cx, cy, '#07050D', 4.6));
         o.push(wire(xs[i], ys[i], cx, cy, '#A9A3BC', 1.5));
@@ -3705,9 +3746,11 @@ function render(){
       }
       }
       const ll = legLabels(p);
-      if(ll) p.pins.forEach((q, i) =>
+      if(ll) p.pins.forEach((q, i) => {
+        if(legBent(p, i)) return;   // the leg is not in that hole
         labels.push('<text class="leg" x="' + (xs[i] + 11) + '" y="' + (ys[i] + 3.5) + '">' +
-                    esc(ll[i] || '') + '</text>'));
+                    esc(ll[i] || '') + '</text>');
+      });
       const name = p.device || p.value || '';
       labels.push('<text class="lbl" style="fill:#CFC8E0" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
                   esc(p.ref + (name ? ' ' + name : '')) + '</text>');
@@ -3728,8 +3771,9 @@ function render(){
     const flyA = legFlying(p, 0), flyB = legFlying(p, 1);
     const allFly2 = flyA && flyB;
     const lead2 = (x, y) => { o.push(wire(x, y, mx, my, '#07050D', 4.6)); o.push(wire(x, y, mx, my, '#A9A3BC', 1.5)); };
-    if(flyA) o.push(flyTerm(ax, ay, mx, my)); else lead2(ax, ay);
-    if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
+    const bentA = legBent(p, 0), bentB = legBent(p, 1);
+    if(bentA) o.push(bentStub(ax, ay, mx, my)); else if(flyA) o.push(flyTerm(ax, ay, mx, my)); else lead2(ax, ay);
+    if(bentB) o.push(bentStub(bx, by, mx, my)); else if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
 
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
     let tint = '#fff', off = 18, half = 12;
@@ -4277,7 +4321,12 @@ function exportSVG(side){
           return '<line x1="' + hx + '" y1="' + hy + '" x2="' + ex + '" y2="' + ey + '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>' +
             '<circle cx="' + hx + '" cy="' + hy + '" r="0.9" fill="none" stroke="#000" stroke-width="0.3"/>' +
             '<circle cx="' + ex + '" cy="' + ey + '" r="0.45" fill="#000" stroke="none"/>'; };
-        for(let i = 0; i < xs.length; i++){ if(legFlying(p, i)) o.push(termS(xs[i], ys[i], cx, cy)); else o.push(lead(i, cx, cy, 0.25)); }
+        const bentS = (hx, hy, fx, fy) => { const mx2 = fx + (hx - fx) * 0.45, my2 = fy + (hy - fy) * 0.45;
+          let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+          const tx = mx2 - dy * 1.1, ty = my2 + dx * 1.1;
+          return '<path d="M' + fx + ' ' + fy + 'L' + mx2 + ' ' + my2 + 'L' + tx + ' ' + ty + '" fill="none" stroke="#888" stroke-width="0.25"/>' +
+            '<circle cx="' + tx + '" cy="' + ty + '" r="0.35" fill="#888" stroke="none"/>'; };
+        for(let i = 0; i < xs.length; i++){ if(legBent(p, i)) o.push(bentS(xs[i], ys[i], cx, cy)); else if(legFlying(p, i)) o.push(termS(xs[i], ys[i], cx, cy)); else o.push(lead(i, cx, cy, 0.25)); }
         const R = 2.4;
         if(!allFlyS){
         const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + a3 +
@@ -4321,8 +4370,14 @@ function exportSVG(side){
         return '<line x1="' + hx + '" y1="' + hy + '" x2="' + ex + '" y2="' + ey + '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>' +
           '<circle cx="' + hx + '" cy="' + hy + '" r="0.9" fill="none" stroke="#000" stroke-width="0.3"/>' +
           '<circle cx="' + ex + '" cy="' + ey + '" r="0.45" fill="#000" stroke="none"/>'; };
-      o.push(flyA ? term2(ax, ay) : leadS(ax, ay));
-      o.push(flyB ? term2(bx, by) : leadS(bx, by));
+      const bent2 = (hx, hy) => { const mx2 = mx + (hx - mx) * 0.45, my2 = my + (hy - my) * 0.45;
+        let dx = hx - mx, dy = hy - my; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+        const tx = mx2 - dy * 1.1, ty = my2 + dx * 1.1;
+        return '<path d="M' + mx + ' ' + my + 'L' + mx2 + ' ' + my2 + 'L' + tx + ' ' + ty + '" fill="none" stroke="#888" stroke-width="0.25"/>' +
+          '<circle cx="' + tx + '" cy="' + ty + '" r="0.35" fill="#888" stroke="none"/>'; };
+      const bA2 = legBent(p, 0), bB2 = legBent(p, 1);
+      o.push(bA2 ? bent2(ax, ay) : (flyA ? term2(ax, ay) : leadS(ax, ay)));
+      o.push(bB2 ? bent2(bx, by) : (flyB ? term2(bx, by) : leadS(bx, by)));
       const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg +
                 ')" fill="#fff" stroke="#000" stroke-width="0.3">';
       let half = 2;
@@ -4755,6 +4810,12 @@ function renderCtx(){
           '<button type="button" class="flyleg' + (fset.has(i) ? ' on' : '') + '" data-leg="' + i + '">' +
           esc(fll[i] || String(i + 1)) + '</button>').join('') + '</div>');
         o.push('<div class="hint">a panel pot or a switch lives off the board. click a leg to run it out on a flying wire - the wire lands where the leg is now. click it again to set it back down.</div>');
+        const bset = new Set(Array.isArray(p.bent) ? p.bent : []);
+        o.push('<label>BENT AWAY - left unwired</label>');
+        o.push('<div class="flyrow">' + p.pins.map((_, i) =>
+          '<button type="button" class="bentleg' + (bset.has(i) ? ' on' : '') + '" data-leg="' + i + '">' +
+          esc(fll[i] || String(i + 1)) + '</button>').join('') + '</div>');
+        o.push('<div class="hint">fold a leg up out of the way and leave it unwired - an unused lug or pin. it is on no net and its hole is free. click again to unfold it.</div>');
       }
       const efp = footprintOf(p);
       if(p.pins.length === 2 && efp && efp.leads === 'axial'){
@@ -4916,12 +4977,21 @@ function renderCtx(){
   on('edDev',  'onchange', e => edit(() => { const t = selObj(); if(t) t.device = e.target.value; }));
   on('edKind', 'onchange', e => edit(() => { const t = selObj(); if(t) t.kind = e.target.value; }));
   on('edVert', 'onchange', e => edit(() => { const t = selObj(); if(!t) return; if(e.target.checked) t.mount = 'vertical'; else delete t.mount; }));
+  const setLegList = (t, key, list) => { if(list.length) t[key] = list; else delete t[key]; };
+  const toggleLeg = (t, key, otherKey, i) => {
+    const set = new Set(Array.isArray(t[key]) ? t[key] : []);
+    if(set.has(i)) set.delete(i); else set.add(i);
+    setLegList(t, key, [...set].sort((x, y) => x - y));
+    /* a leg cannot be both flying and bent - turning one on turns the other off */
+    if(set.has(i)) setLegList(t, otherKey, (Array.isArray(t[otherKey]) ? t[otherKey] : []).filter(x => x !== i));
+  };
   document.querySelectorAll('#ctx .flyleg').forEach(b => b.onclick = () => edit(() => {
     const t = selObj(); if(!t) return;
-    const i = +b.dataset.leg, set = new Set(Array.isArray(t.fly) ? t.fly : []);
-    if(set.has(i)) set.delete(i); else set.add(i);
-    const fly = [...set].sort((x, y) => x - y);
-    if(fly.length) t.fly = fly; else delete t.fly;
+    toggleLeg(t, 'fly', 'bent', +b.dataset.leg);
+  }));
+  document.querySelectorAll('#ctx .bentleg').forEach(b => b.onclick = () => edit(() => {
+    const t = selObj(); if(!t) return;
+    toggleLeg(t, 'bent', 'fly', +b.dataset.leg);
   }));
   on('edFoot', 'onclick', () => {
     const ic = selObj();
@@ -5118,6 +5188,10 @@ function onHole(r, c){
     if(set.has(leg.leg)) set.delete(leg.leg); else set.add(leg.leg);
     const fly = [...set].sort((a, b) => a - b);
     if(fly.length) p.fly = fly; else delete p.fly;
+    if(set.has(leg.leg) && Array.isArray(p.bent)){   // flying a bent leg unfolds it
+      const bent = p.bent.filter(x => x !== leg.leg);
+      if(bent.length) p.bent = bent; else delete p.bent;
+    }
     commit(); return;
   }
 
