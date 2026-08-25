@@ -1923,6 +1923,19 @@ const cbad = migrate({version:2, board:{rows:8,cols:6}, cuts:[], parts:[], pads:
   ics:[{id:'x', ref:'IC1', part:'CD40106', pins:9, pin1:[0,1], span:3, autoCuts:[]}]});
 ok(cbad.ics.length === 0, 'a fixed chip with an odd pin count is still rejected');
 
+console.log('-- transistor pinouts (verified against datasheets) --');
+ok(String(LEG_LIB.trans['2N4401']) === 'E,B,C', '2N4401 is EBC');
+ok(String(LEG_LIB.trans['2N5551']) === 'E,B,C', '2N5551 is EBC');
+ok(String(LEG_LIB.trans['2N4403']) === 'E,B,C', '2N4403 is EBC');
+ok(String(LEG_LIB.trans['MPSA13']) === 'E,B,C', 'MPSA13 (darlington) is EBC');
+// the ones a consistency-minded edit would get wrong: Japanese 2S parts are ECB
+ok(String(LEG_LIB.trans['2SC1815']) === 'E,C,B', '2SC1815 is ECB, not EBC');
+ok(String(LEG_LIB.trans['2SA1015']) === 'E,C,B', '2SA1015 is ECB, not EBC');
+ok(String(LEG_LIB.trans['BS170']) === 'D,G,S', 'BS170 is D-G-S');
+ok(String(LEG_LIB.trans['2N5458']) === 'D,S,G', '2N5458 matches the 2N5457 JFET family (D-S-G)');
+// left out on purpose: its datasheets disagreed on pin order
+ok(!('PN2907A' in LEG_LIB.trans), 'PN2907A is deliberately absent - sources disagreed');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
