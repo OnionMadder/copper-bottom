@@ -134,6 +134,10 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .ctx input,.ctx select{width:100%}
 .ctx .chk{display:flex; align-items:center; gap:7px; font-size:12.5px; letter-spacing:normal; font-weight:400; color:var(--soft); cursor:pointer}
 .ctx .chk input{width:auto}
+.ctx .flyrow{display:flex; gap:5px; flex-wrap:wrap}
+.ctx .flyleg{flex:0 0 auto; width:auto; min-width:30px; padding:3px 9px; font-family:var(--mono); font-size:12px; border:1px solid var(--line2); border-radius:5px; background:var(--panel); color:var(--gray); cursor:pointer}
+.ctx .flyleg:hover{border-color:var(--soft); color:#fff}
+.ctx .flyleg.on{border-color:#E0B870; color:#E0B870; background:#2c2410}
 .hint{color:var(--soft); font-size:12.5px; line-height:1.6; padding:0 2px}
 
 /* ---- reference pane ---- */
@@ -4736,6 +4740,15 @@ function renderCtx(){
         '<option value="' + k + '"' + (k === p.kind ? ' selected' : '') + '>' + PART_LIB[k].name + '</option>').join('') + '</select>');
       o.push('<label>TURN - about leg one</label>');
       o.push('<button id="edRotCW">turn &#8635;</button><button id="edRotCCW">turn &#8634;</button>');
+      if(p.kind !== 'link'){
+        const fll = legLabels(p) || (p.pins.length === 2 ? ['A','B'] : p.pins.map((_, i) => String(i + 1)));
+        const fset = new Set(Array.isArray(p.fly) ? p.fly : []);
+        o.push('<label>FLYING LEADS - off the board</label>');
+        o.push('<div class="flyrow">' + p.pins.map((_, i) =>
+          '<button type="button" class="flyleg' + (fset.has(i) ? ' on' : '') + '" data-leg="' + i + '">' +
+          esc(fll[i] || String(i + 1)) + '</button>').join('') + '</div>');
+        o.push('<div class="hint">a panel pot or a switch lives off the board. click a leg to run it out on a flying wire - the wire lands where the leg is now. click it again to set it back down.</div>');
+      }
       const efp = footprintOf(p);
       if(p.pins.length === 2 && efp && efp.leads === 'axial'){
         o.push('<label>MOUNT</label>');
@@ -4896,6 +4909,13 @@ function renderCtx(){
   on('edDev',  'onchange', e => edit(() => { const t = selObj(); if(t) t.device = e.target.value; }));
   on('edKind', 'onchange', e => edit(() => { const t = selObj(); if(t) t.kind = e.target.value; }));
   on('edVert', 'onchange', e => edit(() => { const t = selObj(); if(!t) return; if(e.target.checked) t.mount = 'vertical'; else delete t.mount; }));
+  document.querySelectorAll('#ctx .flyleg').forEach(b => b.onclick = () => edit(() => {
+    const t = selObj(); if(!t) return;
+    const i = +b.dataset.leg, set = new Set(Array.isArray(t.fly) ? t.fly : []);
+    if(set.has(i)) set.delete(i); else set.add(i);
+    const fly = [...set].sort((x, y) => x - y);
+    if(fly.length) t.fly = fly; else delete t.fly;
+  }));
   on('edFoot', 'onclick', () => {
     const ic = selObj();
     if(!ic) return;
