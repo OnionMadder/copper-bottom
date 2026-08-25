@@ -825,6 +825,7 @@ function migrate(obj){
        Neither is repaired into a guess: the chip cuts where a chip cuts, and
        the DRC says so if that is wrong for this board. */
     const r = Object.assign({}, ic);
+    if('alias' in r && !(typeof r.alias === 'string' && r.alias.trim())) delete r.alias;
     if(!Number.isInteger(r.cutOff) || r.cutOff < 1 || r.cutOff > r.span - 1) delete r.cutOff;
     const skip = icCutSkip(r);
     if(skip.length) r.cutSkip = skip; else delete r.cutSkip;
@@ -1313,6 +1314,46 @@ function hasFootprint(ic){ return !!(ic && ic.pinMap && ic.pinMap.length === ic.
 function icPinName(ic, i){
   const def = IC_LIB[ic.part];
   return (def && def.padNames && def.padNames[i - 1]) || String(i);
+}
+
+/* What a chip is called where a person reads it: a saved user module wears
+   the name it was saved under, everything else its part number. */
+function icShown(ic){ return ic.alias || ic.part; }
+
+/* ---- user modules: a shaped custom DIP, saved by name, stamped again ----
+   The saved library lives in this browser only, so a BOARD never depends on
+   it: placing a saved module stamps an ordinary shaped DIP-N whose pinMap
+   travels in the file, plus an alias saying what it is. The library is a
+   stamp, not a dependency - the file loads anywhere. */
+function packUserModule(ic, name){
+  if(!ic || !hasFootprint(ic) || !(IC_LIB[ic.part] || {}).custom) return null;
+  const nm = String(name == null ? '' : name).trim();
+  if(!nm) return null;
+  return {name:nm, pins:ic.pins, span:ic.span, pinMap:ic.pinMap.map(d => [d[0], d[1]])};
+}
+function validUserModule(o){
+  return !!(o && typeof o === 'object' && typeof o.name === 'string' && o.name.trim() &&
+    Number.isInteger(o.pins) && o.pins >= 2 && o.pins <= 64 &&
+    Number.isInteger(o.span) && o.span >= 2 &&
+    Array.isArray(o.pinMap) && o.pinMap.length === o.pins &&
+    o.pinMap.every(d => Array.isArray(d) && d.length === 2 &&
+                        Number.isInteger(d[0]) && Number.isInteger(d[1])));
+}
+function icFromUserModule(mod, pin1, ref){
+  if(!validUserModule(mod)) return null;
+  return {id:uid(), ref:ref, part:'DIP-N', alias:mod.name, pins:mod.pins,
+          pin1:[pin1[0], pin1[1]], span:mod.span, autoCuts:[],
+          pinMap:mod.pinMap.map(d => [d[0], d[1]])};
+}
+const MODULES_KEY = 'copper-bottom.modules.v1';
+function loadUserModules(){
+  try{
+    const a = JSON.parse(localStorage.getItem(MODULES_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(validUserModule) : [];
+  }catch(err){ return []; }
+}
+function saveUserModules(list){
+  try{ localStorage.setItem(MODULES_KEY, JSON.stringify(list)); }catch(err){}
 }
 
 function pinPos(ic, i){
@@ -2153,8 +2194,8 @@ function buildList(){
   for(const ic of S.ics)
     items.push({
       key:'ic:' + ic.id, ref:ic.ref, kind:'ic',
-      name:(IC_LIB[ic.part] && IC_LIB[ic.part].module) ? 'module' : 'IC',
-      what:ic.part,
+      name:(IC_LIB[ic.part] && IC_LIB[ic.part].module) || ic.alias ? 'module' : 'IC',
+      what:icShown(ic),
       holes:'pin 1 at ' + holeShort(ic.pin1[0], ic.pin1[1]),
       rank:BUILD_ORDER.ic,
     });
@@ -2426,7 +2467,8 @@ function bom(){
     r.qty++; r.refs.push(q.ref);
   }
   for(const ic of S.ics){
-    const r = add('ic', 'IC', ic.part, ic.pins + '-pin DIP');
+    const r = add('ic', (IC_LIB[ic.part] && IC_LIB[ic.part].module) || ic.alias ? 'module' : 'IC',
+                  icShown(ic), ic.pins + '-pin DIP');
     r.qty++; r.refs.push(ic.ref);
   }
 
@@ -2500,7 +2542,8 @@ function walkthrough(){
   for(const ic of S.ics){
     const def = IC_LIB[ic.part] || {};
     const half = ic.pins / 2;
-    step('U - chip ' + ic.ref + '. PART ' + ic.part + ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
+    step('U - chip ' + ic.ref + '. PART ' + icShown(ic) + (ic.alias ? ' (DIP-N)' : '') +
+         ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
       [def.padNames ? 'A module, wired by its pads. In pin order: ' + def.padNames.join(', ') + '.' : null,
        hasFootprint(ic)
          ? 'This one wears a custom footprint - pin 1 goes at ' + at(ic.pin1) +
@@ -3744,7 +3787,7 @@ function render(){
     if(!custom)
       o.push('<path d="M' + ((x0+x1)/2 - 8) + ' ' + y0 + 'a8 8 0 0 0 16 0" fill="#0E0B18" stroke="#5B5280" stroke-width="1.2"/>');
     o.push('<text class="icref" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 - 3) + '">' + esc(ic.ref) + '</text>');
-    o.push('<text class="icpart" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 + 11) + '">' + esc(ic.part) + '</text>');
+    o.push('<text class="icpart" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 + 11) + '">' + esc(icShown(ic)) + '</text>');
     for(let i = 1; i <= ic.pins; i++){
       const p = pinPos(ic, i), x = X(p[1]), y = Y(p[0]);
       const net = NET.netAt(p[0], p[1]);
@@ -4615,7 +4658,7 @@ function exportSVG(side){
       if(!hasFootprint(ic))
         o.push('<path d="M' + ((x0+x1)/2 - 1.4) + ' ' + y0 + 'a1.4 1.4 0 0 0 2.8 0" fill="none" stroke="#000" stroke-width="0.3"/>');
       late.push(T((x0+x1)/2, (y0+y1)/2, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
-      late.push(T((x0+x1)/2, (y0+y1)/2 + 2.6, ic.part, 2.1, 'text-anchor="middle"'));
+      late.push(T((x0+x1)/2, (y0+y1)/2 + 2.6, icShown(ic), 2.1, 'text-anchor="middle"'));
     }
     const p1 = pinPos(ic, 1);
     o.push('<rect x="' + (x(p1[1]) - 0.9) + '" y="' + (y(p1[0]) - 0.9) +
@@ -5012,6 +5055,12 @@ function renderCtx(){
         o.push('<label>PIN COUNT</label><input id="edIcPins" type="number" min="2" max="64" value="' + ic.pins + '">');
         o.push('<div class="hint">changing the count re-lays the pins as two rows - shape it again with edit footprint after.</div>');
       }
+      if((IC_LIB[ic.part] || {}).custom && hasFootprint(ic)){
+        o.push('<label>SAVE AS MODULE</label>');
+        o.push('<input id="edModName" placeholder="name it - reverb brick, KM56" value="' + esc(ic.alias || '') + '">');
+        o.push('<button id="edModSave">save shape to my modules</button>');
+        o.push('<div class="hint">saved in this browser, under your modules in the IC list. placing it stamps this shape - the board file itself stays self-contained, so it opens anywhere.</div>');
+      }
       o.push('<label>FOOTPRINT - ' + (hasFootprint(ic) ? 'custom' : 'standard DIP') + '</label>');
       o.push('<button id="edFoot">' + (FOOT ? 'done shaping' : 'edit footprint') + '</button>');
       if(hasFootprint(ic)) o.push('<button id="edFootReset">back to a DIP</button>');
@@ -5053,8 +5102,18 @@ function renderCtx(){
   }else if(TOOL === 'link'){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef('link')) + '" readonly>');
   }else if(TOOL === 'ic'){
-    o.push('<label>PART</label><select id="ctxIc">' + opts(Object.keys(IC_LIB), IC_PART) + '</select>');
+    const ums = loadUserModules();
+    o.push('<label>PART</label><select id="ctxIc">' + opts(Object.keys(IC_LIB), IC_PART) +
+      (ums.length ? '<optgroup label="your modules">' + ums.map(m =>
+        '<option value="user:' + esc(m.name) + '"' + (IC_PART === 'user:' + m.name ? ' selected' : '') + '>' +
+        esc(m.name) + '</option>').join('') + '</optgroup>' : '') + '</select>');
+    if(IC_PART.indexOf('user:') === 0){
+      const um = ums.find(m => 'user:' + m.name === IC_PART);
+      o.push('<div class="hint">' + (um ? um.pins + ' pins in your saved shape. click where pin 1 goes - the shape comes with it.' : 'that saved module is gone.') + '</div>');
+      o.push('<button id="ctxDelMod">forget this module</button>');
+    }else{
     o.push('<label>SPAN (holes)</label><input id="ctxSpan" type="number" min="2" max="9" value="' + IC_SPAN + '">');
+    }
     if(IC_LIB[IC_PART] && IC_LIB[IC_PART].custom){
       o.push('<label>PIN COUNT</label><input id="ctxPins" type="number" min="2" max="64" value="' + IC_PINS + '">');
       o.push('<div class="hint">any count - a reverb brick, a module, an odd chip. It drops as two rows; then select it and <b>edit footprint</b> to drag the pins to the real layout.</div>');
@@ -5069,6 +5128,13 @@ function renderCtx(){
   on('ctxVal', 'oninput',  e => { VALUES[TOOL] = e.target.value; });
   on('ctxPad', 'oninput',  e => { PAD_LABEL = e.target.value; });
   on('ctxIc',  'onchange', e => { IC_PART = e.target.value; renderCtx(); });   // custom reveals a pin-count field
+  on('ctxDelMod', 'onclick', () => {
+    const nm = IC_PART.slice(5);
+    saveUserModules(loadUserModules().filter(m => m.name !== nm));
+    IC_PART = 'DIP-N';
+    flash('forgot "' + nm + '"');
+    renderCtx();
+  });
   on('ctxPins','oninput',  e => { IC_PINS = Math.max(2, Math.min(64, Math.round(+e.target.value) || 8)); });
   on('ctxDev', 'onchange', e => {
     DEVICE[TOOL] = e.target.value;
@@ -5193,6 +5259,20 @@ function renderCtx(){
     const v = e.target.value.trim();
     if(v) d.to = v; else delete d.to;
   }));
+  on('edModSave', 'onclick', () => {
+    const ic = selObj(); if(!ic) return;
+    const nameEl = document.getElementById('edModName');
+    const mod = packUserModule(ic, nameEl && nameEl.value);
+    if(!mod){ flash('name it first'); return; }
+    pushUndo();
+    /* an upsert by name, so re-saving replaces rather than piles up */
+    const list = loadUserModules().filter(m => m.name.toUpperCase() !== mod.name.toUpperCase());
+    list.push(mod);
+    saveUserModules(list);
+    ic.alias = mod.name;          // the board now says what this one is
+    commit();
+    flash('saved "' + mod.name + '" to your modules');
+  });
   on('edIcPins', 'onchange', e => edit(() => {
     const ic = selObj(); if(!ic) return;
     const n = Math.max(2, Math.min(64, Math.round(+e.target.value) || ic.pins));
@@ -5204,6 +5284,7 @@ function renderCtx(){
   on('edIc',   'onchange', e => edit(() => {
     const ic = selObj(); if(!ic) return;
     ic.part = e.target.value;
+    delete ic.alias;              // a different chip is a different thing
     const nd = IC_LIB[ic.part];
     if(!nd.custom) ic.pins = nd.pins;  // a fixed chip has a fixed count; a custom one keeps its own
     delete ic.pinMap;                 // a different chip is a different shape
@@ -5343,6 +5424,21 @@ function onHole(r, c){
   }
 
   if(TOOL === 'ic'){
+    if(IC_PART.indexOf('user:') === 0){
+      const mod = loadUserModules().find(m => 'user:' + m.name === IC_PART);
+      if(!mod){ flash('that saved module is gone'); renderCtx(); return; }
+      let r0 = 0, r1 = 0, c0 = 0, c1 = 0;
+      for(const d of mod.pinMap){
+        r0 = Math.min(r0, d[0]); r1 = Math.max(r1, d[0]);
+        c0 = Math.min(c0, d[1]); c1 = Math.max(c1, d[1]);
+      }
+      if(r + r0 < 0 || c + c0 < 0 || r + r1 >= S.board.rows || c + c1 >= S.board.cols){
+        flash('module would run off the board'); return;
+      }
+      pushUndo();
+      S.ics.push(icFromUserModule(mod, [r, c], nextIcRef()));
+      commit(); return;
+    }
     const def = IC_LIB[IC_PART];
     const pinCount = def.custom ? IC_PINS : def.pins;
     const half = Math.ceil(pinCount / 2);

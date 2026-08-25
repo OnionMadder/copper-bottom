@@ -2057,6 +2057,34 @@ ok(c2Row.what === '100n' && c2Row.note === 'ceramic disc', 'a ceramic 100n is va
 const c1Row = capBom.find(r => r.refs.indexOf('C1') >= 0);
 ok(c1Row.note === '' && c1Row.refs.indexOf('C2') < 0, 'the default film 100n notes nothing and rows apart from the disc');
 
+console.log('-- saved user modules --');
+S = {version:2, name:'um', board:{rows:10, cols:12}, cuts:[], pads:[], parts:[],
+  ics:[{id:'u', ref:'IC1', part:'DIP-N', pins:9, pin1:[2,3], span:3, autoCuts:[]}]};
+computeNets();
+const umIc = S.ics[0];
+ok(packUserModule(umIc, 'brick') === null, 'an unshaped chip does not pack - a saved module IS a shape');
+editFootprint(umIc); setIcPin(umIc, 9, [8, 9]);
+const packed = packUserModule(umIc, '  KM56 brick  ');
+ok(validUserModule(packed) && packed.name === 'KM56 brick', 'a shaped custom DIP packs, name trimmed');
+ok(packUserModule(umIc, '   ') === null, 'a blank name refuses to pack');
+ok(!validUserModule({name:'x', pins:9, span:3, pinMap:[[0,0]]}), 'a pin map that does not match its count is invalid');
+
+// stamping is self-contained: an ordinary shaped DIP-N plus a name
+const stamped = icFromUserModule(packed, [1, 1], 'IC2');
+ok(stamped.part === 'DIP-N' && stamped.alias === 'KM56 brick' && hasFootprint(stamped),
+   'a stamped module is a shaped DIP-N wearing the saved name');
+ok(String(pinPos(stamped, 9)) === String([1 + (8 - 2), 1 + (9 - 3)]),
+   'the dragged pin lands at the same offset from pin 1');
+ok(icShown(stamped) === 'KM56 brick' && icShown(umIc) === 'DIP-N', 'the alias is what a person reads');
+
+// the board file stays honest through migrate
+S.ics.push(stamped); computeNets();
+const umMig = migrate(JSON.parse(JSON.stringify(S)));
+ok(umMig.ics.length === 2 && umMig.ics[1].alias === 'KM56 brick', 'migrate keeps a stamped module and its name');
+const umJunk = migrate({version:2, board:{rows:6,cols:6}, cuts:[], parts:[], pads:[],
+  ics:[{id:'j', ref:'IC1', part:'DIP-8', pins:8, pin1:[0,0], span:3, autoCuts:[], alias:'   '}]});
+ok(!('alias' in umJunk.ics[0]), 'a blank alias is dropped rather than shown');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
