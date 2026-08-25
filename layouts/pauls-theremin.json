@@ -1,0 +1,860 @@
+{
+  "version": 2,
+  "name": "Paul's Theremin",
+  "board": {
+    "rows": 17,
+    "cols": 24
+  },
+  "cuts": [
+    "2,6",
+    "3,6",
+    "4,6",
+    "5,6",
+    "6,6",
+    "7,6",
+    "8,6",
+    "10,17",
+    "11,17",
+    "12,17",
+    "13,17",
+    "14,17",
+    "15,17",
+    "16,17",
+    "0,10",
+    "1,10",
+    "2,10",
+    "3,17",
+    "4,17",
+    "5,17",
+    "7,17",
+    "8,17",
+    "8,12",
+    "16,14",
+    "14,12",
+    "15,11",
+    "11,6",
+    "12,6",
+    "13,8",
+    "14,6",
+    "15,6",
+    "16,6"
+  ],
+  "parts": [
+    {
+      "id": "ee50ww",
+      "kind": "link",
+      "ref": "J1",
+      "pins": [
+        [
+          12,
+          3
+        ],
+        [
+          9,
+          3
+        ]
+      ]
+    },
+    {
+      "id": "efjlz3",
+      "kind": "link",
+      "ref": "J2",
+      "pins": [
+        [
+          9,
+          4
+        ],
+        [
+          8,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "eg3r18",
+      "kind": "link",
+      "ref": "J3",
+      "pins": [
+        [
+          6,
+          4
+        ],
+        [
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ehhpdi",
+      "kind": "link",
+      "ref": "J4",
+      "pins": [
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "eijfdj",
+      "kind": "link",
+      "ref": "J5",
+      "pins": [
+        [
+          0,
+          9
+        ],
+        [
+          3,
+          9
+        ]
+      ]
+    },
+    {
+      "id": "ejlali",
+      "kind": "link",
+      "ref": "J6",
+      "pins": [
+        [
+          6,
+          9
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "id": "ektw9",
+      "kind": "link",
+      "ref": "J7",
+      "pins": [
+        [
+          5,
+          10
+        ],
+        [
+          7,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "elc4po",
+      "kind": "link",
+      "ref": "J8",
+      "pins": [
+        [
+          0,
+          13
+        ],
+        [
+          8,
+          13
+        ]
+      ]
+    },
+    {
+      "id": "em2tle",
+      "kind": "link",
+      "ref": "J9",
+      "pins": [
+        [
+          9,
+          20
+        ],
+        [
+          11,
+          20
+        ]
+      ]
+    },
+    {
+      "id": "enjtop",
+      "kind": "link",
+      "ref": "J10",
+      "pins": [
+        [
+          11,
+          21
+        ],
+        [
+          13,
+          21
+        ]
+      ]
+    },
+    {
+      "id": "eoi6bk",
+      "kind": "link",
+      "ref": "J11",
+      "pins": [
+        [
+          13,
+          20
+        ],
+        [
+          15,
+          20
+        ]
+      ]
+    },
+    {
+      "id": "ep15s1",
+      "kind": "link",
+      "ref": "J12",
+      "pins": [
+        [
+          14,
+          14
+        ],
+        [
+          13,
+          14
+        ]
+      ]
+    },
+    {
+      "id": "eq3idy",
+      "kind": "link",
+      "ref": "J13",
+      "pins": [
+        [
+          15,
+          10
+        ],
+        [
+          14,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "er9mnf",
+      "kind": "link",
+      "ref": "J14",
+      "pins": [
+        [
+          15,
+          4
+        ],
+        [
+          11,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "esan9e",
+      "kind": "link",
+      "ref": "J15",
+      "pins": [
+        [
+          9,
+          5
+        ],
+        [
+          14,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "etcp0m",
+      "kind": "link",
+      "ref": "J16",
+      "pins": [
+        [
+          2,
+          7
+        ],
+        [
+          13,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "eucvgx",
+      "kind": "res",
+      "ref": "R1",
+      "pins": [
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          4
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "ev8pu9",
+      "kind": "res",
+      "ref": "R2",
+      "pins": [
+        [
+          1,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "value": "27k",
+      "device": "fixed"
+    },
+    {
+      "id": "ewck4a",
+      "kind": "res",
+      "ref": "R3",
+      "pins": [
+        [
+          4,
+          14
+        ],
+        [
+          3,
+          14
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "exhrlz",
+      "kind": "res",
+      "ref": "R4",
+      "pins": [
+        [
+          0,
+          1
+        ],
+        [
+          7,
+          1
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "eygqkz",
+      "kind": "res",
+      "ref": "R5",
+      "pins": [
+        [
+          7,
+          14
+        ],
+        [
+          8,
+          14
+        ]
+      ],
+      "value": "22k",
+      "device": "fixed"
+    },
+    {
+      "id": "ezio0c",
+      "kind": "res",
+      "ref": "R6",
+      "pins": [
+        [
+          5,
+          14
+        ],
+        [
+          6,
+          14
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "e10ge4o",
+      "kind": "res",
+      "ref": "R7",
+      "pins": [
+        [
+          0,
+          14
+        ],
+        [
+          1,
+          14
+        ]
+      ],
+      "value": "22k",
+      "device": "fixed"
+    },
+    {
+      "id": "e11epv0",
+      "kind": "res",
+      "ref": "R8",
+      "pins": [
+        [
+          16,
+          5
+        ],
+        [
+          15,
+          5
+        ]
+      ],
+      "value": "100r",
+      "device": "fixed"
+    },
+    {
+      "id": "e12hy",
+      "kind": "res",
+      "ref": "R9",
+      "pins": [
+        [
+          3,
+          12
+        ],
+        [
+          15,
+          12
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "e132y0g",
+      "kind": "link",
+      "ref": "J17",
+      "pins": [
+        [
+          12,
+          11
+        ],
+        [
+          11,
+          11
+        ]
+      ]
+    },
+    {
+      "id": "e144jhs",
+      "kind": "res",
+      "ref": "R10",
+      "pins": [
+        [
+          2,
+          20
+        ],
+        [
+          5,
+          20
+        ]
+      ],
+      "value": "470r",
+      "device": "fixed"
+    },
+    {
+      "id": "e15clnt",
+      "kind": "res",
+      "ref": "R11",
+      "pins": [
+        [
+          2,
+          22
+        ],
+        [
+          9,
+          22
+        ]
+      ],
+      "value": "27k",
+      "device": "fixed"
+    },
+    {
+      "id": "e16bpxz",
+      "kind": "res",
+      "ref": "R12",
+      "pins": [
+        [
+          9,
+          18
+        ],
+        [
+          8,
+          18
+        ]
+      ],
+      "value": "27k",
+      "device": "fixed"
+    },
+    {
+      "id": "e17ft7z",
+      "kind": "res",
+      "ref": "R13",
+      "pins": [
+        [
+          14,
+          9
+        ],
+        [
+          10,
+          9
+        ]
+      ],
+      "value": "270k",
+      "device": "fixed"
+    },
+    {
+      "id": "e18ibv5",
+      "kind": "res",
+      "ref": "R14",
+      "pins": [
+        [
+          16,
+          13
+        ],
+        [
+          12,
+          13
+        ]
+      ],
+      "value": "22k",
+      "device": "fixed"
+    },
+    {
+      "id": "e19gem4",
+      "kind": "cap",
+      "ref": "C1",
+      "pins": [
+        [
+          5,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "value": "100pf"
+    },
+    {
+      "id": "e1akhj2",
+      "kind": "cap",
+      "ref": "C2",
+      "pins": [
+        [
+          8,
+          11
+        ],
+        [
+          7,
+          11
+        ]
+      ],
+      "value": "10nf"
+    },
+    {
+      "id": "e1bhpv9",
+      "kind": "cap",
+      "ref": "C3",
+      "pins": [
+        [
+          4,
+          11
+        ],
+        [
+          1,
+          11
+        ]
+      ],
+      "value": "100nf"
+    },
+    {
+      "id": "e1clfj",
+      "kind": "cap",
+      "ref": "C4",
+      "pins": [
+        [
+          9,
+          16
+        ],
+        [
+          8,
+          16
+        ]
+      ],
+      "value": "10nf"
+    },
+    {
+      "id": "e1f70pi",
+      "kind": "ecap",
+      "ref": "C5",
+      "pins": [
+        [
+          6,
+          18
+        ],
+        [
+          5,
+          18
+        ]
+      ],
+      "value": "10uf",
+      "polarized": true
+    },
+    {
+      "id": "e1ihkqh",
+      "kind": "ecap",
+      "ref": "C6",
+      "pins": [
+        [
+          13,
+          1
+        ],
+        [
+          12,
+          1
+        ]
+      ],
+      "value": "10uf",
+      "polarized": true
+    },
+    {
+      "id": "e1j5x0m",
+      "kind": "ecap",
+      "ref": "C7",
+      "pins": [
+        [
+          11,
+          1
+        ],
+        [
+          9,
+          1
+        ]
+      ],
+      "value": "10uf",
+      "polarized": true
+    },
+    {
+      "id": "e1kgt8d",
+      "kind": "cap",
+      "ref": "C8",
+      "pins": [
+        [
+          10,
+          21
+        ],
+        [
+          9,
+          21
+        ]
+      ],
+      "value": "10nf"
+    },
+    {
+      "id": "e1l91wn",
+      "kind": "cap",
+      "ref": "C9",
+      "pins": [
+        [
+          14,
+          11
+        ],
+        [
+          13,
+          11
+        ]
+      ],
+      "value": "100pf"
+    },
+    {
+      "id": "e1m8e79",
+      "kind": "reg",
+      "ref": "U1",
+      "pins": [
+        [
+          13,
+          3
+        ],
+        [
+          14,
+          3
+        ],
+        [
+          15,
+          3
+        ]
+      ],
+      "value": "",
+      "device": "78L05"
+    },
+    {
+      "id": "e1o8h7a",
+      "kind": "diode",
+      "ref": "D1",
+      "pins": [
+        [
+          9,
+          2
+        ],
+        [
+          15,
+          2
+        ]
+      ],
+      "value": "1N4001",
+      "device": "switching",
+      "polarized": true
+    },
+    {
+      "id": "e1t4apj",
+      "kind": "trim",
+      "ref": "VR1",
+      "pins": [
+        [
+          14,
+          7
+        ],
+        [
+          15,
+          9
+        ],
+        [
+          16,
+          7
+        ]
+      ],
+      "value": "10k",
+      "device": "trimpot"
+    },
+    {
+      "id": "e1z9k4a",
+      "kind": "link",
+      "ref": "J18",
+      "pins": [
+        [
+          9,
+          15
+        ],
+        [
+          16,
+          15
+        ]
+      ]
+    }
+  ],
+  "ics": [
+    {
+      "id": "eb87jf",
+      "ref": "IC1",
+      "part": "CD4069",
+      "pins": 14,
+      "pin1": [
+        2,
+        5
+      ],
+      "span": 3,
+      "autoCuts": [
+        "2,6",
+        "3,6",
+        "4,6",
+        "5,6",
+        "6,6",
+        "7,6",
+        "8,6"
+      ]
+    },
+    {
+      "id": "ecca9n",
+      "ref": "IC2",
+      "part": "CD4069",
+      "pins": 14,
+      "pin1": [
+        10,
+        16
+      ],
+      "span": 3,
+      "autoCuts": [
+        "10,17",
+        "11,17",
+        "12,17",
+        "13,17",
+        "14,17",
+        "15,17",
+        "16,17"
+      ]
+    }
+  ],
+  "pads": [
+    {
+      "id": "e1qhgpn",
+      "label": "9V",
+      "at": [
+        16,
+        0
+      ]
+    },
+    {
+      "id": "e1rfjrv",
+      "label": "GND",
+      "at": [
+        9,
+        0
+      ]
+    },
+    {
+      "id": "e1sgln4",
+      "label": "ANT",
+      "at": [
+        1,
+        0
+      ]
+    },
+    {
+      "id": "e1ubuyp",
+      "label": "OUT",
+      "at": [
+        2,
+        23
+      ]
+    },
+    {
+      "id": "er78mn",
+      "label": "VR2-1",
+      "at": [
+        13,
+        0
+      ]
+    },
+    {
+      "id": "eskk9j",
+      "label": "VR2-2",
+      "at": [
+        10,
+        23
+      ]
+    },
+    {
+      "id": "etgcj",
+      "label": "VR2-3",
+      "at": [
+        8,
+        23
+      ]
+    }
+  ],
+  "netlist": "# Paul's Theremin - written from the board\n# 17 strips of 24 holes, 44 parts, 2 chips, 32 cuts\n#\n# This is the circuit as the copper currently has it. Checking the board\n# against it can only pass - its use is to carry the circuit somewhere else.\n\n9V:     @9V R8.A\n\nGND:    @GND IC1.7 IC2.7 IC2.9 IC2.11 IC2.13 R11.B R12.A C4.A C6.B C7.B C8.B U1.G D1.A\n\nIC1_6A: IC1.13 R3.B R4.A R9.A\nR5_B:   R5.B R7.A C4.B\nANT:    @ANT R1.A R2.A C1.B\nR7_B:   R7.B C3.B\nIC1_1A: IC1.1 R1.B\nVR2-1:  @VR2-1 IC1.14 C6.A U1.O\nOUT:    @OUT R10.A R11.A\nIC1_1Y: IC1.2 IC1.3 R2.B\nIC1_6Y: IC1.12 R3.A C3.A\nIC1_2Y: IC1.4 IC1.5 C1.A\nIC1_4A: IC1.9 IC1.11 R5.A R6.A C2.B\nR10_B:  R10.B C5.B\nIC1_4Y: IC1.8 IC1.10 R6.B C2.A C5.A\nIC1_3Y: IC1.6 R4.B\nVR2-3:  @VR2-3 R12.B\nIC2_1A: IC2.1 R13.B\nVR2-2:  @VR2-2 IC2.14 C8.A\nU1_I:   R8.B C7.A U1.I D1.B\nIC2_1Y: IC2.2 IC2.3 R14.B\nIC2_6Y: IC2.12\nIC2_2Y: IC2.4 IC2.5 C9.B\nVR1_1:  R13.A C9.A VR1.1 VR1.W\nIC2_5Y: IC2.10\nIC2_3Y: IC2.6 R9.B\nVR1_3:  R14.A VR1.3\nIC2_4Y: IC2.8"
+}

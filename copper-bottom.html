@@ -1871,6 +1871,43 @@ function runDRC(){
       /* a grouping the chip's own datasheet calls for is not a short */
       const ties = (IC_LIB[ic.part] || {}).ties || [];
       if(ties.some(g => pins.every(n => g.indexOf(n) >= 0))) continue;
+      /* Three idioms are wiring, not faults - flagging them on the circuits
+         these chips are FOR would cry wolf on every classic 4069 build:
+         inputs share a strip freely (they only listen); ONE output driving
+         its neighbors' inputs is a cascade, the standard oscillator chain;
+         and several outputs share a strip legitimately when they are
+         paralleled gates - same-numbered inputs tied to one net, so the
+         outputs agree by construction. That last one is only PROVABLE for
+         single-input gates (a kY whose pin table has a kA and no kB), so
+         anything else keeps the error - unproven is unsafe here. */
+      const roles = (IC_LIB[ic.part] || {}).roles || {};
+      /* only for a chip wearing the library's own geometry - a hand-shaped
+         footprint has no idioms to presume, so it keeps the strict rule */
+      if(!hasFootprint(ic)){
+      const outs = pins.filter(n => roles[n] === 'out');
+      const nonIO = pins.filter(n => roles[n] !== 'out' && roles[n] !== 'in');
+      if(nonIO.length === 0){
+        if(outs.length <= 1) continue;                     // listeners, or one driver
+        const info = (IC_LIB[ic.part] || {}).pinInfo || {};
+        const nameOf = n => ((info[n] || {}).n || '');
+        const pinNamed = nm => { for(const k of Object.keys(info)) if(nameOf(+k) === nm) return +k; return 0; };
+        const inputOf = n => {
+          const m = /^(\d+)Y$/.exec(nameOf(n));
+          if(!m || pinNamed(m[1] + 'B')) return 0;         // not a single-input gate
+          return pinNamed(m[1] + 'A');
+        };
+        const netOfPin = n => { const p = pinPos(ic, n); const nn = NET.netAt(p[0], p[1]); return nn ? nn.id : -1; };
+        let paralleled = true, base = -2;
+        for(const o of outs){
+          const inp = inputOf(o);
+          if(!inp){ paralleled = false; break; }
+          const nid = netOfPin(inp);
+          if(base === -2) base = nid;
+          else if(nid !== base || nid === -1){ paralleled = false; break; }
+        }
+        if(paralleled && base !== -1) continue;
+      }
+      }
       add('error', 'pin-short',
           ic.ref + ' pins ' + pins.join(', ') + ' are all on one net',
           pinPos(ic, pins[0]), id);
@@ -1895,6 +1932,11 @@ function runDRC(){
     });
     for(const [id, legs] of byNet){
       if(legs.length < 2) continue;
+      /* strapping a pot's wiper to ONE end lug is the textbook rheostat -
+         continuity if the wiper lifts, and the part still varies. Wiper to
+         BOTH ends, or end to end, really is shorted out. */
+      if((p.kind === 'trim' || p.kind === 'pot') && legs.length === 2 &&
+         legs.indexOf('W') >= 0 && (legs.indexOf('1') >= 0) !== (legs.indexOf('3') >= 0)) continue;
       add('error', 'part-short',
           p.ref + ' ' + (p.pins.length > 2 ? 'legs ' : 'leads ') +
           (legs.length > 2 ? legs.slice(0, -1).join(', ') + ' and ' + legs[legs.length-1]

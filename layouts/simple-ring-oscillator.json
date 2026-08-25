@@ -1,0 +1,374 @@
+{
+  "version": 2,
+  "name": "Simple Ring Oscillator",
+  "board": {
+    "rows": 14,
+    "cols": 10
+  },
+  "cuts": [],
+  "parts": [
+    {
+      "id": "e1jiwo",
+      "kind": "trans",
+      "ref": "Q1",
+      "pins": [
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "value": "",
+      "device": "2N3904"
+    },
+    {
+      "id": "e2aq0m",
+      "kind": "trans",
+      "ref": "Q2",
+      "pins": [
+        [
+          7,
+          2
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          5,
+          2
+        ]
+      ],
+      "value": "",
+      "device": "2N3904"
+    },
+    {
+      "id": "e3j6rb",
+      "kind": "trans",
+      "ref": "Q3",
+      "pins": [
+        [
+          11,
+          6
+        ],
+        [
+          10,
+          6
+        ],
+        [
+          9,
+          6
+        ]
+      ],
+      "value": "",
+      "device": "2N3904"
+    },
+    {
+      "id": "e4al8e",
+      "kind": "cap",
+      "ref": "C1",
+      "pins": [
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "value": "10nf"
+    },
+    {
+      "id": "e5bwlf",
+      "kind": "cap",
+      "ref": "C2",
+      "pins": [
+        [
+          6,
+          4
+        ],
+        [
+          8,
+          4
+        ]
+      ],
+      "value": "15nf"
+    },
+    {
+      "id": "e6ei7m",
+      "kind": "cap",
+      "ref": "C3",
+      "pins": [
+        [
+          10,
+          3
+        ],
+        [
+          12,
+          3
+        ]
+      ],
+      "value": "22nf"
+    },
+    {
+      "id": "e7esz7",
+      "kind": "diode",
+      "ref": "D1",
+      "pins": [
+        [
+          7,
+          0
+        ],
+        [
+          8,
+          0
+        ]
+      ],
+      "value": "red",
+      "device": "LED",
+      "polarized": true
+    },
+    {
+      "id": "e8iu5i",
+      "kind": "diode",
+      "ref": "D2",
+      "pins": [
+        [
+          3,
+          8
+        ],
+        [
+          4,
+          8
+        ]
+      ],
+      "value": "red",
+      "device": "LED",
+      "polarized": true
+    },
+    {
+      "id": "e93j7m",
+      "kind": "diode",
+      "ref": "D3",
+      "pins": [
+        [
+          11,
+          8
+        ],
+        [
+          12,
+          8
+        ]
+      ],
+      "value": "red",
+      "device": "LED",
+      "polarized": true
+    },
+    {
+      "id": "ea4dll",
+      "kind": "res",
+      "ref": "R1",
+      "pins": [
+        [
+          1,
+          7
+        ],
+        [
+          0,
+          7
+        ]
+      ],
+      "value": "1.2k",
+      "device": "fixed",
+      "mount": "vertical"
+    },
+    {
+      "id": "ebdnfv",
+      "kind": "res",
+      "ref": "R2",
+      "pins": [
+        [
+          5,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "value": "2.2k",
+      "device": "fixed"
+    },
+    {
+      "id": "ecav43",
+      "kind": "res",
+      "ref": "R3",
+      "pins": [
+        [
+          9,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "value": "3.3k",
+      "device": "fixed"
+    },
+    {
+      "id": "ed2d6i",
+      "kind": "res",
+      "ref": "R4",
+      "pins": [
+        [
+          6,
+          6
+        ],
+        [
+          1,
+          6
+        ]
+      ],
+      "value": "47k",
+      "device": "fixed"
+    },
+    {
+      "id": "een7c",
+      "kind": "res",
+      "ref": "R5",
+      "pins": [
+        [
+          9,
+          7
+        ],
+        [
+          2,
+          7
+        ]
+      ],
+      "value": "47k",
+      "device": "fixed"
+    },
+    {
+      "id": "efc22v",
+      "kind": "res",
+      "ref": "R6",
+      "pins": [
+        [
+          10,
+          8
+        ],
+        [
+          5,
+          8
+        ]
+      ],
+      "value": "47k",
+      "device": "fixed"
+    },
+    {
+      "id": "ehjrr3",
+      "kind": "link",
+      "ref": "J1",
+      "pins": [
+        [
+          8,
+          2
+        ],
+        [
+          12,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "ei4gwk",
+      "kind": "link",
+      "ref": "J2",
+      "pins": [
+        [
+          4,
+          1
+        ],
+        [
+          8,
+          1
+        ]
+      ]
+    },
+    {
+      "id": "z1",
+      "kind": "cap",
+      "ref": "C4",
+      "pins": [
+        [
+          9,
+          5
+        ],
+        [
+          13,
+          5
+        ]
+      ],
+      "value": "100nf"
+    },
+    {
+      "id": "z2",
+      "kind": "res",
+      "ref": "R7",
+      "pins": [
+        [
+          13,
+          6
+        ],
+        [
+          12,
+          6
+        ]
+      ],
+      "value": "100k",
+      "device": "fixed",
+      "mount": "vertical"
+    }
+  ],
+  "ics": [],
+  "pads": [
+    {
+      "id": "ej6shz",
+      "label": "GND",
+      "at": [
+        8,
+        9
+      ],
+      "to": "ground"
+    },
+    {
+      "id": "ekkvac",
+      "label": "9V",
+      "at": [
+        0,
+        9
+      ],
+      "to": "power"
+    },
+    {
+      "id": "z3",
+      "label": "OUT",
+      "at": [
+        13,
+        9
+      ],
+      "to": "audio out"
+    }
+  ],
+  "netlist": "# Simple Ring Oscillator - written from the board\n# 14 strips of 10 holes, 19 parts, 0 chips, 0 cuts\n#\n# This is the circuit as the copper currently has it. Checking the board\n# against it can only pass - its use is to carry the circuit somewhere else.\n\n9V:   @9V R1.B R2.B R3.B\n\nGND:  @GND C1.B C2.B C3.B D1.B D2.B D3.B R7.B\n\nQ1_C: Q1.C R1.A R4.B\nQ1_B: Q1.B C1.A R5.B\nQ1_E: Q1.E D2.A\nQ2_C: Q2.C R2.A R6.B\nQ2_B: Q2.B C2.A R4.A\nQ2_E: Q2.E D1.A\nQ3_C: Q3.C R3.A R5.A C4.A\nQ3_B: Q3.B C3.A R6.A\nQ3_E: Q3.E D3.A\nOUT:  @OUT C4.B R7.A"
+}

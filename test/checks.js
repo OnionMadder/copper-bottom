@@ -142,7 +142,7 @@ ok(has(drcOf(s => { s.parts.push(R('RX', [11,1], [2,1])); }), 'orphan'),
 console.log('-- an IC with no cuts at all --');
 const naked = drcOf(s => { s.cuts = []; });
 ok(has(naked, 'ic-nocuts'),  'uncut DIP trips ic-nocuts');
-ok(has(naked, 'pin-short'),  'uncut DIP also trips pin-short on the unlabelled rows');
+ok(!has(naked, 'pin-short'), 'pin-short stays out of it - every facing pair reads as a cascade or rides a rail, and ic-nocuts owns the uncut fault');
 
 
 console.log('-- resistor value parsing --');
@@ -2084,6 +2084,43 @@ ok(umMig.ics.length === 2 && umMig.ics[1].alias === 'KM56 brick', 'migrate keeps
 const umJunk = migrate({version:2, board:{rows:6,cols:6}, cuts:[], parts:[], pads:[],
   ics:[{id:'j', ref:'IC1', part:'DIP-8', pins:8, pin1:[0,0], span:3, autoCuts:[], alias:'   '}]});
 ok(!('alias' in umJunk.ics[0]), 'a blank alias is dropped rather than shown');
+
+console.log('-- circuit idioms are not shorts --');
+// a CD4069 with its cut column; pins 1-7 down col 1, 8-14 back up col 4
+const IDIOM_BASE = () => ({version:2, name:'idiom', board:{rows:8, cols:8}, parts:[], pads:[], ics:[
+  {id:'u', ref:'IC1', part:'CD4069', pins:14, pin1:[0,1], span:3,
+   autoCuts:['0,2','1,2','2,2','3,2','4,2','5,2','6,2']}
+], cuts:['0,2','1,2','2,2','3,2','4,2','5,2','6,2']});
+
+// cascade: output 2 into input 3 on one net - the standard oscillator chain
+S = IDIOM_BASE();
+S.parts.push({id:'l1', kind:'link', ref:'J1', pins:[[1,0],[2,0]]});
+computeNets();
+ok(!runDRC().some(f => f.rule === 'pin-short'), 'an output feeding the next input is a cascade, not a short');
+
+// paralleled gates: inputs 9+11 tied AND outputs 8+10 tied - they agree by construction
+S = IDIOM_BASE();
+S.parts.push({id:'l2', kind:'link', ref:'J1', pins:[[5,6],[3,6]]});   // inputs 9, 11
+S.parts.push({id:'l3', kind:'link', ref:'J2', pins:[[6,6],[4,6]]});   // outputs 8, 10
+computeNets();
+ok(!runDRC().some(f => f.rule === 'pin-short'), 'paralleled inverters - inputs tied, outputs tied - pass');
+
+// but outputs tied while their inputs are NOT is a real fight
+S = IDIOM_BASE();
+S.parts.push({id:'l3', kind:'link', ref:'J1', pins:[[6,6],[4,6]]});   // outputs 8, 10 only
+computeNets();
+ok(runDRC().some(f => f.rule === 'pin-short'), 'outputs sharing a net with their inputs apart still errors');
+
+// the rheostat strap: wiper to ONE end lug is wiring, wiper missing is not
+S = {version:2, name:'rheo', board:{rows:8, cols:8}, cuts:[], pads:[], ics:[], parts:[
+  {id:'v', kind:'trim', ref:'VR1', value:'10k', device:'trimpot', pins:[[1,1],[3,1],[5,1]]},
+  {id:'l', kind:'link', ref:'J1', pins:[[1,3],[3,3]]},   // lug 1 to wiper
+]};
+computeNets();
+ok(!runDRC().some(f => f.rule === 'part-short'), 'wiper strapped to one end lug is a rheostat, not a short');
+S.parts[1].pins = [[1,3],[5,3]];   // lug 1 to lug 3 instead - end to end
+computeNets();
+ok(runDRC().some(f => f.rule === 'part-short'), 'end lug to end lug without the wiper still errors');
 
 S = demoProject(); computeNets();
 
