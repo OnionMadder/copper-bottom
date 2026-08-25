@@ -397,6 +397,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 }
 .sheetbar b{letter-spacing:.24em; font-size:11px}
 .sheetbar .sp{flex:1}
+.sheetbar .barck{display:flex; align-items:center; gap:5px; font-size:11.5px;
+  color:var(--soft); cursor:pointer; white-space:nowrap}
+.sheetbar .barck input{accent-color:#00FFA3}
 .sheetdoc{
   flex:1; overflow:auto; background:#fff; color:#111; padding:16mm 14mm 24mm;
   font:12px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
@@ -426,6 +429,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .tick input:checked + span{background:#333; box-shadow:inset 0 0 0 2px #fff}
 
 @media print{
+  /* the app is dark; paper is not. Without this the page after the last line
+     of content prints as a slab of the app's background wherever the print
+     dialog has background graphics on. */
+  html,body{background:#fff}
   .hdr,.main,.foot,.sheetbar,.thanks{display:none !important}
   .sheet{position:static; background:#fff}
   .sheet[hidden]{display:none}
@@ -434,6 +441,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .sheetdoc h2{page-break-after:avoid}
   .sheetdoc .svgwrap{page-break-inside:avoid}
   tr,h1{page-break-inside:avoid}
+  /* each reading copy owns a printed page - full size is its whole point */
+  .sheetdoc .bigmap{page-break-before:always}
 }
 /* The paper needs a margin of its own - with the screen padding zeroed, the
    brand rule was landing flush on the sheet's edge. ONE @page rule, at the
@@ -677,6 +686,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <div class="sheetbar">
     <b>BUILD SHEET</b>
     <span class="sp"></span>
+    <label class="barck" title="add full-page reading copies of both board maps at the end - the 1:1 copies stay as they are"><input type="checkbox" id="bigmaps"> full-page maps</label>
     <button id="btnSvgC">component .svg</button>
     <button id="btnSvgS">solder .svg</button>
     <button id="btnMd">copy markdown</button>
@@ -5215,10 +5225,19 @@ function calBar(ox, oy){
   return o.join('');
 }
 
-function exportSVG(side){
+/* `fit` turns the 1:1 drawing into a reading copy: [w, h] in mm of the box it
+   should fill, usually a printed page. The board, its rulers and its labels
+   scale up together; everything that belongs to the SHEET rather than the
+   board - the title lines, the maker's mark, the calibration bar, the arrow
+   sentence - is left out, partly because the build sheet provides them in
+   HTML, but mostly because their width was what capped the scale: a small
+   board's drawing is nearly all caption, and a reading copy sized to its
+   captions barely grows. The calibration bar in particular MUST go - a ruler
+   that measures wrong on purpose is worse than none. */
+function exportSVG(side, fit){
   const rows = S.board.rows, cols = S.board.cols;
   const solder = side === 'solder';
-  const TOP = 16, BOT = 14;   // three header lines: name, side/meta, maker's mark
+  const TOP = fit ? 2 : 16, BOT = fit ? 2 : 14;   // three header lines: name, side/meta, maker's mark
   const name = S.name || 'untitled';
   const subLine = (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
                           : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
@@ -5234,8 +5253,12 @@ function exportSVG(side){
     lineW(48, 2.4) + 6,                          // the maker's mark, letter-spaced
     solder ? lineW(ARROW_NOTE.length, 2.1) : 0,
     27 + lineW(74, 2.1));                        // the calibration bar and its caption
-  const W = +Math.max(EDGE*2 + (cols-1)*MM, EDGE*2 + textW).toFixed(3);
+  const W = +(fit ? EDGE*2 + (cols-1)*MM
+                  : Math.max(EDGE*2 + (cols-1)*MM, EDGE*2 + textW)).toFixed(3);
   const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
+  /* the one line that makes the reading copy bigger: same viewBox, same
+     drawing, a larger rendered box - so type grows with the copper */
+  const mag = fit ? Math.min(fit[0] / W, fit[1] / H) : 1;
   const x = c => EDGE + (solder ? (cols-1-c) : c) * MM;
   const y = r => TOP + EDGE + r * MM;
   const cutSet = new Set(S.cuts);
@@ -5248,18 +5271,20 @@ function exportSVG(side){
         '" font-family="monospace" paint-order="stroke" stroke="#fff" stroke-width="0.8" stroke-linejoin="round" ' +
         (extra || '') + '>' + esc(s) + '</text>';
 
-  o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + 'mm" height="' + H +
-         'mm" viewBox="0 0 ' + W + ' ' + H + '">');
+  o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + (W * mag).toFixed(2) + 'mm" height="' +
+         (H * mag).toFixed(2) + 'mm" viewBox="0 0 ' + W + ' ' + H + '">');
   o.push('<rect width="' + W + '" height="' + H + '" fill="#fff"/>');
-  o.push('<g fill="#000" stroke="none">');
-  o.push(T(EDGE, 6, name, 3.4, 'font-weight="bold"'));
-  o.push(T(EDGE, 9.6, subLine, 2.2));
-  /* the maker's mark, the same two-tone as the app header - its own line, so
-     a narrow board cannot run its name into it */
-  o.push('<text x="' + EDGE + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
-         'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
-         '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
-  o.push('</g>');
+  if(!fit){
+    o.push('<g fill="#000" stroke="none">');
+    o.push(T(EDGE, 6, name, 3.4, 'font-weight="bold"'));
+    o.push(T(EDGE, 9.6, subLine, 2.2));
+    /* the maker's mark, the same two-tone as the app header - its own line, so
+       a narrow board cannot run its name into it */
+    o.push('<text x="' + EDGE + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
+           'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
+           '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
+    o.push('</g>');
+  }
 
   /* rulers keep the layout's own numbering in both views, so a coordinate
      from the cut list is findable on either sheet */
@@ -5494,9 +5519,10 @@ function exportSVG(side){
     o.push('<path d="M' + (ox + (cols > 1 ? 4.5 : 0)) + ' ' + (oy - 4.5) + 'L' + ox + ' ' + (oy - 1.4) +
            'L' + (ox + 3.2) + ' ' + (oy - 5.6) + 'Z" fill="#000"/>');
     late.push('');
-    o.push(T(EDGE, footY - 3.2, ARROW_NOTE, 2.1, 'font-weight="bold"'));
+    if(!fit) o.push(T(EDGE, footY - 3.2, ARROW_NOTE, 2.1, 'font-weight="bold"'));
   }
-  o.push(calBar(EDGE, footY + 2));
+  /* the ruler only appears where it tells the truth: never on a reading copy */
+  if(!fit) o.push(calBar(EDGE, footY + 2));
   o.push('</svg>');
   return o.join('');
 }
@@ -5586,7 +5612,22 @@ function renderSheet(){
       '<h2>Off-board wiring <span class="n">' + wires.length + '</span></h2>' +
       '<p>Fill in the last column with what each wire actually goes to.</p>' +
       '<table><thead><tr><th>pad</th><th>hole</th><th>from left (back)</th><th>goes to</th></tr></thead>' +
-        '<tbody>' + wireRows + '</tbody></table>' : '');
+        '<tbody>' + wireRows + '</tbody></table>' : '') +
+
+    /* Reading copies, each on its own printed page. The 1:1 copies above are
+       the contract with the printer; a small board makes them small, which is
+       correct and unreadable at once. These are the same drawings scaled to
+       fill the page, and both the heading and the caption say so, because a
+       board map that might be mistaken for actual size is how a drill guide
+       goes wrong. */
+    (bigmaps.checked ?
+      '<div class="bigmap"><h2>Component side - full page <span class="n">reading copy, NOT 1:1</span></h2>' +
+      '<p>Enlarged to fill the page for reading. Check the printer against the 1:1 copies above.</p>' +
+      '<div class="svgwrap">' + exportSVG('component', [178, 225]) + '</div></div>' +
+      '<div class="bigmap"><h2>Solder side - full page, mirrored <span class="n">reading copy, NOT 1:1</span></h2>' +
+      '<p>Mirrored, as you look at the back of the board. The arrow marks row 1, col 1 - ' +
+        'on this side it sits at the RIGHT-hand end of row 1.</p>' +
+      '<div class="svgwrap">' + exportSVG('solder', [178, 225]) + '</div></div>' : '');
 }
 
 function openSheet(){ sheet.hidden = false; renderSheet(); }
@@ -7356,6 +7397,19 @@ nlText.oninput     = () => {
 btnSheet.onclick   = openSheet;
 sheetClose.onclick = closeSheet;
 btnPrint.onclick   = () => window.print();
+/* the full-page maps ride the sheet by default; unticking saves the paper,
+   and the choice sticks. Its own key, like the thank-you's, so clearing a
+   board never resets it. */
+const BIGMAPS_KEY = 'copper-bottom.bigmaps';
+(function(){
+  let v = null;
+  try{ v = localStorage.getItem(BIGMAPS_KEY); }catch(err){}
+  bigmaps.checked = v !== '0';
+})();
+bigmaps.onchange = () => {
+  try{ localStorage.setItem(BIGMAPS_KEY, bigmaps.checked ? '1' : '0'); }catch(err){}
+  renderSheet();
+};
 btnSvgC.onclick    = () => downloadSVG('component');
 btnSvgS.onclick    = () => downloadSVG('solder');
 btnMd.onclick      = () => {
