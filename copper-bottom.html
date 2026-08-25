@@ -768,7 +768,10 @@ function migrate(obj){
 
   o.ics = (Array.isArray(o.ics) ? o.ics : []).filter(ic =>
     ic && typeof ic === 'object' && isHole(ic.pin1) &&
-    Number.isInteger(ic.pins) && ic.pins >= 4 && ic.pins % 2 === 0 &&
+    Number.isInteger(ic.pins) &&
+    /* a fixed DIP is an even count of at least 4; a custom module can be any
+       count from 2 up, odd included - the footprint editor lays it out. */
+    (IC_LIB[ic.part] && IC_LIB[ic.part].custom ? ic.pins >= 2 : (ic.pins >= 4 && ic.pins % 2 === 0)) &&
     Number.isInteger(ic.span) && ic.span >= 2
   ).map(ic => {
     /* A cut line that cannot be where it says it is goes back to the middle,
@@ -1191,6 +1194,10 @@ const IC_LIB = {
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
   'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
   'DIP-16':{pins:16, name:'generic 16-pin', cmos:false, roles:{}},
+  /* pin count is set at placement (IC_PINS), not read from here; the 8 is only
+     a fallback. Drops as two rows, then the footprint editor shapes it - which
+     is how a reverb brick or an odd module gets laid out. */
+  'DIP-N' :{pins:8,  name:'custom (set pin count)', cmos:false, roles:{}, custom:true},
 };
 
 /* pin i (1-based) of an IC to [row,col]. By default pins run down the left row
@@ -4576,7 +4583,7 @@ let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
 const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k'};
 const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed'};
-let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3;
+let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
                 e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly',
@@ -4744,13 +4751,17 @@ function renderCtx(){
     }else if(ic){
       o.push('<label>REF</label><input id="edRef" value="' + esc(ic.ref) + '">');
       o.push('<label>PART</label><select id="edIc">' + opts(Object.keys(IC_LIB), ic.part) + '</select>');
+      if(IC_LIB[ic.part] && IC_LIB[ic.part].custom){
+        o.push('<label>PIN COUNT</label><input id="edIcPins" type="number" min="2" max="64" value="' + ic.pins + '">');
+        o.push('<div class="hint">changing the count re-lays the pins as two rows - shape it again with edit footprint after.</div>');
+      }
       o.push('<label>FOOTPRINT - ' + (hasFootprint(ic) ? 'custom' : 'standard DIP') + '</label>');
       o.push('<button id="edFoot">' + (FOOT ? 'done shaping' : 'edit footprint') + '</button>');
       if(hasFootprint(ic)) o.push('<button id="edFootReset">back to a DIP</button>');
       if(FOOT) o.push('<div class="hint">drag any numbered pin to a new hole. a shaped chip ' +
                       'manages its own cuts - the auto-cut column no longer applies.</div>');
       if(!hasFootprint(ic)){
-        const half = ic.pins / 2, whole = icCutSkip(ic).length;
+        const half = Math.ceil(ic.pins / 2), whole = icCutSkip(ic).length;
         o.push('<label>CUTS - column ' + dCol(icCutCol(ic.pin1, ic.span, icCutOff(ic))) + '</label>');
         o.push('<button id="edCutL"' + (canMoveIcCuts(ic, -1) ? '' : ' disabled') + '>&#9664; move cuts</button>' +
                '<button id="edCutR"' + (canMoveIcCuts(ic,  1) ? '' : ' disabled') + '>move cuts &#9654;</button>');
@@ -4787,6 +4798,10 @@ function renderCtx(){
   }else if(TOOL === 'ic'){
     o.push('<label>PART</label><select id="ctxIc">' + opts(Object.keys(IC_LIB), IC_PART) + '</select>');
     o.push('<label>SPAN (holes)</label><input id="ctxSpan" type="number" min="2" max="9" value="' + IC_SPAN + '">');
+    if(IC_LIB[IC_PART] && IC_LIB[IC_PART].custom){
+      o.push('<label>PIN COUNT</label><input id="ctxPins" type="number" min="2" max="64" value="' + IC_PINS + '">');
+      o.push('<div class="hint">any count - a reverb brick, a module, an odd chip. It drops as two rows; then select it and <b>edit footprint</b> to drag the pins to the real layout.</div>');
+    }
   }else if(TOOL === 'pad'){
     o.push('<label>LABEL</label><input id="ctxPad" value="' + esc(PAD_LABEL) + '">');
   }
@@ -4796,7 +4811,8 @@ function renderCtx(){
   const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el[ev] = fn; };
   on('ctxVal', 'oninput',  e => { VALUES[TOOL] = e.target.value; });
   on('ctxPad', 'oninput',  e => { PAD_LABEL = e.target.value; });
-  on('ctxIc',  'onchange', e => { IC_PART = e.target.value; });
+  on('ctxIc',  'onchange', e => { IC_PART = e.target.value; renderCtx(); });   // custom reveals a pin-count field
+  on('ctxPins','oninput',  e => { IC_PINS = Math.max(2, Math.min(64, Math.round(+e.target.value) || 8)); });
   on('ctxDev', 'onchange', e => {
     DEVICE[TOOL] = e.target.value;
     const dv = DEV_LIB[TOOL] && DEV_LIB[TOOL][DEVICE[TOOL]];
@@ -4904,10 +4920,19 @@ function renderCtx(){
     const v = e.target.value.trim();
     if(v) d.to = v; else delete d.to;
   }));
+  on('edIcPins', 'onchange', e => edit(() => {
+    const ic = selObj(); if(!ic) return;
+    const n = Math.max(2, Math.min(64, Math.round(+e.target.value) || ic.pins));
+    if(n === ic.pins) return;
+    ic.pins = n;
+    delete ic.pinMap;              // the shape depends on the count; re-lay as two rows
+    refreshAutoCuts(ic);
+  }));
   on('edIc',   'onchange', e => edit(() => {
     const ic = selObj(); if(!ic) return;
     ic.part = e.target.value;
-    ic.pins = IC_LIB[ic.part].pins;
+    const nd = IC_LIB[ic.part];
+    if(!nd.custom) ic.pins = nd.pins;  // a fixed chip has a fixed count; a custom one keeps its own
     delete ic.pinMap;                 // a different chip is a different shape
     refreshAutoCuts(ic);
   }));
@@ -5046,12 +5071,13 @@ function onHole(r, c){
 
   if(TOOL === 'ic'){
     const def = IC_LIB[IC_PART];
-    const half = def.pins / 2;
+    const pinCount = def.custom ? IC_PINS : def.pins;
+    const half = Math.ceil(pinCount / 2);
     if(r + half - 1 >= S.board.rows || c + IC_SPAN >= S.board.cols){ flash('IC would run off the board'); return; }
     pushUndo();
     const pin1 = [r,c];
-    const auto = icCutKeys(pin1, IC_SPAN, def.pins).filter(k => S.cuts.indexOf(k) < 0);
-    S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:def.pins, pin1:pin1, span:IC_SPAN, autoCuts:auto});
+    const auto = icCutKeys(pin1, IC_SPAN, pinCount).filter(k => S.cuts.indexOf(k) < 0);
+    S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:pin1, span:IC_SPAN, autoCuts:auto});
     S.cuts = S.cuts.concat(auto);
     commit(); return;
   }

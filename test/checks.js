@@ -1899,6 +1899,30 @@ const swMig = migrate({version:2, board:{rows:4,cols:6}, cuts:[], ics:[], pads:[
 ok(swMig.parts.length === 1 && swMig.parts[0].kind === 'spdt' && String(swMig.parts[0].fly) === '0,1,2',
    'migrate keeps a flown SPDT switch');
 
+console.log('-- custom pin-count DIP --');
+// a 9-pin custom module: an arbitrary, odd count lays out with every pin distinct
+S = {version:2, name:'brick', board:{rows:8, cols:6}, cuts:[], parts:[], pads:[],
+  ics:[{id:'u', ref:'IC1', part:'DIP-N', pins:9, pin1:[0,1], span:3, autoCuts:[]}]};
+computeNets();
+const cu = S.ics[0];
+const cuHoles = new Set(); for(let i = 1; i <= 9; i++) cuHoles.add(String(pinPos(cu, i)));
+ok(cuHoles.size === 9, 'a 9-pin custom DIP gives nine distinct pin holes');
+
+// the footprint editor materialises a 9-entry map and a pin drags where you put it
+editFootprint(cu);
+ok(hasFootprint(cu) && cu.pinMap.length === 9, 'edit footprint makes a 9-entry pin map for it');
+setIcPin(cu, 5, [5,4]);
+ok(String(pinPos(cu, 5)) === '5,4', 'a custom pin drags to the hole you give it');
+
+// migrate keeps a custom IC at its own count - odd, and below the even-DIP floor
+const cmig = migrate({version:2, board:{rows:8,cols:6}, cuts:[], parts:[], pads:[],
+  ics:[{id:'m', ref:'IC1', part:'DIP-N', pins:9, pin1:[0,1], span:3, autoCuts:[]}]});
+ok(cmig.ics.length === 1 && cmig.ics[0].pins === 9, 'migrate keeps a 9-pin custom DIP');
+// a named chip still has to be an even count of at least four
+const cbad = migrate({version:2, board:{rows:8,cols:6}, cuts:[], parts:[], pads:[],
+  ics:[{id:'x', ref:'IC1', part:'CD40106', pins:9, pin1:[0,1], span:3, autoCuts:[]}]});
+ok(cbad.ics.length === 0, 'a fixed chip with an odd pin count is still rejected');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
