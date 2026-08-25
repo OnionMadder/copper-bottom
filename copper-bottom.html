@@ -751,6 +751,9 @@ function migrate(obj){
       fly = [...new Set(fly)].sort((a, b) => a - b);
       if(fly.length || ('fly' in r)){ r = Object.assign({}, r); if(fly.length) r.fly = fly; else delete r.fly; }
     }
+    /* 'vertical' is the only mount the checks read; anything else is dropped
+       rather than carried, so a file cannot smuggle in a value nothing honours. */
+    if('mount' in r && r.mount !== 'vertical'){ r = Object.assign({}, r); delete r.mount; }
     if(!r.id) r = Object.assign({}, r, {id:uid()});
     return r;
   }).filter(Boolean);

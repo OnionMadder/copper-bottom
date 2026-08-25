@@ -1833,6 +1833,12 @@ computeNets();
 ok(runDRC().some(f => f.rule === 'lead-span'), 'an axial part crammed into too tight a span warns');
 S.parts[0].mount = 'vertical'; computeNets();
 ok(!runDRC().some(f => f.rule === 'lead-span'), "and mount:'vertical' quiets it");
+const mVert = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[],
+  parts:[{id:'v', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[2,1]], mount:'vertical'}]});
+ok(mVert.parts[0].mount === 'vertical', 'migrate keeps a vertical mount');
+const mJunk = migrate({version:2, board:{rows:4,cols:4}, cuts:[], ics:[], pads:[],
+  parts:[{id:'j', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[2,1]], mount:'sideways'}]});
+ok(!('mount' in mJunk.parts[0]), 'migrate drops a mount value nothing reads');
 
 S = demoProject(); computeNets();
 
