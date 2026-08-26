@@ -11,6 +11,12 @@ Single self-contained HTML file. No build step, no install, no server - double-c
 
 ![The editor: a 555 theremin laid out, every net colored, checks clean](docs/editor.png)
 
+Tracing a published layout, the picture is in two places at once - aligned **behind
+the grid** to place parts over, and readable **beside the board** - and every part the
+board does not have yet shows through as a ghost. Nothing else does this:
+
+![Mid-trace: the layout picture aligned behind the grid, ghost parts showing where the board is still empty, and the same picture readable beside it](docs/tracing.png)
+
 A finding never just points - it says what the board will do if you build it anyway:
 
 ![A shorted resistor caught by the checks, consequence spelled out](docs/drc.png)
@@ -192,12 +198,6 @@ which swings the opposite way.
 Most layouts in the world are pictures. A forum post, a screenshot, a photo of a board
 somebody built - and the usual way to use one is to count holes off the picture with a
 finger and hope.
-
-![Mid-trace: the layout picture aligned behind the grid, ghost parts showing where the board is still empty, and the same picture readable beside it](docs/tracing.png)
-
-The picture is in two places at once there: **behind the grid** to trace over, and
-**beside the board** to read at zoom - and the parts the board does not have yet show
-through as ghosts, which is the whole to-do list at a glance.
 
 **reference → behind board** puts the picture underneath the grid. Every hole,
 strip, cut and part is then drawn on top of it, and you place parts by clicking the holes
