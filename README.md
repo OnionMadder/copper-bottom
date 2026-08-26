@@ -2,8 +2,7 @@
 
 A stripboard layout editor that tells you what's actually connected to what.
 
-Named for the copper bottom of the board - the side you flip to, the side you cut -
-and for *copper-bottomed*, meaning a thing you can rely on.
+Named for the copper bottom of the board - the side you cut.
 
 Single self-contained HTML file. No build step, no install, no server - double-click
 `copper-bottom.html` and it opens. Works offline at the bench.
