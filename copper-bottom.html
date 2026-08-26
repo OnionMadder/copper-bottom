@@ -937,7 +937,13 @@ function migrate(obj){
   if(typeof o.name !== 'string') o.name = 'untitled';
   const b = (o.board && typeof o.board === 'object') ? o.board : {};
   o.board = {rows:clampInt(b.rows, 2, 60, 13), cols:clampInt(b.cols, 2, 80, 20),
-             kind:b.kind === 'perf' ? 'perf' : 'strip'};
+             kind:b.kind === 'perf' ? 'perf' : b.kind === 'bread' ? 'bread' : 'strip'};
+  /* a permanent breadboard IS its fourteen rows - rails, two banks, rails.
+     A file claiming another count is repaired to the real shape and told. */
+  if(o.board.kind === 'bread' && o.board.rows !== BREAD_ROWS){
+    note('board reshaped to ' + BREAD_ROWS + ' rows (a permanent breadboard is rails + two banks)');
+    o.board.rows = BREAD_ROWS;
+  }
 
   const before = {
     cuts:Array.isArray(o.cuts) ? o.cuts.length : 0,
@@ -948,13 +954,14 @@ function migrate(obj){
 
   o.cuts = (Array.isArray(o.cuts) ? o.cuts : [])
     .filter(k => typeof k === 'string' && /^\d+,\d+$/.test(k));
-  /* a perfboard has no strips, so a cut on one is a claim about copper that
-     does not exist - dropped and said, like everything else dropped here.
-     Chips lose their auto-cut lists with it, quietly: those only name which
-     of the cuts a chip owns, and there are none to own. */
-  if(o.board.kind === 'perf'){
+  /* off stripboard, a cut is a claim about copper that does not exist -
+     dropped and said, like everything else dropped here. Chips lose their
+     auto-cut lists with it, quietly: those only name which of the cuts a
+     chip owns, and there are none to own. */
+  if(o.board.kind !== 'strip'){
     if(o.cuts.length){
-      note(o.cuts.length + ' cut' + (o.cuts.length === 1 ? '' : 's') + ' (a perfboard has no strips)');
+      note(o.cuts.length + ' cut' + (o.cuts.length === 1 ? '' : 's') + ' (' +
+           (o.board.kind === 'perf' ? 'a perfboard has no strips' : 'a permanent breadboard is pre-wired') + ')');
       o.cuts = [];
     }
     if(Array.isArray(o.ics)) for(const ic of o.ics) if(ic && typeof ic === 'object') ic.autoCuts = [];
@@ -1630,7 +1637,7 @@ function icCutCol(pin1, span, off){
   return pin1[1] + use;
 }
 function icCutKeys(pin1, span, pins, off, skip){
-  if(isPerf()) return [];   // no strips means nothing for a chip to cut
+  if(noCuts()) return [];   // no strips means nothing for a chip to cut
   const c = icCutCol(pin1, span, off), out = [];
   const no = new Set(Array.isArray(skip) ? skip : []);
   for(let i = 0; i < pins / 2; i++) if(!no.has(i)) out.push(K(pin1[0] + i, c));
@@ -1682,14 +1689,25 @@ function segAt(seg, r, c){
   return v === undefined ? null : v;
 }
 
-/* Perfboard is the other kind of board this tool understands: no strips,
-   every hole its own island of copper, and the wire links do ALL the work.
-   The one honest difference lives here in segmentation - everything above
-   the nets (DRC, netlist, sheets, breadboard export) reads nets and never
-   needs to know. Cuts have no meaning without strips, so a perf board
-   carries none - and ic-nocuts can never fire, because facing pins never
+/* Perfboard and the permanent breadboard are the other kinds of board this
+   tool understands, and each one's whole identity is a segmentation rule.
+   Perfboard: no strips, every hole its own island, the wire links do ALL
+   the work. Permanent breadboard (a solderable breadboard PCB, the
+   Perma-Proto shape): FOURTEEN fixed rows - two power rails, bank J down
+   to F, the channel, bank E down to A, two rails - where a rail runs the
+   board's whole length and a bank column is five holes that stop at the
+   channel. Everything above the nets (DRC, netlist, sheets, breadboard
+   export) reads nets and never needs to know. Cuts have no meaning on
+   either - and ic-nocuts can never fire on them, because facing pins never
    share a segment to begin with. */
-const isPerf = () => S.board.kind === 'perf';
+const isPerf  = () => S.board.kind === 'perf';
+const isBread = () => S.board.kind === 'bread';
+const noCuts  = () => isPerf() || isBread();
+
+/* the fixed vertical anatomy of the permanent breadboard, top to bottom */
+const BREAD_ROWS = 14;
+const BREAD_LABEL = ['+','-','J','I','H','G','F','E','D','C','B','A','-','+'];
+const breadZone = (r) => r < 2 ? 'railTop' : r < 7 ? 'bankTop' : r < 12 ? 'bankBot' : 'railBot';
 
 function computeNets(){
   const rows = S.board.rows, cols = S.board.cols;
@@ -1698,12 +1716,27 @@ function computeNets(){
   const segHoles = [];
   let n = 0;
 
-  /* step 1 - segment every strip; on perfboard every hole IS its segment */
+  /* step 1 - segment every strip; on perfboard every hole IS its segment,
+     and on the permanent breadboard the copper is rails and tie columns */
+  if(isBread()){
+    const ids = new Map();   // one id per rail row / per (bank, column)
+    for(let r = 0; r < rows; r++){
+      seg[r] = [];
+      const zone = breadZone(r);
+      for(let c = 0; c < cols; c++){
+        const key = zone[0] === 'r' ? zone + ':' + r : zone + ':' + c;
+        if(!ids.has(key)){ ids.set(key, n++); segHoles[ids.get(key)] = []; }
+        const s = ids.get(key);
+        seg[r][c] = s;
+        segHoles[s].push([r, c]);
+      }
+    }
+  }else
   for(let r = 0; r < rows; r++){
     seg[r] = [];
     let cur = -1;
     for(let c = 0; c < cols; c++){
-      if(!isPerf() && cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
+      if(!noCuts() && cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
       if(isPerf() || cur < 0){ cur = n++; segHoles[cur] = []; }
       seg[r][c] = cur;
       segHoles[cur].push([r,c]);
@@ -2763,15 +2796,21 @@ function walkthrough(){
 
   L.push((S.name || 'untitled') + ' - placing it step by step');
   L.push(S.board.rows + ' rows of ' + S.board.cols + ' holes' +
-         (isPerf() ? ' (PERFBOARD)' : '') + ' · ' +
+         (isPerf() ? ' (PERFBOARD)' : isBread() ? ' (PERMANENT BREADBOARD)' : '') + ' · ' +
          S.parts.length + ' parts · ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
-         (isPerf() ? '' : ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')) +
+         (noCuts() ? '' : ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')) +
          ' · ' + S.pads.length + ' pad' + (S.pads.length === 1 ? '' : 's'));
   L.push('');
   if(isPerf()){
     L.push('This is PERFBOARD: every hole is its own island of copper, and the');
     L.push('wire links are the whole circuit. A leg that no link reaches is');
     L.push('connected to nothing at all.');
+  }else if(isBread()){
+    L.push('This is a PERMANENT BREADBOARD - the solderable PCB with breadboard');
+    L.push('copper. Rows 1-2 and 13-14 are the power rails, running the whole');
+    L.push('board. Rows 3-7 are bank J down to F, rows 8-12 bank E down to A,');
+    L.push('and a column of five in one bank is a single piece of copper. The');
+    L.push('channel between rows 7 and 8 is where a chip straddles.');
   }else{
     L.push('Every part crosses the strips - watch the ROW change between clicks.');
     L.push('All the holes in one row are a single piece of copper, so a part with');
@@ -2780,7 +2819,8 @@ function walkthrough(){
   L.push('');
 
   step('Press new, then set rows to ' + S.board.rows + ' and cols to ' + S.board.cols +
-       (isPerf() ? ', and flip the board to perf in the footer' : '') + '.');
+       (isPerf() ? ', and flip the board to perf in the footer' :
+        isBread() ? ', and flip the board to breadboard in the footer' : '') + '.');
 
   for(const ic of S.ics){
     const def = IC_LIB[ic.part] || {};
@@ -2959,10 +2999,10 @@ function netlistFromBoard(){
   const pad = Math.min(14, Math.max(...rows.map(r => r.name.length), 4) + 2);
   const out = [
     '# ' + (S.name || 'untitled') + ' - written from the board',
-    '# ' + S.board.rows + (isPerf() ? ' rows of ' : ' strips of ') + S.board.cols + ' holes' +
-      (isPerf() ? ' (perfboard)' : '') + ', ' +
+    '# ' + S.board.rows + (isPerf() || isBread() ? ' rows of ' : ' strips of ') + S.board.cols + ' holes' +
+      (isPerf() ? ' (perfboard)' : isBread() ? ' (permanent breadboard)' : '') + ', ' +
       S.parts.length + ' parts, ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
-      (isPerf() ? '' : ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')),
+      (noCuts() ? '' : ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')),
     '#',
     '# This is the circuit as the copper currently has it. Checking the board',
     '# against it can only pass - its use is to carry the circuit somewhere else.',
@@ -3109,11 +3149,12 @@ function buildMarkdown(){
   L.push('# ' + (S.name || 'untitled'));
   L.push('');
   L.push(S.board.rows + ' rows x ' + S.board.cols + ' cols, 0.1in pitch' +
-         (isPerf() ? ', PERFBOARD - every hole its own pad, the links are the wiring.' : '.'));
+         (isPerf() ? ', PERFBOARD - every hole its own pad, the links are the wiring.'
+         : isBread() ? ', PERMANENT BREADBOARD - rails top and bottom, tie columns of five.' : '.'));
   L.push('');
 
   const cuts = cutList();
-  if(!isPerf()){
+  if(!noCuts()){
     L.push('## Cuts (' + cuts.length + ')');
     L.push('');
     L.push('Made on the **solder side**, with the board flipped left to right.');
@@ -3292,6 +3333,7 @@ function lineEdit(axis, at, delta){
   const dim = axis ? 'cols' : 'rows';
   const size = S.board[dim];
   const max = axis ? 80 : 60;
+  if(!axis && isBread())              return {ok:false, reason:'a permanent breadboard is always ' + BREAD_ROWS + ' rows - rails and two banks'};
   if(at < 0 || at >= size)            return {ok:false, reason:'no ' + dim.slice(0,-1) + ' ' + at};
   if(delta > 0 && size >= max)        return {ok:false, reason:'already at the maximum of ' + max + ' ' + dim};
   if(delta < 0 && size <= 2)          return {ok:false, reason:'a board needs at least two ' + dim};
@@ -5038,35 +5080,55 @@ function render(){
            (MARGIN + PITCH * OV.T.tx) + ' ' + (MARGIN + PITCH * OV.T.ty) + ')"/>');
   }
 
-  /* --- rulers --- */
+  /* --- rulers; the breadboard's rows go by their bench names --- */
   for(let c = 0; c < cols; c++)
     o.push('<text class="rule" x="' + X(c) + '" y="' + (MARGIN - 17) + '">' + dCol(c) + '</text>');
   for(let r = 0; r < rows; r++)
-    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
+    o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' +
+           (isBread() ? BREAD_LABEL[r] : dRow(r)) + '</text>');
 
-  /* --- copper: one rounded bar per uncut run - or, on perfboard, one pad
-     per hole, because that IS the copper there. Quiet by default, so parts
-     and cuts are what your eye lands on. The lit net always goes bright,
-     and NETCOLOUR mode paints every net at once. --- */
+  /* --- copper: one rounded bar per uncut run - on perfboard one pad per
+     hole, on the permanent breadboard rails and tie columns - because that
+     IS the copper there. Quiet by default, so parts and cuts are what your
+     eye lands on. The lit net always goes bright, and NETCOLOUR mode
+     paints every net at once. --- */
+  const copperBar = (x0, y0, w, h, net) => {
+    const col = net ? net.color : '#555';
+    const on  = net && net.id === hl;
+    const rr = Math.min(w, h) / 2;
+    const bar = (f, fo, s, so, sw) =>
+      o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w + '" height="' + h +
+             '" rx="' + rr + '" fill="' + f +
+             '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
+    if(on)             bar(col, 0.34, col, 1, 1.6);
+    else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+    else { bar('#B0703A', 0.13, '#C98B4B', 0.26, 1); bar(col, 0.06, col, 0.14, 1); }
+  };
+  if(isBread()){
+    /* the channel, so the anatomy reads at a glance */
+    o.push('<rect x="' + (X(0) - PITCH * 0.5) + '" y="' + (Y(6) + PITCH * 0.36) + '" width="' +
+           ((cols - 1) * PITCH + PITCH) + '" height="' + (PITCH * 0.28) +
+           '" fill="#07050D" stroke="#241F36" stroke-width="1"/>');
+    for(const r of [0, 1, 12, 13]){
+      copperBar(X(0) - PITCH * 0.44, Y(r) - 9.5, (cols - 1) * PITCH + PITCH * 0.88, 19, NET.netAt(r, 0));
+      /* the polarity line a real board prints beside its rail */
+      o.push('<rect x="' + (X(0) - PITCH * 0.44) + '" y="' + (Y(r) + (r < 2 ? -14 : 11)) + '" width="' +
+             ((cols - 1) * PITCH + PITCH * 0.88) + '" height="2.4" rx="1.2" fill="' +
+             (BREAD_LABEL[r] === '+' ? '#FF5C7A' : '#5BA8FF') + '" fill-opacity="0.8"/>');
+    }
+    for(const band of [[2, 6], [7, 11]])
+      for(let c = 0; c < cols; c++)
+        copperBar(X(c) - 9.5, Y(band[0]) - PITCH * 0.44, 19, Y(band[1]) - Y(band[0]) + PITCH * 0.88, NET.netAt(band[0], c));
+  }else
   for(let r = 0; r < rows; r++){
     let c = 0;
     while(c < cols){
       if(!isPerf() && cutSet.has(K(r,c))){ c++; continue; }
       let e = c;
       if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
-      const net = NET.netAt(r, c);
-      const col = net ? net.color : '#555';
-      const on  = net && net.id === hl;
-      const x0 = X(c) - PITCH * (isPerf() ? 0.32 : 0.44),
-            w  = X(e) - X(c) + PITCH * (isPerf() ? 0.64 : 0.88),
-            h2 = isPerf() ? PITCH * 0.32 : 9.5;
-      const bar = (f, fo, s, so, sw) =>
-        o.push('<rect x="' + x0 + '" y="' + (Y(r) - h2) + '" width="' + w + '" height="' + (h2 * 2) +
-               '" rx="' + h2 + '" fill="' + f +
-               '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
-      if(on)             bar(col, 0.34, col, 1, 1.6);
-      else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
-      else { bar('#B0703A', 0.13, '#C98B4B', 0.26, 1); bar(col, 0.06, col, 0.14, 1); }
+      const half = isPerf() ? PITCH * 0.32 : 9.5;
+      copperBar(X(c) - (isPerf() ? half : PITCH * 0.44), Y(r) - half,
+                X(e) - X(c) + (isPerf() ? half * 2 : PITCH * 0.88), half * 2, NET.netAt(r, c));
       c = e + 1;
     }
   }
@@ -5578,26 +5640,39 @@ function renderSolderView(hl){
     o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
 
   /* copper, bright - on this side it is what you are looking at. On
-     perfboard that copper is one pad per hole, not a strip. */
+     perfboard that copper is one pad per hole; on the permanent breadboard
+     it is the rails and the tie columns. */
+  const bBar = (x0, y0, w, h, net) => {
+    const col = net ? net.color : '#555';
+    const on  = net && net.id === hl;
+    const rr = Math.min(w, h) / 2;
+    const bar = (f, fo, s, so, sw) =>
+      o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w + '" height="' + h +
+             '" rx="' + rr + '" fill="' + f +
+             '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
+    if(on)             bar(col, 0.34, col, 1, 1.6);
+    else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+    else               bar('#B0703A', 0.30, '#C98B4B', 0.55, 1);
+  };
+  if(isBread()){
+    o.push('<rect x="' + (Math.min(mX(0), mX(cols - 1)) - PITCH * 0.5) + '" y="' + (Y(6) + PITCH * 0.36) +
+           '" width="' + ((cols - 1) * PITCH + PITCH) + '" height="' + (PITCH * 0.28) +
+           '" fill="#07050D" stroke="#241F36" stroke-width="1"/>');
+    for(const r of [0, 1, 12, 13])
+      bBar(Math.min(mX(0), mX(cols - 1)) - PITCH * 0.44, Y(r) - 9.5, (cols - 1) * PITCH + PITCH * 0.88, 19, NET.netAt(r, 0));
+    for(const band of [[2, 6], [7, 11]])
+      for(let c = 0; c < cols; c++)
+        bBar(mX(c) - 9.5, Y(band[0]) - PITCH * 0.44, 19, Y(band[1]) - Y(band[0]) + PITCH * 0.88, NET.netAt(band[0], c));
+  }else
   for(let r = 0; r < rows; r++){
     let c = 0;
     while(c < cols){
       if(!isPerf() && cutSet.has(K(r,c))){ c++; continue; }
       let e = c;
       if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
-      const net = NET.netAt(r, c);
-      const col = net ? net.color : '#555';
-      const on  = net && net.id === hl;
       const half = isPerf() ? PITCH * 0.32 : 9.5;
-      const x0 = Math.min(mX(c), mX(e)) - (isPerf() ? half : PITCH * 0.44);
-      const w  = Math.abs(mX(e) - mX(c)) + (isPerf() ? half * 2 : PITCH * 0.88);
-      const bar = (f, fo, s, so, sw) =>
-        o.push('<rect x="' + x0 + '" y="' + (Y(r) - half) + '" width="' + w + '" height="' + (half * 2) +
-               '" rx="' + half + '" fill="' + f +
-               '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
-      if(on)             bar(col, 0.34, col, 1, 1.6);
-      else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
-      else               bar('#B0703A', 0.30, '#C98B4B', 0.55, 1);
+      bBar(Math.min(mX(c), mX(e)) - (isPerf() ? half : PITCH * 0.44), Y(r) - half,
+           Math.abs(mX(e) - mX(c)) + (isPerf() ? half * 2 : PITCH * 0.88), half * 2, NET.netAt(r, c));
       c = e + 1;
     }
   }
@@ -5877,7 +5952,7 @@ function exportSVG(side, fit){
   const name = S.name || 'untitled';
   const subLine = (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
                           : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
-                  '  ·  0.1in pitch' + (isPerf() ? '  ·  PERFBOARD' : '') + '  ·  1:1';
+                  '  ·  0.1in pitch' + (isPerf() ? '  ·  PERFBOARD' : isBread() ? '  ·  PERMANENT BREADBOARD' : '') + '  ·  1:1';
   const ARROW_NOTE = 'The arrow marks row 1, col 1 - the first hole. On the back it sits at the RIGHT-hand end of row 1.';
   /* The board is 1:1 and cannot stretch, but the words around it can outrun
      a narrow board and clip. Size the sheet to its longest line as well as
@@ -5927,13 +6002,28 @@ function exportSVG(side, fit){
   for(let c = 0; c < cols; c++)
     o.push(T(x(c), y(0) - 3.4, String(dCol(c)), 1.7, 'text-anchor="middle" fill="#666"'));
   for(let r = 0; r < rows; r++)
-    o.push(T(EDGE - 3.4, y(r) + 0.6, String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
+    o.push(T(EDGE - 3.4, y(r) + 0.6, isBread() ? BREAD_LABEL[r] : String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
 
   /* Copper runs, both sides. On the solder side the copper faces you, so
      the strips draw as the filled bands they are, broken at every cut - the
      printout reads like the board in your hand. The component side keeps a
      ghost of them so the parts stay legible on top. On perfboard the copper
-     is one pad per hole and draws that way, both sides. */
+     is one pad per hole; on the permanent breadboard it is the rails and
+     the tie columns. Both sides, all three kinds. */
+    const sheetBar = (bx, by, bw, bh) => {
+      const rr = Math.min(bw, bh) / 2;
+      o.push('<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh +
+             '" rx="' + rr + '" ' +
+             (solder ? 'fill="#EBD9C4" stroke="#C7A87E" stroke-width="0.2"'
+                     : 'fill="#F8F2EA" stroke="#D8C7B2" stroke-width="0.16"') + '/>');
+    };
+    if(isBread()){
+      for(const r of [0, 1, 12, 13])
+        sheetBar(Math.min(x(0), x(cols - 1)) - MM*0.42, y(r) - 0.95, (cols - 1) * MM + MM*0.84, 1.9);
+      for(const band of [[2, 6], [7, 11]])
+        for(let c = 0; c < cols; c++)
+          sheetBar(x(c) - 0.95, y(band[0]) - MM*0.42, 1.9, y(band[1]) - y(band[0]) + MM*0.84);
+    }else
     for(let r = 0; r < rows; r++){
       let c = 0;
       while(c < cols){
@@ -5941,12 +6031,8 @@ function exportSVG(side, fit){
         let e = c;
         if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e+1))) e++;
         const pad = isPerf() ? MM * 0.4 : 0.95;
-        const x0 = Math.min(x(c), x(e)) - (isPerf() ? pad : MM*0.42),
-              w  = Math.abs(x(e) - x(c)) + (isPerf() ? pad * 2 : MM*0.84);
-        o.push('<rect x="' + x0 + '" y="' + (y(r) - pad) + '" width="' + w +
-               '" height="' + (pad * 2) + '" rx="' + pad + '" ' +
-               (solder ? 'fill="#EBD9C4" stroke="#C7A87E" stroke-width="0.2"'
-                       : 'fill="#F8F2EA" stroke="#D8C7B2" stroke-width="0.16"') + '/>');
+        sheetBar(Math.min(x(c), x(e)) - (isPerf() ? pad : MM*0.42), y(r) - pad,
+                 Math.abs(x(e) - x(c)) + (isPerf() ? pad * 2 : MM*0.84), pad * 2);
         c = e + 1;
       }
     }
@@ -6225,8 +6311,8 @@ function renderSheet(){
     '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom</span></div>' +
     '<h1>' + esc(S.name || 'untitled') + '</h1>' +
     '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch' +
-      (isPerf() ? ' · perfboard' : '') + ' · ' +
-      items.length + ' parts · ' + (isPerf() ? '' : cuts.length + ' cuts · ') + '<b id="prog">' + ticked + ' / ' + total +
+      (isPerf() ? ' · perfboard' : isBread() ? ' · permanent breadboard' : '') + ' · ' +
+      items.length + ' parts · ' + (noCuts() ? '' : cuts.length + ' cuts · ') + '<b id="prog">' + ticked + ' / ' + total +
       '</b> done</p>' +
     '<h2>Component side</h2>' +
     '<div class="svgwrap">' + exportSVG('component') + '</div>' +
@@ -6234,7 +6320,7 @@ function renderSheet(){
     '<p>The board as you see it with the copper facing you. Column numbers are still ' +
       'those of the layout, so a coordinate from the cut list lands on the same hole in both views.</p>' +
     '<div class="svgwrap">' + exportSVG('solder') + '</div>' +
-    (isPerf() ? '' :
+    (noCuts() ? '' :
     '<h2>Cuts <span class="n">' + cuts.length + '</span></h2>' +
     '<p>Made on the solder side. <b>from left (back)</b> counts holes from the left edge as you ' +
       'look at the back of the board - the mirror flip is already done for you.</p>' +
@@ -6604,10 +6690,11 @@ for(const b of document.querySelectorAll('.tool')){
 }
 
 function setTool(t){
-  /* the cut tool has nothing to cut on a perfboard - refuse with the reason
+  /* the cut tool has nothing to cut off stripboard - refuse with the reason
      rather than letting a click quietly do nothing */
-  if(t === 'cut' && isPerf()){
-    flash('a perfboard has no strips to cut - the wire links ARE the wiring');
+  if(t === 'cut' && noCuts()){
+    flash(isPerf() ? 'a perfboard has no strips to cut - the wire links ARE the wiring'
+                   : 'a permanent breadboard is pre-wired - rails and tie columns, nothing to cut');
     return;
   }
   TOOL = t;
@@ -7123,6 +7210,23 @@ function onHole(r, c){
     const def = IC_LIB[IC_PART];
     const pinCount = def.custom ? IC_PINS : def.pins;
     const half = Math.ceil(pinCount / 2);
+    /* on the permanent breadboard a DIP LIES DOWN: it straddles the channel,
+       pin 1 at the click in row E (grid row 8), pins running right along E
+       and back along F above - the shape every breadboard chip has always
+       had. Made as an explicit footprint so nothing else needs a case. */
+    if(isBread()){
+      if(pinCount % 2){ flash('an odd pin count cannot straddle the channel'); return; }
+      if(r !== 7 && r !== 6){ flash('a chip straddles the channel - click its pin-1 hole in row E, just below the channel'); return; }
+      if(c + half - 1 >= S.board.cols){ flash('IC would run off the board'); return; }
+      pushUndo();
+      const pin1 = [7, c];
+      const pinMap = [];
+      for(let i = 0; i < half; i++) pinMap.push([0, i]);              // 1..half rightward along E
+      for(let i = 0; i < half; i++) pinMap.push([-1, half - 1 - i]);  // back leftward along F
+      S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:pin1,
+                  span:2, autoCuts:[], pinMap:pinMap});
+      commit(); return;
+    }
     if(r + half - 1 >= S.board.rows || c + IC_SPAN >= S.board.cols){ flash('IC would run off the board'); return; }
     pushUndo();
     const pin1 = [r,c];
@@ -7400,29 +7504,41 @@ function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2)
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
-/* strip <-> perf. Going to perf throws the cuts away - they have no strips
-   to live on - so it asks first when there are any. Coming back to strips
-   hands every DIP its automatic cuts again. Undo covers both directions. */
+/* The board button walks strips -> perf -> breadboard -> strips. Leaving
+   stripboard throws the cuts away - they have no strips to live on - so it
+   asks first when there are any; entering the breadboard also reshapes the
+   board to its fixed fourteen rows, and coming back to strips hands every
+   DIP its automatic cuts again. Undo covers every direction. */
 function syncBoardKind(){
-  bkind.textContent = isPerf() ? 'perf' : 'strips';
+  bkind.textContent = isPerf() ? 'perf' : isBread() ? 'breadboard' : 'strips';
   const cutBtn = document.querySelector('.tool[data-tool="cut"]');
-  if(cutBtn) cutBtn.classList.toggle('dead', isPerf());
+  if(cutBtn) cutBtn.classList.toggle('dead', noCuts());
 }
 bkind.onclick = () => {
-  if(!isPerf() && S.cuts.length &&
+  const next = isPerf() ? 'bread' : isBread() ? 'strip' : 'perf';
+  if(S.board.kind !== 'perf' && next === 'perf' && S.cuts.length &&
      !confirm('Perfboard has no strips, so its ' + S.cuts.length + ' cut' +
               (S.cuts.length === 1 ? '' : 's') + ' will be removed. Switch anyway?')) return;
+  if(next === 'bread' && S.board.rows !== BREAD_ROWS &&
+     !confirm('A permanent breadboard is ' + BREAD_ROWS + ' rows - two rails, bank J-F, the channel, ' +
+              'bank E-A, two rails. The board becomes ' + BREAD_ROWS + ' rows; anything past that ' +
+              'ends up off the board. Switch anyway?')) return;
   pushUndo();
-  if(isPerf()){
-    S.board.kind = 'strip';
+  S.board.kind = next;
+  if(next === 'strip'){
     for(const ic of S.ics) refreshAutoCuts(ic);
     flash('stripboard - copper runs along the rows again');
   }else{
-    S.board.kind = 'perf';
     S.cuts = [];
     for(const ic of S.ics) ic.autoCuts = [];
     if(TOOL === 'cut') setTool('inspect');
-    flash('perfboard - every hole its own pad, links do the wiring');
+    if(next === 'bread'){
+      S.board.rows = BREAD_ROWS;
+      rows.value = BREAD_ROWS;
+      flash('permanent breadboard - rails top and bottom, tie columns of five, pre-wired');
+    }else{
+      flash('perfboard - every hole its own pad, links do the wiring');
+    }
   }
   commit();
 };
@@ -7431,11 +7547,20 @@ holdable(zout, () => zoom(-1));
 
 projname.oninput = () => { S.name = projname.value; autosave(); };
 function resize(){
-  const r = Math.max(2, Math.min(60, +rows.value || 13));
+  /* a permanent breadboard's rows ARE its anatomy - rails, two banks - so
+     only its length is yours to change */
+  let r = Math.max(2, Math.min(60, +rows.value || 13));
+  if(isBread() && r !== BREAD_ROWS){
+    r = BREAD_ROWS;
+    rows.value = BREAD_ROWS;
+    flash('a permanent breadboard is ' + BREAD_ROWS + ' rows - rails and two banks; stretch it sideways instead');
+  }
   const c = Math.max(2, Math.min(80, +cols.value || 20));
   if(r === S.board.rows && c === S.board.cols) return;
   pushUndo();
-  S.board = {rows:r, cols:c};
+  /* replacing the whole object here used to drop the KIND with it - a
+     resized perfboard silently woke up as stripboard */
+  S.board = {rows:r, cols:c, kind:S.board.kind || 'strip'};
   commit();
 }
 rows.onchange = resize;

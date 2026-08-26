@@ -2421,6 +2421,37 @@ if(!impP.failed){
   ok(!sameNet([0, 0], [1, 0]), 'holes without wiring stay apart');
 }
 
+console.log('-- permanent breadboard --');
+/* rails run the board, tie columns run five holes, the channel divides */
+S = {version:2, name:'bb', board:{rows:14, cols:10, kind:'bread'}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(NET.nets.length === 24, '4 rails + 20 tie columns = 24 nets (got ' + NET.nets.length + ')');
+ok(sameNet([0, 0], [0, 9]), 'a rail runs the whole board');
+ok(!sameNet([0, 0], [1, 0]), 'the two top rails are separate copper');
+ok(sameNet([2, 3], [6, 3]), 'a tie column joins its five holes (bank J-F)');
+ok(sameNet([7, 3], [11, 3]), 'and in bank E-A');
+ok(!sameNet([6, 3], [7, 3]), 'the channel separates the banks');
+ok(!sameNet([2, 3], [2, 4]), 'adjacent tie columns are separate');
+
+/* a DIP lies across the channel as an explicit footprint - no cuts, no shorts */
+S.ics.push({id:'u', ref:'IC1', part:'NE555', pins:8, pin1:[7, 2], span:2, autoCuts:[],
+            pinMap:[[0,0],[0,1],[0,2],[0,3],[-1,3],[-1,2],[-1,1],[-1,0]]});
+computeNets();
+ok(String(pinPos(S.ics[0], 1)) === '7,2' && String(pinPos(S.ics[0], 8)) === '6,2',
+   'pin 1 in E, pin 8 facing it in F');
+ok(!runDRC().some(f => f.rule === 'ic-nocuts'), 'a straddling chip needs no cuts');
+ok(!runDRC().some(f => f.rule === 'pin-short'), 'and shorts nothing');
+ok(icCutKeys([7, 2], 2, 8).length === 0, 'nothing for a chip to cut here either');
+ok(/PERMANENT BREADBOARD/.test(walkthrough()), 'the walkthrough names the board kind');
+ok(/permanent breadboard/.test(netlistFromBoard()), 'so does the written netlist');
+
+/* migrate repairs the shape and drops what cannot exist */
+const mb = migrate({version:2, board:{rows:9, cols:10, kind:'bread'}, cuts:['0,1'], parts:[], ics:[], pads:[]});
+ok(mb.board.rows === 14 && MIGRATE_NOTES.some(n => /reshaped/.test(n)),
+   'a bread file with the wrong row count is reshaped to 14 and told');
+ok(mb.cuts.length === 0 && MIGRATE_NOTES.some(n => /pre-wired/.test(n)),
+   'its cuts are dropped with the reason');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
