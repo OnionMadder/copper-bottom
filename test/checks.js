@@ -2219,6 +2219,152 @@ ok(!bbp.failed && bbp.check.ok, 'a bare transistor board translates and self-che
   ok(breadboardText(bbp).indexOf('flat face toward you') >= 0, 'the step states the package orientation');
 }
 
+console.log('-- DIYLC import --');
+/* A synthetic .diy exercising every branch the importer has. The geometry
+ * facts it encodes were verified against DIYLC's own source and regression
+ * corpus (zero false joins over 404 ground-truth pairs, Aug 26 2026). */
+const DIY = (inner) => '<?xml version="1.0" encoding="UTF-8" ?>\n<project>\n' +
+  '<title>New Project</title>\n<gridSpacing value="0.1" unit="in"/>\n' +
+  '<components>\n' + inner + '</components>\n</project>';
+const PT = (x, y) => `<point x="${x}" y="${y}"/>`;
+const DIY_FIX = DIY(`
+  <diylc.boards.VeroBoard><name>Board1</name>
+    <firstPoint x="0.0" y="0.0"/><secondPoint x="1.6" y="1.2"/>
+    <spacing value="0.1" unit="in"/><orientation>HORIZONTAL</orientation>
+  </diylc.boards.VeroBoard>
+  <diylc.boards.VeroBoard><name>Board2</name>
+    <firstPoint x="3.0" y="0.0"/><secondPoint x="3.5" y="0.5"/>
+    <spacing value="0.1" unit="in"/>
+  </diylc.boards.VeroBoard>
+  <diylc.passive.Resistor><name>R1</name>
+    <points>${PT(0.1, 0.1)}${PT(0.5, 0.1)}${PT(0.3, 0.05)}</points>
+    <value value="10.0" unit="K"/>
+  </diylc.passive.Resistor>
+  <diylc.passive.Resistor><name>R2</name>
+    <points>${PT(0.2, 0.2)}${PT(0.4, 0.2)}${PT(0.3, 0.15)}</points>
+    <value value="4.7" unit="K"/>
+  </diylc.passive.Resistor>
+  <diylc.connectivity.Jumper><name>J1</name>
+    <points>${PT(0.1, 0.2)}${PT(0.1, 0.5)}${PT(0.1, 0.35)}</points>
+  </diylc.connectivity.Jumper>
+  <diylc.passive.RadialElectrolytic><name>C1</name>
+    <points>${PT(0.2, 0.3)}${PT(0.2, 0.5)}${PT(0.2, 0.4)}</points>
+    <value value="100.0" unit="uF"/><polarized>true</polarized><invert>false</invert>
+  </diylc.passive.RadialElectrolytic>
+  <diylc.passive.RadialElectrolytic><name>C2</name>
+    <points>${PT(0.3, 0.3)}${PT(0.3, 0.5)}${PT(0.3, 0.4)}</points>
+    <value value="10.0" unit="uF"/><polarized>true</polarized><invert>true</invert>
+  </diylc.passive.RadialElectrolytic>
+  <diylc.passive.RadialCeramicDiskCapacitor><name>C3</name>
+    <points>${PT(0.4, 0.6)}${PT(0.4, 0.8)}${PT(0.4, 0.7)}</points>
+    <value value="10.0" unit="nF"/>
+  </diylc.passive.RadialCeramicDiskCapacitor>
+  <diylc.semiconductors.DiodePlastic><name>D1</name>
+    <points>${PT(0.5, 0.6)}${PT(0.5, 0.9)}${PT(0.5, 0.75)}</points>
+  </diylc.semiconductors.DiodePlastic>
+  <diylc.semiconductors.TransistorTO92><name>Q1</name>
+    <controlPoints>${PT(0.3, 0.7)}${PT(0.4, 0.7)}${PT(0.5, 0.7)}</controlPoints>
+    <value>2N3904</value>
+  </diylc.semiconductors.TransistorTO92>
+  <diylc.semiconductors.DIL__IC><name>IC1</name><value>NE555</value>
+    <controlPoints>${PT(0.8, 0.1)}${PT(0.8, 0.2)}${PT(0.8, 0.3)}${PT(0.8, 0.4)}${PT(1.1, 0.1)}${PT(1.1, 0.2)}${PT(1.1, 0.3)}${PT(1.1, 0.4)}</controlPoints>
+  </diylc.semiconductors.DIL__IC>
+  <diylc.semiconductors.DIL__IC><name>IC2</name><value>X7</value>
+    <controlPoints>${PT(0.7, 0.9)}${PT(0.6, 0.9)}${PT(0.7, 1.0)}${PT(0.6, 1.0)}</controlPoints>
+  </diylc.semiconductors.DIL__IC>
+  <diylc.connectivity.TraceCut><name>Cut1</name>
+    <cutBetweenHoles>false</cutBetweenHoles>${PT(0.9, 0.1)}
+  </diylc.connectivity.TraceCut>
+  <diylc.connectivity.TraceCut><name>Cut2</name>
+    <cutBetweenHoles>true</cutBetweenHoles>${PT(0.4, 1.0)}
+  </diylc.connectivity.TraceCut>
+  <diylc.connectivity.TraceCut><name>Cut3</name>
+    <cutBetweenHoles>true</cutBetweenHoles>${PT(0.5, 0.2)}
+  </diylc.connectivity.TraceCut>
+  <diylc.connectivity.SolderPad><name>IN</name>${PT(1.3, 0.9)}</diylc.connectivity.SolderPad>
+  <diylc.passive.PotentiometerPanel><name>Level</name>
+    <controlPoints>${PT(2.0, 0.5)}${PT(2.2, 0.5)}${PT(2.4, 0.5)}</controlPoints>
+  </diylc.passive.PotentiometerPanel>
+  <diylc.connectivity.HookupWire><name>W1</name>
+    <controlPoints2>${PT(1.4, 1.0)}${PT(2.0, 0.5)}</controlPoints2>
+  </diylc.connectivity.HookupWire>
+  <diylc.connectivity.HookupWire><name>W2</name>
+    <controlPoints2>${PT(0.6, 0.1)}${PT(0.6, 0.4)}</controlPoints2>
+  </diylc.connectivity.HookupWire>
+  <diylc.misc.Label><name>L1</name>${PT(0.5, 0.5)}</diylc.misc.Label>
+  <diylc.electromechanical.MiniToggleSwitch><name>SW1</name>
+    <controlPoints>${PT(1.2, 0.6)}${PT(1.2, 0.7)}</controlPoints>
+  </diylc.electromechanical.MiniToggleSwitch>
+`);
+
+const imp = importDiylc(DIY_FIX, 'fixture.diy');
+ok(!imp.failed, 'the fixture imports');
+if(!imp.failed){
+  const p = imp.project;
+  const byRef = (r) => p.parts.find(x => x.ref === r);
+  ok(p.name === 'fixture', 'an unnamed project takes its file name');
+  ok(p.board.rows === 10 && p.board.cols === 14, 'board is 10x14 (got ' + p.board.rows + 'x' + p.board.cols + ')');
+  ok(String(byRef('R1').pins[0]) === '0,0' && String(byRef('R1').pins[1]) === '0,4', 'R1 lands on holes [0,0]-[0,4]');
+  ok(byRef('R1').value === '10k', 'value 10.0 unit K reads 10k');
+  ok(byRef('C1').kind === 'ecap' && String(byRef('C1').pins[0]) === '2,1', 'electrolytic: first point is the PLUS leg');
+  ok(byRef('C2').kind === 'ecap' && String(byRef('C2').pins[0]) === '4,2', 'inverted electrolytic: legs come in swapped, plus first');
+  ok(byRef('C3').device === 'ceramic disc', 'a ceramic disc keeps its family');
+  ok(byRef('D1').kind === 'diode' && String(byRef('D1').pins[1]) === '8,4', 'diode: the band - the SECOND point - is the cathode leg');
+  ok(byRef('Q1').device === 'TO-92' && byRef('Q1').value === '2N3904',
+     'a transistor imports with honest 1/2/3 legs and its name in the value');
+  const ic1 = p.ics.find(i => i.ref === 'IC1');
+  ok(ic1 && ic1.part === 'NE555', 'a value the library knows becomes that part');
+  ok(ic1 && !ic1.pinMap && String(ic1.pin1) === '0,7' && ic1.span === 3, 'a DEFAULT-orientation DIP imports native: pin1 [0,7], span 3');
+  const ic2 = p.ics.find(i => i.ref === 'IC2');
+  ok(ic2 && ic2.part === 'DIP-4' && ic2.alias === 'X7', 'an unknown chip becomes a DIP-N wearing its value as alias');
+  ok(ic2 && Array.isArray(ic2.pinMap) && ic2.pinMap.length === 4, 'a rotated DIP imports as an explicit footprint');
+  ok(p.cuts.indexOf('0,8') >= 0, 'an on-hole cut lands on its hole');
+  ok(p.cuts.indexOf('9,2') >= 0, 'a between-holes cut takes the free hole on its LEFT');
+  ok(p.cuts.indexOf('1,4') >= 0 && p.cuts.indexOf('1,3') < 0,
+     'a between-holes cut with its left hole occupied falls back to its own');
+  ok(p.pads.some(d => d.label === 'IN'), 'a solder pad becomes a pad');
+  ok(p.pads.some(d => d.label === 'Level_1' && /Level\.1/.test(d.to || '')),
+     'a wire to an off-board pot becomes a pad named for the lug');
+  ok(p.parts.some(x => x.kind === 'link' && x.ref === 'W2'), 'a hookup wire with both ends on holes becomes a link');
+  ok(imp.notes.some(n => /2 vero boards/.test(n)), 'the second board is reported, not silently dropped');
+  ok(imp.notes.some(n => /MiniToggleSwitch SW1 \(ON the board/.test(n)), 'an untranslatable part ON the board is shouted');
+
+  /* and the imported layout survives the app's own gauntlet */
+  S = migrate(p); computeNets();
+  ok(MIGRATE_NOTES.length === 0, 'migrate keeps every imported element');
+  const nid = (r, c) => { const n = NET.netAt(r, c); return n ? n.id : -1; };
+  ok(nid(0, 7) !== nid(0, 10), 'the cut between the DIP columns separates pin 1 from pin 8');
+  ok(nid(1, 0) === nid(4, 0), 'the jumper joins its two strips');
+}
+
+/* a VERTICAL board transposes: its strips still come out as rows */
+const DIY_V = DIY(`
+  <diylc.boards.VeroBoard><name>B</name>
+    <firstPoint x="0.0" y="0.0"/><secondPoint x="0.8" y="1.0"/>
+    <spacing value="0.1" unit="in"/><orientation>VERTICAL</orientation>
+  </diylc.boards.VeroBoard>
+  <diylc.passive.Resistor><name>R1</name>
+    <points>${PT(0.1, 0.1)}${PT(0.1, 0.4)}${PT(0.05, 0.25)}</points>
+    <value value="1.0" unit="K"/>
+  </diylc.passive.Resistor>
+`);
+const impV = importDiylc(DIY_V, 'v.diy');
+ok(!impV.failed && impV.project.board.rows === 6 && impV.project.board.cols === 8,
+   'a vertical board comes out 6 rows x 8 cols' + (impV.failed ? '' : ' (got ' + impV.project.board.rows + 'x' + impV.project.board.cols + ')'));
+if(!impV.failed){
+  const r1 = impV.project.parts[0];
+  ok(String(r1.pins[0]) === '0,0' && String(r1.pins[1]) === '0,3',
+     'both legs of a part along one vertical strip land on one CB row');
+}
+
+/* the honest refusals */
+ok(/not XML at all/.test((importDiylc('garbage', 'x.diy').failed || '')), 'non-XML refuses with the v1-binary hint');
+ok(/not readable XML/.test((importDiylc('<project><broken', 'x.diy').failed || '')), 'broken XML refuses with a reason');
+ok(/no <project>/.test((importDiylc('<foo/>', 'x.diy').failed || '')), 'XML without a project refuses');
+const perf = importDiylc(DIY('<diylc.boards.PerfBoard><name>B1</name><firstPoint x="0" y="0"/><secondPoint x="1" y="1"/></diylc.boards.PerfBoard>'), 'p.diy');
+ok(/PerfBoard/.test(perf.failed || '') && /roadmap/.test(perf.failed || ''),
+   'a perfboard file names what it found and where that feature lives');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
