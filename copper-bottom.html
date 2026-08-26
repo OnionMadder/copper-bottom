@@ -494,7 +494,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
        'new' sat next to 'demo', one misclick apart from wiping the board. It
        is last now, and tinted. (Both are undoable - load() pushes undo.) -->
   <span class="grp">
-    <button id="btnRef" title="keep a schematic or layout photo beside the board, or behind it">reference</button>
+    <button id="btnRef" title="keep a schematic or layout photo beside the board, behind it, or both at once">reference</button>
     <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
     <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
     <button id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough</button>
@@ -6907,9 +6907,13 @@ function refSet(src){
 
 function refToggle(on){
   const show = on === undefined ? !refShown() : on;
-  /* One picture, two places to put it. Showing the pane takes it out from
-     behind the board rather than drawing it twice. */
-  if(show && OV.on) ovSet(false);
+  /* One picture, two places to show it - and both at once is allowed. It
+     used to be either/or, on the argument that the pane "takes the picture
+     out from behind the board rather than drawing it twice". Field use said
+     otherwise (Aug 2026): mid-trace you open the pane to read a value at
+     zoom, and the overlay vanishing under you costs the alignment context
+     you were working in. The placements are independent - the pane pans and
+     zooms its copy, the traced copy stays put behind the grid. */
   ref.hidden = !show; refGrip.hidden = !show;
   btnRef.classList.toggle('on', show);
   if(show){ refApply(); if(REF.src && refImg.naturalWidth && REF.z === 1) refFitNow(); }
@@ -7070,7 +7074,6 @@ function ovSet(on){
     if(fresh) OV.T = overlayFitBox(sz[0], sz[1], S.board.rows, S.board.cols);
     if(!overlayOk(OV.T)){ OV.on = false; ovSync(); return; }
     OV.on = true;
-    refToggle(false);
     ovTell(fresh ? 'dropped in square on and centered. if that is a photo of a board, press align'
                  : 'back where you left it');
   }else{
