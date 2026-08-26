@@ -6189,14 +6189,29 @@ function exportSVG(side, fit){
     const cL = x(ex.c0), cR = x(ex.c1);
     const x0 = Math.min(cL, cR) - 0.9, x1 = Math.max(cL, cR) + 0.9;
     const y0 = y(ex.r0) - 1.2, y1 = y(ex.r1) + 1.2;
+    /* On the component side the body is OPAQUE white, the way the real chip
+       covers the strips - it used to be transparent, and everything under it
+       printed straight through its name. Its own pin holes come back on top,
+       because the body just painted over them. */
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
-           '" rx="0.6" fill="none" stroke="#000" stroke-width="0.3"' +
+           '" rx="0.6" fill="' + (solder ? 'none' : '#fff') + '" stroke="#000" stroke-width="0.3"' +
            (solder ? ' stroke-dasharray="1 0.8"' : '') + '/>');
     if(!solder){
+      for(let i = 1; i <= ic.pins; i++){
+        const pp = pinPos(ic, i);
+        o.push('<circle cx="' + x(pp[1]) + '" cy="' + y(pp[0]) + '" r="0.5" fill="#fff" stroke="#666" stroke-width="0.18"/>');
+      }
       if(!hasFootprint(ic))
-        o.push('<path d="M' + ((x0+x1)/2 - 1.4) + ' ' + y0 + 'a1.4 1.4 0 0 0 2.8 0" fill="none" stroke="#000" stroke-width="0.3"/>');
-      late.push(T((x0+x1)/2, (y0+y1)/2, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
-      late.push(T((x0+x1)/2, (y0+y1)/2 + 2.6, icShown(ic), 2.1, 'text-anchor="middle"'));
+        o.push('<path d="M' + ((x0+x1)/2 - 1.4) + ' ' + y0 + 'a1.4 1.4 0 0 0 2.8 0" fill="#fff" stroke="#000" stroke-width="0.3"/>');
+      /* the name rides a white plate and a halo, drawn after every part
+         label - a chip is the landmark a reader orients by, so nothing
+         gets to print across it */
+      const nm = icShown(ic), mx = (x0+x1)/2, my = (y0+y1)/2;
+      const pw = Math.max(ic.ref.length * 2.6, nm.length * 2.1) * 0.62 + 2.4;
+      late.push('<rect x="' + (mx - pw/2) + '" y="' + (my - 2.5) + '" width="' + pw +
+                '" height="6" rx="0.8" fill="#fff" fill-opacity="0.94"/>');
+      late.push(TL(mx, my, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
+      late.push(TL(mx, my + 2.6, nm, 2.1, 'text-anchor="middle"'));
     }
     const p1 = pinPos(ic, 1);
     o.push('<rect x="' + (x(p1[1]) - 0.9) + '" y="' + (y(p1[0]) - 0.9) +
@@ -6214,15 +6229,28 @@ function exportSVG(side, fit){
              '" stroke="#000" stroke-width="0.35" stroke-dasharray="1.2 1" stroke-linecap="round"/>');
     }
 
-  /* ---- cuts, last and boldest ---- */
+  /* ---- cuts. On screen they can be loud - they are pink against colored
+     parts. In monochrome a fat X at every cut overwhelmed everything around
+     it, so here the BAND BREAK is the cut's main signal (the copper already
+     stops on both sides of it) and the marker on top stays quiet: a thin
+     ring with an X where the knife goes (the solder side), just a slash on
+     the side you only read (the component side). ---- */
   for(const k of S.cuts){
     const p = k.split(','), r = +p[0], c = +p[1];
     if(r >= rows || c >= cols) continue;
-    const cx = x(c), cy = y(r), s = 1.35;
-    o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.5" fill="#fff" stroke="#000" stroke-width="0.35"/>');
-    o.push('<path d="M' + (cx-s) + ' ' + (cy-s) + 'L' + (cx+s) + ' ' + (cy+s) +
-           'M' + (cx+s) + ' ' + (cy-s) + 'L' + (cx-s) + ' ' + (cy+s) +
-           '" stroke="#000" stroke-width="0.55" stroke-linecap="round"/>');
+    const cx = x(c), cy = y(r);
+    if(solder){
+      const s = 1.0;
+      o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.25" fill="#fff" stroke="#000" stroke-width="0.28"/>');
+      o.push('<path d="M' + (cx-s) + ' ' + (cy-s) + 'L' + (cx+s) + ' ' + (cy+s) +
+             'M' + (cx+s) + ' ' + (cy-s) + 'L' + (cx-s) + ' ' + (cy+s) +
+             '" stroke="#000" stroke-width="0.35" stroke-linecap="round"/>');
+    }else{
+      const s = 0.9;
+      o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.1" fill="#fff" stroke="#888" stroke-width="0.22"/>');
+      o.push('<path d="M' + (cx+s) + ' ' + (cy-s) + 'L' + (cx-s) + ' ' + (cy+s) +
+             '" stroke="#555" stroke-width="0.3" stroke-linecap="round"/>');
+    }
   }
 
   /* ---- pads ---- */
