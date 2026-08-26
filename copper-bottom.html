@@ -30,7 +30,14 @@
 :root{
   --void:#0B0813; --panel:#14101F; --panel2:#1E1830; --line:#241F36; --line2:#332B4d;
   --mint:#00FFA3; --cyan:#00F0FF; --mag:#D926A9; --violet:#7B2CBF;
-  --gray:#B0B0B0; --soft:#9C94B4; --dim:#6B6580;
+  /* Both quiet grays were raised Aug 26 2026 to clear the site's AAA bar
+     (7:1) on their lightest background - the same surgery the site did to
+     --ink-soft. --soft was #9C94B4 (5.52:1 on a kbd chip, 6.5 on the
+     panel); its worst seat is the #241F36 chip. --dim was #6B6580 (3.38:1)
+     and colors nothing but text, so the token itself moved; its worst seat
+     is a hovered panel2 row. dim keeps reading quieter than soft by being
+     GRAYER now rather than darker - darkness was the part that failed. */
+  --gray:#B0B0B0; --soft:#B2ACC9; --dim:#AAA5B8;
 
   /* Two families, and the split is not decorative. Monospace is for anything
      you would COUNT or type back - coordinates, refs, values, netlists, the
@@ -5435,7 +5442,7 @@ function render(){
   }
 
   o.push('<style>' +
-    '.rule{fill:#6B6580;font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.rule{fill:#AAA5B8;font:9px ui-monospace,monospace;text-anchor:middle}' +
     '.lbl{fill:#fff;font:9px ui-monospace,monospace;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:4;stroke-linejoin:round}' +
     '.pad{font:10px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:#0B0813;stroke-width:3.5}' +
     '.pin{fill:#0B0813;font:8.5px ui-monospace,monospace;text-anchor:middle;font-weight:700}' +
@@ -5597,7 +5604,7 @@ function renderNets(hl){
 function renderReadout(){
   const hl = highlightedNet();
   if(!hoverHole && hl === null){
-    readout.innerHTML = '<div class="row" style="color:#6B6580">hover the board with <b style="color:#00FFA3">V</b> to light up a net.<br>click to pin it.</div>';
+    readout.innerHTML = '<div class="row" style="color:var(--dim)">hover the board with <b style="color:#00FFA3">V</b> to light up a net.<br>click to pin it.</div>';
     return;
   }
   const o = [];
@@ -5609,7 +5616,7 @@ function renderReadout(){
        reinforces it - so a walkthrough saying [3,3] then [4,3] gets built along
        one strip instead of across three. Name the axes and the trap is gone. */
     o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">row ' + dRow(r) +
-           ' <span style="color:#6B6580">·</span> col ' + dCol(c) + '</div>');
+           ' <span style="color:var(--dim)">·</span> col ' + dCol(c) + '</div>');
     o.push('<div class="row">' + (net ? 'net ' + net.id + ' · <b>' + net.holes.length + '</b> holes · <b>' +
            net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> - dead hole') + '</div>');
     for(const oc of occupants(r, c)){
@@ -5679,7 +5686,7 @@ function renderDRC(){
   }
 
   if(!FINDINGS.length){
-    drclist.innerHTML = '<div class="clean">no errors, no warnings.<br><span style="color:#6B6580">' +
+    drclist.innerHTML = '<div class="clean">no errors, no warnings.<br><span style="color:var(--dim)">' +
       'nothing shorted, nothing floating, nothing off the board.</span></div>';
     return;
   }
