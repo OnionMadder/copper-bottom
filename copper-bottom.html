@@ -251,6 +251,11 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
   .thanks{animation:thanksIn .38s ease-out}
   @keyframes thanksIn{from{opacity:0; transform:translateY(-100%)} to{opacity:1; transform:none}}
 }
+/* the first-visit welcome wears the violet, so it reads as the app talking
+   rather than the thank-you's green */
+.hello{background:#171225; border-bottom-color:#4A3C6E; color:#D8D2E8}
+.hello b{color:var(--mint)}
+@media (max-width:900px){ .hello{font-size:12px; padding:7px 10px} }
 
 /* ---- board ---- */
 /* A flex row so the back of the board can sit beside the front. With one
@@ -576,6 +581,14 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   </span>
   <input type="file" id="file" accept=".json,.diy,application/json" style="display:none">
   <input type="file" id="refFile" accept="image/*" style="display:none">
+</div>
+
+<div class="thanks hello" id="hello" hidden>
+  <span class="msg"><b>New here?</b> This is a working example - poke it.
+    <b>reference</b> puts a layout picture beside the board, or behind the grid to trace.
+    <b>import</b> reads DIYLC .diy files. <b>checks</b> says what is wrong and what it
+    would do on the bench. <b>build sheet</b> prints both sides at 1:1.</span>
+  <button id="helloClose" title="close - this only appears once">got it</button>
 </div>
 
 <div class="thanks" id="thanks" hidden>
@@ -8525,12 +8538,22 @@ file.onchange = () => {
 /* ---- the one-time thank-you ----
    Its own key, like the reference picture's, so clearing a board never
    un-thanks anybody and a full storage never stops the editor opening. */
+/* Two one-time banners, one at a time: the welcome first, and the
+   thank-you waits for the NEXT visit - two stacked banners is a wall, and
+   a wall gets dismissed unread. Separate keys, so clearing a board never
+   brings either back. */
+const HELLO_KEY = 'copper-bottom.hello.v1';
 const THANKS_KEY = 'copper-bottom.thanks.v1';
 (function(){
-  let seen = null;
-  try{ seen = localStorage.getItem(THANKS_KEY); }catch(err){}
-  if(!seen) thanks.hidden = false;
+  let hi = null, seen = null;
+  try{ hi = localStorage.getItem(HELLO_KEY); seen = localStorage.getItem(THANKS_KEY); }catch(err){}
+  if(!hi) hello.hidden = false;
+  else if(!seen) thanks.hidden = false;
 })();
+helloClose.onclick = () => {
+  hello.hidden = true;
+  try{ localStorage.setItem(HELLO_KEY, '1'); }catch(err){}
+};
 thanksClose.onclick = () => {
   thanks.hidden = true;
   try{ localStorage.setItem(THANKS_KEY, '1'); }catch(err){}
