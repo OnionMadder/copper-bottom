@@ -193,7 +193,13 @@ Most layouts in the world are pictures. A forum post, a screenshot, a photo of a
 somebody built - and the usual way to use one is to count holes off the picture with a
 finger and hope.
 
-**reference → behind board** puts the picture underneath the grid instead. Every hole,
+![Mid-trace: the layout picture aligned behind the grid, ghost parts showing where the board is still empty, and the same picture readable beside it](docs/tracing.png)
+
+The picture is in two places at once there: **behind the grid** to trace over, and
+**beside the board** to read at zoom - and the parts the board does not have yet show
+through as ghosts, which is the whole to-do list at a glance.
+
+**reference → behind board** puts the picture underneath the grid. Every hole,
 strip, cut and part is then drawn on top of it, and you place parts by clicking the holes
 you can see through the grid. Nothing is read off the picture by software: no hole
 detection, no color matching, nothing that could put a part somewhere nobody chose to

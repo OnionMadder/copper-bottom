@@ -175,6 +175,9 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
   position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
   color:var(--dim); font-size:10.5px; line-height:1.7; text-align:center; padding:0 20px;
 }
+/* display:flex beats the hidden attribute, so without this the tip text
+   ghosted behind every loaded picture that did not cover the whole pane */
+.ref .empty[hidden]{display:none}
 /* the grab strip that sets how much room the pane takes */
 .refgrip{flex:0 0 auto; width:5px; cursor:col-resize; background:var(--line)}
 .refgrip:hover{background:var(--mint)}
