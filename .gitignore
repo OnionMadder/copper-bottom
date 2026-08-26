@@ -16,3 +16,7 @@ desktop.ini
 *~
 .vscode/
 .idea/
+
+# working notes stay local - the repo is public, the notes are not
+/CLAUDE.md
+/ROADMAP.md
