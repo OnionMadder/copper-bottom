@@ -118,6 +118,9 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 }
 .tool:hover{background:#171325; color:#fff; border-color:var(--line2)}
 .tool.on{background:#1c1630; border-color:var(--mint); color:var(--mint)}
+/* a tool the current board kind has no use for - still clickable, and the
+   click explains itself, but the eye should not reach for it */
+.tool.dead{opacity:.4}
 /* The icon is the part as the BOARD draws it - a resistor with bands, an
    electrolytic as a disc with a +, a DIP with its notch - not the schematic
    symbol. This tool exists for people who cannot read schematics; the rail is
@@ -820,6 +823,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <button id="btnChecks" class="checkstoggle" title="show the checks panel">checks</button>
   <span>rows <button id="rDn" title="one row fewer - hold to keep going">&minus;</button><input id="rows" type="number" min="2" max="60" value="13"><button id="rUp" title="one row more - hold to keep going">+</button></span>
   <span>cols <button id="cDn" title="one column fewer - hold to keep going">&minus;</button><input id="cols" type="number" min="2" max="80" value="20"><button id="cUp" title="one column more - hold to keep going">+</button></span>
+  <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
@@ -932,7 +936,8 @@ function migrate(obj){
 
   if(typeof o.name !== 'string') o.name = 'untitled';
   const b = (o.board && typeof o.board === 'object') ? o.board : {};
-  o.board = {rows:clampInt(b.rows, 2, 60, 13), cols:clampInt(b.cols, 2, 80, 20)};
+  o.board = {rows:clampInt(b.rows, 2, 60, 13), cols:clampInt(b.cols, 2, 80, 20),
+             kind:b.kind === 'perf' ? 'perf' : 'strip'};
 
   const before = {
     cuts:Array.isArray(o.cuts) ? o.cuts.length : 0,
@@ -943,6 +948,17 @@ function migrate(obj){
 
   o.cuts = (Array.isArray(o.cuts) ? o.cuts : [])
     .filter(k => typeof k === 'string' && /^\d+,\d+$/.test(k));
+  /* a perfboard has no strips, so a cut on one is a claim about copper that
+     does not exist - dropped and said, like everything else dropped here.
+     Chips lose their auto-cut lists with it, quietly: those only name which
+     of the cuts a chip owns, and there are none to own. */
+  if(o.board.kind === 'perf'){
+    if(o.cuts.length){
+      note(o.cuts.length + ' cut' + (o.cuts.length === 1 ? '' : 's') + ' (a perfboard has no strips)');
+      o.cuts = [];
+    }
+    if(Array.isArray(o.ics)) for(const ic of o.ics) if(ic && typeof ic === 'object') ic.autoCuts = [];
+  }
 
   o.parts = (Array.isArray(o.parts) ? o.parts : []).map(q => {
     if(!q || typeof q !== 'object') return null;
@@ -1614,6 +1630,7 @@ function icCutCol(pin1, span, off){
   return pin1[1] + use;
 }
 function icCutKeys(pin1, span, pins, off, skip){
+  if(isPerf()) return [];   // no strips means nothing for a chip to cut
   const c = icCutCol(pin1, span, off), out = [];
   const no = new Set(Array.isArray(skip) ? skip : []);
   for(let i = 0; i < pins / 2; i++) if(!no.has(i)) out.push(K(pin1[0] + i, c));
@@ -1665,6 +1682,15 @@ function segAt(seg, r, c){
   return v === undefined ? null : v;
 }
 
+/* Perfboard is the other kind of board this tool understands: no strips,
+   every hole its own island of copper, and the wire links do ALL the work.
+   The one honest difference lives here in segmentation - everything above
+   the nets (DRC, netlist, sheets, breadboard export) reads nets and never
+   needs to know. Cuts have no meaning without strips, so a perf board
+   carries none - and ic-nocuts can never fire, because facing pins never
+   share a segment to begin with. */
+const isPerf = () => S.board.kind === 'perf';
+
 function computeNets(){
   const rows = S.board.rows, cols = S.board.cols;
   const cut = new Set(S.cuts);
@@ -1672,13 +1698,13 @@ function computeNets(){
   const segHoles = [];
   let n = 0;
 
-  /* step 1 - segment every strip */
+  /* step 1 - segment every strip; on perfboard every hole IS its segment */
   for(let r = 0; r < rows; r++){
     seg[r] = [];
     let cur = -1;
     for(let c = 0; c < cols; c++){
-      if(cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
-      if(cur < 0){ cur = n++; segHoles[cur] = []; }
+      if(!isPerf() && cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
+      if(isPerf() || cur < 0){ cur = n++; segHoles[cur] = []; }
       seg[r][c] = cur;
       segHoles[cur].push([r,c]);
     }
@@ -2736,17 +2762,25 @@ function walkthrough(){
   };
 
   L.push((S.name || 'untitled') + ' - placing it step by step');
-  L.push(S.board.rows + ' rows of ' + S.board.cols + ' holes · ' +
+  L.push(S.board.rows + ' rows of ' + S.board.cols + ' holes' +
+         (isPerf() ? ' (PERFBOARD)' : '') + ' · ' +
          S.parts.length + ' parts · ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
-         ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's') +
+         (isPerf() ? '' : ' · ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')) +
          ' · ' + S.pads.length + ' pad' + (S.pads.length === 1 ? '' : 's'));
   L.push('');
-  L.push('Every part crosses the strips - watch the ROW change between clicks.');
-  L.push('All the holes in one row are a single piece of copper, so a part with');
-  L.push('both legs on one row is bypassed by the strip and does nothing.');
+  if(isPerf()){
+    L.push('This is PERFBOARD: every hole is its own island of copper, and the');
+    L.push('wire links are the whole circuit. A leg that no link reaches is');
+    L.push('connected to nothing at all.');
+  }else{
+    L.push('Every part crosses the strips - watch the ROW change between clicks.');
+    L.push('All the holes in one row are a single piece of copper, so a part with');
+    L.push('both legs on one row is bypassed by the strip and does nothing.');
+  }
   L.push('');
 
-  step('Press new, then set rows to ' + S.board.rows + ' and cols to ' + S.board.cols + '.');
+  step('Press new, then set rows to ' + S.board.rows + ' and cols to ' + S.board.cols +
+       (isPerf() ? ', and flip the board to perf in the footer' : '') + '.');
 
   for(const ic of S.ics){
     const def = IC_LIB[ic.part] || {};
@@ -2925,9 +2959,10 @@ function netlistFromBoard(){
   const pad = Math.min(14, Math.max(...rows.map(r => r.name.length), 4) + 2);
   const out = [
     '# ' + (S.name || 'untitled') + ' - written from the board',
-    '# ' + S.board.rows + ' strips of ' + S.board.cols + ' holes, ' +
+    '# ' + S.board.rows + (isPerf() ? ' rows of ' : ' strips of ') + S.board.cols + ' holes' +
+      (isPerf() ? ' (perfboard)' : '') + ', ' +
       S.parts.length + ' parts, ' + S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's') +
-      ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's'),
+      (isPerf() ? '' : ', ' + S.cuts.length + ' cut' + (S.cuts.length === 1 ? '' : 's')),
     '#',
     '# This is the circuit as the copper currently has it. Checking the board',
     '# against it can only pass - its use is to carry the circuit somewhere else.',
@@ -3073,17 +3108,20 @@ function buildMarkdown(){
   };
   L.push('# ' + (S.name || 'untitled'));
   L.push('');
-  L.push(S.board.rows + ' rows x ' + S.board.cols + ' cols, 0.1in pitch.');
+  L.push(S.board.rows + ' rows x ' + S.board.cols + ' cols, 0.1in pitch' +
+         (isPerf() ? ', PERFBOARD - every hole its own pad, the links are the wiring.' : '.'));
   L.push('');
 
   const cuts = cutList();
-  L.push('## Cuts (' + cuts.length + ')');
-  L.push('');
-  L.push('Made on the **solder side**, with the board flipped left to right.');
-  L.push('"from left (back)" counts holes from the left edge as you look at the back.');
-  L.push('');
-  table(['row', 'col', 'from left (back)'],
-        cuts.map(c => [dRow(c.row), dCol(c.col), c.back]));
+  if(!isPerf()){
+    L.push('## Cuts (' + cuts.length + ')');
+    L.push('');
+    L.push('Made on the **solder side**, with the board flipped left to right.');
+    L.push('"from left (back)" counts holes from the left edge as you look at the back.');
+    L.push('');
+    table(['row', 'col', 'from left (back)'],
+          cuts.map(c => [dRow(c.row), dCol(c.col), c.back]));
+  }
 
   const parts = bom();
   const totalParts = parts.reduce((n, r) => n + r.qty, 0);
@@ -4589,36 +4627,44 @@ function importDiylc(text, fname){
   const short = (t) => t.slice(t.lastIndexOf('.') + 1).replace(/__/g, '_');
 
   /* --- the boards --- */
-  const HOLE = 0.7 / 25.4, STRIP = 0.07;
+  const HOLE = 0.7 / 25.4, STRIP = 0.07, PAD = 0.08;
   const boards = [];
   for(const el of comps){
-    if(short(el.tag) !== 'VeroBoard') continue;
+    const kindTag = short(el.tag);
+    if(kindTag !== 'VeroBoard' && kindTag !== 'PerfBoard') continue;
     const f = xmlOne(el, 'firstPoint'), g = xmlOne(el, 'secondPoint');
     const pts = diylcPts(el);
     const p1 = f ? [parseFloat(f.attrs.x), parseFloat(f.attrs.y)] : pts[0];
     const p2 = g ? [parseFloat(g.attrs.x), parseFloat(g.attrs.y)] : pts[1];
     if(!p1 || !p2 || ![p1[0], p1[1], p2[0], p2[1]].every(Number.isFinite)) continue;
     const s = diylcIn(el, 'spacing', 0.1);
-    const horiz = xmlText(el, 'orientation') !== 'VERTICAL';
     /* how many holes/strips fit is decided by the same margins DIYLC draws
-       with - holes stop a spacing-plus-hole short of the far edge, strips a
-       spacing-plus-half-strip short */
+       with - vero holes stop a spacing-plus-hole short of the far edge and
+       strips a spacing-plus-half-strip short; perf pads stop a
+       spacing-plus-pad short along a row, half that between rows */
     const count = (extent, margin) => Math.max(0, Math.ceil((extent - margin) / s - 1e-9) - 1);
     const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
     const x0 = Math.min(p1[0], p2[0]), y0 = Math.min(p1[1], p2[1]);
-    const b = {s:s, x0:x0, y0:y0, horiz:horiz, name:xmlText(el, 'name') || ('board ' + (boards.length + 1))};
-    if(horiz){ b.cols = count(w, s + HOLE); b.rows = count(h, s + STRIP / 2); }
-    else     { b.rows = count(w, s + STRIP / 2); b.cols = count(h, s + HOLE); }
-    b.cntX = horiz ? b.cols : b.rows;
-    b.cntY = horiz ? b.rows : b.cols;
+    const b = {s:s, x0:x0, y0:y0, kind:kindTag === 'PerfBoard' ? 'perf' : 'strip',
+               name:xmlText(el, 'name') || ('board ' + (boards.length + 1))};
+    if(b.kind === 'perf'){
+      b.horiz = true;
+      b.cols = count(w, s + PAD); b.rows = count(h, s + PAD / 2);
+    }else{
+      b.horiz = xmlText(el, 'orientation') !== 'VERTICAL';
+      if(b.horiz){ b.cols = count(w, s + HOLE); b.rows = count(h, s + STRIP / 2); }
+      else       { b.rows = count(w, s + STRIP / 2); b.cols = count(h, s + HOLE); }
+    }
+    b.cntX = b.horiz ? b.cols : b.rows;
+    b.cntY = b.horiz ? b.rows : b.cols;
     boards.push(b);
   }
   if(!boards.length){
     const kinds = {};
     for(const el of comps){ const t = short(el.tag); if(/Board|board/.test(t)) kinds[t] = 1; }
     const found = Object.keys(kinds).join(', ');
-    return {failed:'No vero board in this file' + (found ? ' - it uses ' + found : '') +
-            '. Copper Bottom imports stripboard (VeroBoard) layouts; perfboard is on the roadmap.'};
+    return {failed:'No vero or perf board in this file' + (found ? ' - it uses ' + found : '') +
+            '. Copper Bottom imports stripboard (VeroBoard) and perfboard (PerfBoard) layouts.'};
   }
 
   /* index of a coordinate on a board's grid, or null off it */
@@ -4635,7 +4681,8 @@ function importDiylc(text, fname){
   };
 
   /* --- pick the board most of the circuit sits on --- */
-  const ELEC_SKIP = {VeroBoard:1, Label:1, WrapLabel:1, Image:1, Rectangle:1, Ellipse:1, Dot:1};
+  const ELEC_SKIP = {VeroBoard:1, PerfBoard:1, BlankBoard:1, ChassisPanel:1, RectangularCutout:1,
+                     TapeMeasure:1, Label:1, WrapLabel:1, Image:1, Rectangle:1, Ellipse:1, Dot:1};
   let board = boards[0];
   if(boards.length > 1){
     let best = -1;
@@ -4651,7 +4698,8 @@ function importDiylc(text, fname){
   const hole = (x, y) => holeOn(board, x, y);
 
   /* --- walk the components --- */
-  const P = {version:2, name:xmlText(proj, 'title'), board:{rows:board.rows, cols:board.cols},
+  const P = {version:2, name:xmlText(proj, 'title'),
+             board:{rows:board.rows, cols:board.cols, kind:board.kind},
              cuts:[], parts:[], ics:[], pads:[]};
   if(!P.name || P.name === 'New Project')
     P.name = (fname || 'imported layout').replace(/\.diy$/i, '');
@@ -4778,6 +4826,21 @@ function importDiylc(text, fname){
         bump('IC');
         break;
       }
+      case 'SIL_IC': {
+        /* a single-in-line part - a resistor network, usually. One row of
+           pins maps onto the custom-footprint chip, pin for pin. */
+        const holes = diylcPts(el).map(p => hole(p[0], p[1]));
+        if(!holes.length || holes.some(h => !h)){ unplaced.push('SIL IC ' + xmlText(el, 'name')); break; }
+        const p1 = holes[0];
+        const ic = {id:uid(), ref:ref(xmlText(el, 'name'), 'RN'), part:'DIP-N', pins:holes.length,
+                    pin1:p1, span:2, autoCuts:[],
+                    pinMap:holes.map(h => [h[0] - p1[0], h[1] - p1[1]])};
+        const sval = diylcValueStr(el);
+        if(sval) ic.alias = sval;
+        P.ics.push(ic);
+        bump('SIL part');
+        break;
+      }
       case 'SolderPad':
       case 'Eyelet': {
         const p = diylcPts(el)[0];
@@ -4789,10 +4852,17 @@ function importDiylc(text, fname){
         break;
       }
       case 'HookupWire':
-      case 'CopperTrace':
       case 'CurvedTrace': {
+        /* a path: the real ends are the first and last control points */
         const pts = diylcPts(el);
         if(pts.length >= 2) wires.push({a:pts[0], b:pts[pts.length - 1], name:xmlText(el, 'name') || 'W'});
+        break;
+      }
+      case 'CopperTrace': {
+        /* a LEADED component: two ends and then the label anchor - taking
+           the last point here would wire the label into the circuit */
+        const pts = diylcPts(el);
+        if(pts.length >= 2) wires.push({a:pts[0], b:pts[1], name:xmlText(el, 'name') || 'W'});
         break;
       }
       case 'PotentiometerPanel': {
@@ -4851,6 +4921,7 @@ function importDiylc(text, fname){
   for(const c of cutsRaw){
     const h = hole(c.x, c.y);
     if(!h){ bump('cut off this board'); continue; }
+    if(board.kind === 'perf'){ bump('cut skipped - no strips on perfboard'); continue; }
     if(!c.between){ cutSet.add(K(h[0], h[1])); continue; }
     /* the gap is on the near side of the cut's own hole: left of it for the
        default vertical cut line, above it for a horizontal one - then
@@ -4870,7 +4941,8 @@ function importDiylc(text, fname){
   /* --- the report --- */
   const say = [];
   for(const k of Object.keys(counts)) say.push(counts[k] + ' ' + k + (counts[k] === 1 ? '' : 's'));
-  if(say.length) notes.unshift('imported from board "' + board.name + '": ' + say.join(', ') + '.');
+  if(say.length) notes.unshift('imported from ' + (board.kind === 'perf' ? 'perfboard' : 'stripboard') +
+                               ' "' + board.name + '": ' + say.join(', ') + '.');
   if(boards.length > 1)
     notes.push('this file holds ' + boards.length + ' vero boards; the busiest was imported. ' +
                'The other' + (boards.length > 2 ? 's' : '') + ' (' +
@@ -4927,6 +4999,9 @@ function highlightedNet(){
 
 function render(){
   computeNets();
+  /* the footer's board button and the cut tool's greyed state follow every
+     route into a new board - load, import, undo, the toggle itself */
+  if(typeof syncBoardKind === 'function') syncBoardKind();
   /* the fly tool wears a count of off-board leads - one hookup wire each,
      handy to total before cutting wire. Kept live here so it tracks every edit. */
   {
@@ -4969,21 +5044,25 @@ function render(){
   for(let r = 0; r < rows; r++)
     o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
 
-  /* --- copper: one rounded bar per uncut run.
-     Quiet by default, so parts and cuts are what your eye lands on. The lit net
-     always goes bright, and NETCOLOUR mode paints every net at once. --- */
+  /* --- copper: one rounded bar per uncut run - or, on perfboard, one pad
+     per hole, because that IS the copper there. Quiet by default, so parts
+     and cuts are what your eye lands on. The lit net always goes bright,
+     and NETCOLOUR mode paints every net at once. --- */
   for(let r = 0; r < rows; r++){
     let c = 0;
     while(c < cols){
-      if(cutSet.has(K(r,c))){ c++; continue; }
+      if(!isPerf() && cutSet.has(K(r,c))){ c++; continue; }
       let e = c;
-      while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
+      if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
       const net = NET.netAt(r, c);
       const col = net ? net.color : '#555';
       const on  = net && net.id === hl;
-      const x0 = X(c) - PITCH * 0.44, w = X(e) - X(c) + PITCH * 0.88;
+      const x0 = X(c) - PITCH * (isPerf() ? 0.32 : 0.44),
+            w  = X(e) - X(c) + PITCH * (isPerf() ? 0.64 : 0.88),
+            h2 = isPerf() ? PITCH * 0.32 : 9.5;
       const bar = (f, fo, s, so, sw) =>
-        o.push('<rect x="' + x0 + '" y="' + (Y(r) - 9.5) + '" width="' + w + '" height="19" rx="9.5" fill="' + f +
+        o.push('<rect x="' + x0 + '" y="' + (Y(r) - h2) + '" width="' + w + '" height="' + (h2 * 2) +
+               '" rx="' + h2 + '" fill="' + f +
                '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
       if(on)             bar(col, 0.34, col, 1, 1.6);
       else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
@@ -5498,20 +5577,23 @@ function renderSolderView(hl){
   for(let r = 0; r < rows; r++)
     o.push('<text class="rule" x="' + (MARGIN - 19) + '" y="' + (Y(r) + 3.5) + '">' + dRow(r) + '</text>');
 
-  /* copper, bright - on this side it is what you are looking at */
+  /* copper, bright - on this side it is what you are looking at. On
+     perfboard that copper is one pad per hole, not a strip. */
   for(let r = 0; r < rows; r++){
     let c = 0;
     while(c < cols){
-      if(cutSet.has(K(r,c))){ c++; continue; }
+      if(!isPerf() && cutSet.has(K(r,c))){ c++; continue; }
       let e = c;
-      while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
+      if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
       const net = NET.netAt(r, c);
       const col = net ? net.color : '#555';
       const on  = net && net.id === hl;
-      const x0 = Math.min(mX(c), mX(e)) - PITCH * 0.44;
-      const w  = Math.abs(mX(e) - mX(c)) + PITCH * 0.88;
+      const half = isPerf() ? PITCH * 0.32 : 9.5;
+      const x0 = Math.min(mX(c), mX(e)) - (isPerf() ? half : PITCH * 0.44);
+      const w  = Math.abs(mX(e) - mX(c)) + (isPerf() ? half * 2 : PITCH * 0.88);
       const bar = (f, fo, s, so, sw) =>
-        o.push('<rect x="' + x0 + '" y="' + (Y(r) - 9.5) + '" width="' + w + '" height="19" rx="9.5" fill="' + f +
+        o.push('<rect x="' + x0 + '" y="' + (Y(r) - half) + '" width="' + w + '" height="' + (half * 2) +
+               '" rx="' + half + '" fill="' + f +
                '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
       if(on)             bar(col, 0.34, col, 1, 1.6);
       else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
@@ -5795,7 +5877,7 @@ function exportSVG(side, fit){
   const name = S.name || 'untitled';
   const subLine = (solder ? 'SOLDER SIDE - mirrored, as you look at the back of the board'
                           : 'COMPONENT SIDE') + '  ·  ' + rows + ' x ' + cols +
-                  '  ·  0.1in pitch  ·  1:1';
+                  '  ·  0.1in pitch' + (isPerf() ? '  ·  PERFBOARD' : '') + '  ·  1:1';
   const ARROW_NOTE = 'The arrow marks row 1, col 1 - the first hole. On the back it sits at the RIGHT-hand end of row 1.';
   /* The board is 1:1 and cannot stretch, but the words around it can outrun
      a narrow board and clip. Size the sheet to its longest line as well as
@@ -5850,16 +5932,19 @@ function exportSVG(side, fit){
   /* Copper runs, both sides. On the solder side the copper faces you, so
      the strips draw as the filled bands they are, broken at every cut - the
      printout reads like the board in your hand. The component side keeps a
-     ghost of them so the parts stay legible on top. */
+     ghost of them so the parts stay legible on top. On perfboard the copper
+     is one pad per hole and draws that way, both sides. */
     for(let r = 0; r < rows; r++){
       let c = 0;
       while(c < cols){
-        if(cutSet.has(K(r,c))){ c++; continue; }
+        if(!isPerf() && cutSet.has(K(r,c))){ c++; continue; }
         let e = c;
-        while(e + 1 < cols && !cutSet.has(K(r, e+1))) e++;
-        const x0 = Math.min(x(c), x(e)) - MM*0.42, w = Math.abs(x(e) - x(c)) + MM*0.84;
-        o.push('<rect x="' + x0 + '" y="' + (y(r) - 0.95) + '" width="' + w +
-               '" height="1.9" rx="0.95" ' +
+        if(!isPerf()) while(e + 1 < cols && !cutSet.has(K(r, e+1))) e++;
+        const pad = isPerf() ? MM * 0.4 : 0.95;
+        const x0 = Math.min(x(c), x(e)) - (isPerf() ? pad : MM*0.42),
+              w  = Math.abs(x(e) - x(c)) + (isPerf() ? pad * 2 : MM*0.84);
+        o.push('<rect x="' + x0 + '" y="' + (y(r) - pad) + '" width="' + w +
+               '" height="' + (pad * 2) + '" rx="' + pad + '" ' +
                (solder ? 'fill="#EBD9C4" stroke="#C7A87E" stroke-width="0.2"'
                        : 'fill="#F8F2EA" stroke="#D8C7B2" stroke-width="0.16"') + '/>');
         c = e + 1;
@@ -6139,8 +6224,9 @@ function renderSheet(){
     '<div class="brandrow"><span class="bwordmark">COPPER<span>BOTTOM</span></span>' +
     '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom</span></div>' +
     '<h1>' + esc(S.name || 'untitled') + '</h1>' +
-    '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch · ' +
-      items.length + ' parts · ' + cuts.length + ' cuts · <b id="prog">' + ticked + ' / ' + total +
+    '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch' +
+      (isPerf() ? ' · perfboard' : '') + ' · ' +
+      items.length + ' parts · ' + (isPerf() ? '' : cuts.length + ' cuts · ') + '<b id="prog">' + ticked + ' / ' + total +
       '</b> done</p>' +
     '<h2>Component side</h2>' +
     '<div class="svgwrap">' + exportSVG('component') + '</div>' +
@@ -6148,11 +6234,12 @@ function renderSheet(){
     '<p>The board as you see it with the copper facing you. Column numbers are still ' +
       'those of the layout, so a coordinate from the cut list lands on the same hole in both views.</p>' +
     '<div class="svgwrap">' + exportSVG('solder') + '</div>' +
+    (isPerf() ? '' :
     '<h2>Cuts <span class="n">' + cuts.length + '</span></h2>' +
     '<p>Made on the solder side. <b>from left (back)</b> counts holes from the left edge as you ' +
       'look at the back of the board - the mirror flip is already done for you.</p>' +
     '<table><thead><tr><th></th><th>row</th><th>col</th><th>from left (back)</th></tr></thead>' +
-      '<tbody>' + (cutRows || '<tr><td colspan="4">no cuts</td></tr>') + '</tbody></table>' +
+      '<tbody>' + (cutRows || '<tr><td colspan="4">no cuts</td></tr>') + '</tbody></table>') +
     '<h2>Parts <span class="n">' + totalParts + '</span></h2>' +
     '<p>What to pull from the drawer before you start. Counted by what you buy, so a ' +
       'resistor standing on end is still the same resistor, but a DO-41 diode is not a DO-35.</p>' +
@@ -6517,6 +6604,12 @@ for(const b of document.querySelectorAll('.tool')){
 }
 
 function setTool(t){
+  /* the cut tool has nothing to cut on a perfboard - refuse with the reason
+     rather than letting a click quietly do nothing */
+  if(t === 'cut' && isPerf()){
+    flash('a perfboard has no strips to cut - the wire links ARE the wiring');
+    return;
+  }
   TOOL = t;
   pending = [];
   focusHole = null;
@@ -7306,6 +7399,33 @@ function holdable(btn, fn){
 function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
+
+/* strip <-> perf. Going to perf throws the cuts away - they have no strips
+   to live on - so it asks first when there are any. Coming back to strips
+   hands every DIP its automatic cuts again. Undo covers both directions. */
+function syncBoardKind(){
+  bkind.textContent = isPerf() ? 'perf' : 'strips';
+  const cutBtn = document.querySelector('.tool[data-tool="cut"]');
+  if(cutBtn) cutBtn.classList.toggle('dead', isPerf());
+}
+bkind.onclick = () => {
+  if(!isPerf() && S.cuts.length &&
+     !confirm('Perfboard has no strips, so its ' + S.cuts.length + ' cut' +
+              (S.cuts.length === 1 ? '' : 's') + ' will be removed. Switch anyway?')) return;
+  pushUndo();
+  if(isPerf()){
+    S.board.kind = 'strip';
+    for(const ic of S.ics) refreshAutoCuts(ic);
+    flash('stripboard - copper runs along the rows again');
+  }else{
+    S.board.kind = 'perf';
+    S.cuts = [];
+    for(const ic of S.ics) ic.autoCuts = [];
+    if(TOOL === 'cut') setTool('inspect');
+    flash('perfboard - every hole its own pad, links do the wiring');
+  }
+  commit();
+};
 holdable(zin,  () => zoom(1));
 holdable(zout, () => zoom(-1));
 

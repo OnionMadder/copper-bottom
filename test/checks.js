@@ -2361,9 +2361,65 @@ if(!impV.failed){
 ok(/not XML at all/.test((importDiylc('garbage', 'x.diy').failed || '')), 'non-XML refuses with the v1-binary hint');
 ok(/not readable XML/.test((importDiylc('<project><broken', 'x.diy').failed || '')), 'broken XML refuses with a reason');
 ok(/no <project>/.test((importDiylc('<foo/>', 'x.diy').failed || '')), 'XML without a project refuses');
-const perf = importDiylc(DIY('<diylc.boards.PerfBoard><name>B1</name><firstPoint x="0" y="0"/><secondPoint x="1" y="1"/></diylc.boards.PerfBoard>'), 'p.diy');
-ok(/PerfBoard/.test(perf.failed || '') && /roadmap/.test(perf.failed || ''),
-   'a perfboard file names what it found and where that feature lives');
+const blank = importDiylc(DIY('<diylc.boards.BlankBoard><name>B1</name><firstPoint x="0" y="0"/><secondPoint x="1" y="1"/></diylc.boards.BlankBoard>'), 'b.diy');
+ok(/BlankBoard/.test(blank.failed || ''), 'a board kind with no holes names what it found');
+
+console.log('-- perfboard --');
+/* every hole its own island; the links are the whole circuit */
+S = {version:2, name:'perf', board:{rows:4, cols:4, kind:'perf'}, cuts:[],
+     parts:[{id:'l1', kind:'link', ref:'J1', pins:[[0,0],[2,2]]}], ics:[], pads:[]};
+computeNets();
+ok(NET.nets.length === 15, 'a 4x4 perfboard with one link has 15 nets (got ' + NET.nets.length + ')');
+ok(!sameNet([0,1], [0,2]), 'two adjacent holes on one row are NOT connected');
+ok(sameNet([0,0], [2,2]), 'the link joins its two holes');
+
+/* a DIP on perfboard brings no cuts and can never short its pin rows */
+S.ics.push({id:'u', ref:'IC1', part:'NE555', pins:8, pin1:[0,1], span:2, autoCuts:[]});
+computeNets();
+ok(icCutKeys([0,1], 2, 8).length === 0, 'a chip on perfboard has nothing to cut');
+ok(!runDRC().some(f => f.rule === 'ic-nocuts'), 'ic-nocuts never fires on perfboard');
+S.board.kind = 'strip';
+computeNets();
+ok(runDRC().some(f => f.rule === 'ic-nocuts'), 'the same chip on stripboard still warns (the control)');
+
+/* migrate throws perfboard cuts away and says so */
+const mp = migrate({version:2, board:{rows:4, cols:4, kind:'perf'}, cuts:['1,1'],
+                    parts:[], ics:[{id:'u2', ref:'IC1', part:'NE555', pins:8, pin1:[0,0], span:2, autoCuts:['0,1']}], pads:[]});
+ok(mp.cuts.length === 0 && MIGRATE_NOTES.some(n => /perfboard has no strips/.test(n)),
+   'migrate drops cuts on a perfboard and reports it');
+ok(mp.ics[0].autoCuts.length === 0, 'and the chip forgets the cuts it cannot own');
+
+/* the DIYLC importer reads a PerfBoard file: kind rides in, traces wire it */
+const impP = importDiylc(DIY(`
+  <diylc.boards.PerfBoard><name>B1</name>
+    <firstPoint x="0.0" y="0.0"/><secondPoint x="1.0" y="1.0"/>
+    <spacing value="0.1" unit="in"/>
+  </diylc.boards.PerfBoard>
+  <diylc.passive.Resistor><name>R1</name>
+    <points>${PT(0.1, 0.1)}${PT(0.1, 0.4)}${PT(0.05, 0.25)}</points>
+    <value value="1.0" unit="K"/>
+  </diylc.passive.Resistor>
+  <diylc.connectivity.CopperTrace><name>T1</name>
+    <points>${PT(0.1, 0.4)}${PT(0.4, 0.4)}${PT(0.25, 0.4)}</points>
+  </diylc.connectivity.CopperTrace>
+  <diylc.connectivity.TraceCut><name>Cut1</name>
+    <cutBetweenHoles>false</cutBetweenHoles>${PT(0.2, 0.2)}
+  </diylc.connectivity.TraceCut>
+`), 'perf.diy');
+ok(!impP.failed, 'a perfboard file imports');
+if(!impP.failed){
+  const pp = impP.project;
+  ok(pp.board.kind === 'perf' && pp.board.rows === 8 && pp.board.cols === 8,
+     'kind and size ride in (got ' + pp.board.kind + ' ' + pp.board.rows + 'x' + pp.board.cols + ')');
+  ok(pp.parts.some(x => x.kind === 'link' && x.ref === 'T1' && String(x.pins[1]) === '3,3'),
+     'a copper trace becomes a link by its ENDS, not its label point');
+  ok(pp.cuts.length === 0 && impP.notes.some(n => /cut skipped - no strips/.test(n)),
+     'a trace cut on perfboard is skipped and reported');
+  S = migrate(pp); computeNets();
+  ok(MIGRATE_NOTES.length === 0, 'the perf import survives migrate whole');
+  ok(sameNet([3, 0], [3, 3]), 'the trace joins its holes');
+  ok(!sameNet([0, 0], [1, 0]), 'holes without wiring stay apart');
+}
 
 S = demoProject(); computeNets();
 
