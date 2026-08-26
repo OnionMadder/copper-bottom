@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>COPPER BOTTOM</title>
 <meta name="description" content="Stripboard layout editor with design-rule checking and a 1:1 build sheet.">
 <!--
@@ -259,6 +259,22 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 }
 /* the drawer handle exists only where the panel IS a drawer */
 .side .grab{display:none}
+/* ...and so does the pull-up tab that stands in for the drawer when it is
+   away. A closed drawer that leaves nothing on screen is just a hidden
+   panel; the tab is the visible edge you pull. */
+.drawertab{display:none}
+@media (max-width:900px){
+  .drawertab{
+    display:block; position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(36px + env(safe-area-inset-bottom, 0px)); z-index:7;
+    padding:6px 16px 7px; border:1px solid var(--line2); border-radius:999px;
+    background:var(--panel); color:var(--soft); font:12px var(--ui);
+    box-shadow:0 4px 14px rgba(0,0,0,.5); touch-action:none; cursor:grab;
+    white-space:nowrap;
+  }
+  .drawertab[hidden]{display:none}
+  .drawertab.bad{color:#F2C8E4; border-color:var(--mag)}
+}
 /* The right-hand column: what you are editing, then what is wrong with it.
    A wrapper rather than one panel, because below 900px these two want
    completely different treatment and a shared parent takes one down with the
@@ -370,6 +386,20 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     touch-action:none; background:var(--panel);
   }
   .side .grab span{width:46px; height:5px; border-radius:3px; background:var(--line2)}
+  /* The footer takes the header's deal: nothing wraps, nothing hides, a
+     swipe reaches everything. Before this, zoom, show back and the status
+     line simply sat past the right edge of a phone with no way to get at
+     them. The checks button stays pinned at the left of the scroll - it is
+     the one control the drawer depends on - and the safe-area pad keeps the
+     whole row above an iPhone's home bar. */
+  .foot{flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+        gap:12px; height:auto; min-height:28px;
+        padding-bottom:env(safe-area-inset-bottom, 0px)}
+  .foot::-webkit-scrollbar{display:none}
+  .foot > *{flex:0 0 auto}
+  .foot .sp{flex:1 1 auto; min-width:8px}
+  .foot #stat{white-space:nowrap}
+  .checkstoggle{position:sticky; left:0; z-index:2; background:var(--panel)}
   .rail{width:52px}
   /* no keyboard on a phone, so the shortcut is dead weight in a 52px rail.
      The icon takes the middle on its own. */
@@ -622,6 +652,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <h2 id="nethdr">Nets</h2>
     <div class="netwrap" id="netlist"></div>
   </div>
+  <button class="drawertab" id="drawerTab" hidden title="pull up, or tap - the checks, the inspector and the nets live in here"></button>
   </div>
 </div>
 
@@ -7196,12 +7227,20 @@ ovSync();
 const NARROW = () => window.matchMedia('(max-width:900px)').matches;
 function syncChecksButton(){
   const n = (typeof FINDINGS !== 'undefined' && FINDINGS) ? FINDINGS.length : 0;
-  btnChecks.textContent = n ? 'checks (' + n + ')' : 'checks';
+  const label = n ? 'checks (' + n + ')' : 'checks';
+  btnChecks.textContent = label;
   btnChecks.classList.toggle('on', !side.hidden);
+  /* the drawer's visible edge: only where the panel is a drawer, and only
+     while the drawer is away. It wears the finding count so a problem shows
+     through a closed drawer. */
+  drawerTab.hidden = !NARROW() || !side.hidden;
+  drawerTab.textContent = '▴ ' + label;
+  drawerTab.classList.toggle('bad', n > 0);
 }
 btnChecks.onclick = () => { side.hidden = !side.hidden; syncChecksButton(); };
 /* start closed on a narrow screen so it does not cover the board on arrival */
 if(NARROW()) side.hidden = true;
+syncChecksButton();
 window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syncChecksButton(); });
 
 /* The drawer's handle. A tap puts the sheet away; so does dragging it down
@@ -7231,6 +7270,39 @@ window.addEventListener('resize', () => { if(!NARROW()) side.hidden = false; syn
   };
   sideGrab.addEventListener('pointerup', up);
   sideGrab.addEventListener('pointercancel', () => { if(startY !== null){ settle(false); startY = null; } });
+})();
+
+/* The tab is the same deal in the other direction. A tap opens the sheet;
+   a pull raises it with the finger, and letting go past the same quarter
+   that closes it keeps it up - less than that and it settles back down.
+   The sheet is unhidden on the first real tug so there is something to
+   raise, held off-screen by the transform until the finger brings it up. */
+(function(){
+  let startY = null, raised = false;
+  drawerTab.addEventListener('pointerdown', e => {
+    startY = e.clientY; raised = false;
+    try{ drawerTab.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  drawerTab.addEventListener('pointermove', e => {
+    if(startY === null) return;
+    const dy = Math.max(0, startY - e.clientY);
+    if(!raised && dy > 6){
+      side.hidden = false;
+      raised = true;
+    }
+    if(raised) side.style.transform = 'translateY(' + Math.max(0, side.offsetHeight - dy) + 'px)';
+  });
+  const up = (e) => {
+    if(startY === null) return;
+    const dy = Math.max(0, startY - e.clientY);
+    side.style.transform = '';
+    if(dy < 6)       side.hidden = false;                                     // a plain tap
+    else if(raised)  side.hidden = dy < Math.min(70, side.offsetHeight / 4);  // a half-hearted tug settles back
+    startY = null; raised = false;
+    syncChecksButton();
+  };
+  drawerTab.addEventListener('pointerup', up);
+  drawerTab.addEventListener('pointercancel', up);
 })();
 
 /* A layout turned into prose BY THE TOOL cannot disagree with the tool - it
