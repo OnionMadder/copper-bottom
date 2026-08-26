@@ -4628,20 +4628,28 @@ const xmlText = (n, tag) => { const k = xmlOne(n, tag); return k ? k.text.trim()
 function diylcValueStr(el){
   const v = xmlOne(el, 'value');
   if(!v) return '';
-  if(v.attrs.value === undefined) return v.text.trim();
-  const num = parseFloat(v.attrs.value);
-  if(!Number.isFinite(num)) return v.text.trim();
   const U = {R:'R', K:'k', M:'M', pF:'p', nF:'n', uF:'u', mF:'m'};
-  const unit = v.attrs.unit || '';
+  /* v4 writes <value value="10.0" unit="K"/>; v3 nests the same pair as
+     child elements. A bare string stays a string either way. */
+  let raw = v.attrs.value, unit = v.attrs.unit || '';
+  if(raw === undefined && xmlOne(v, 'value')){
+    raw = xmlText(v, 'value');
+    unit = xmlText(v, 'unit');
+  }
+  if(raw === undefined) return v.text.trim();
+  const num = parseFloat(raw);
+  if(!Number.isFinite(num)) return v.text.trim();
   return String(+num.toPrecision(6)) + (U[unit] !== undefined ? U[unit] : unit);
 }
 /* a Size child in inches, whatever unit the file used */
 function diylcIn(el, tag, dflt){
   const c = xmlOne(el, tag);
-  if(!c || c.attrs.value === undefined) return dflt;
-  const v = parseFloat(c.attrs.value);
+  if(!c) return dflt;
+  const raw = c.attrs.value !== undefined ? c.attrs.value : xmlText(c, 'value');
+  if(raw === '' || raw === undefined) return dflt;
+  const v = parseFloat(raw);
   if(!Number.isFinite(v)) return dflt;
-  const u = c.attrs.unit || 'in';
+  const u = (c.attrs.unit !== undefined ? c.attrs.unit : xmlText(c, 'unit')) || 'in';
   if(u === 'in') return v;
   if(u === 'mm') return v / 25.4;
   if(u === 'cm') return v / 2.54;
@@ -4651,10 +4659,10 @@ function diylcIn(el, tag, dflt){
 function diylcPts(el){
   for(const tag of ['points', 'controlPoints', 'controlPoints2']){
     const c = xmlOne(el, tag);
-    if(c) return c.kids.filter(k => k.tag === 'point')
+    if(c) return c.kids.filter(k => k.tag === 'point' || k.tag === 'java.awt.Point')
                        .map(p => [parseFloat(p.attrs.x), parseFloat(p.attrs.y)]);
   }
-  const p = xmlOne(el, 'point');
+  const p = xmlOne(el, 'point') || xmlOne(el, 'java.awt.Point');
   return p ? [[parseFloat(p.attrs.x), parseFloat(p.attrs.y)]] : [];
 }
 
@@ -4663,12 +4671,16 @@ function importDiylc(text, fname){
   try{ root = xmlParse(text); }
   catch(err){ return {failed:'This is not readable XML (' + err.message + '). A very old ' +
                       'DIYLC v1 file is binary - open it in DIYLC 3 or 4 and save it again.'}; }
-  const proj = root.kids.find(k => k.tag === 'project');
-  if(!proj) return {failed:String(text).indexOf('<') < 0
-    ? 'This is not XML at all. A very old DIYLC v1 file is binary - open it in DIYLC 3 or 4 and save it again.'
-    : 'This XML is not a DIYLC project file - no <project> element.'};
+  const proj = root.kids.find(k => k.tag === 'project' || k.tag === 'org.diylc.core.Project');
+  if(!proj){
+    if(root.kids.some(k => k.tag === 'Layout'))
+      return {failed:'This is a DIYLC v1 file. Open it in DIYLC 3 or 4, which converts it, and save it again.'};
+    return {failed:String(text).indexOf('<') < 0
+      ? 'This is not XML at all - not a DIYLC file this tool can read.'
+      : 'This XML is not a DIYLC project file - no <project> element.'};
+  }
   const compRoot = xmlOne(proj, 'components');
-  const comps = compRoot ? compRoot.kids.filter(k => k.tag.indexOf('diylc.') === 0) : [];
+  const comps = compRoot ? compRoot.kids.filter(k => k.tag.indexOf('diylc.') >= 0) : [];
   const short = (t) => t.slice(t.lastIndexOf('.') + 1).replace(/__/g, '_');
 
   /* --- the boards --- */
@@ -4930,6 +4942,17 @@ function importDiylc(text, fname){
   }
 
   /* --- wires: on-board both ends is a link; one end is a named exit --- */
+  /* a wire END is free-drawn geometry: DIYLC connects it by copper overlap,
+     sub-grid, and some layouts route traces BETWEEN holes PCB-style. An
+     importer that quantizes to holes must not guess those - an endpoint is a
+     hole only when it really sits on one, and anything between holes is
+     reported rather than snapped into a connection nobody drew. */
+  const holeStrict = (x, y) => {
+    const ix = (x - (board.x0 + board.s)) / board.s;
+    const iy = (y - (board.y0 + board.s)) / board.s;
+    if(Math.abs(ix - Math.round(ix)) > 0.15 || Math.abs(iy - Math.round(iy)) > 0.15) return null;
+    return holeOn(board, x, y);
+  };
   const donorAt = (p) => {
     let best = null, bd = 0.06;   // just over half a hole pitch
     for(const d of donors){
@@ -4938,8 +4961,10 @@ function importDiylc(text, fname){
     }
     return best;
   };
+  let vagueEnds = 0;
   for(const w of wires){
-    const ha = hole(w.a[0], w.a[1]), hb = hole(w.b[0], w.b[1]);
+    const ha = holeStrict(w.a[0], w.a[1]), hb = holeStrict(w.b[0], w.b[1]);
+    if((!ha && hole(w.a[0], w.a[1])) || (!hb && hole(w.b[0], w.b[1]))) vagueEnds++;
     if(ha && hb){
       P.parts.push({id:uid(), kind:'link', ref:ref(w.name, 'J'), pins:[ha, hb]});
       bump('wire as link');
@@ -4951,6 +4976,10 @@ function importDiylc(text, fname){
       bump('wire as pad');
     }else bump('off-board wire');
   }
+  if(vagueEnds)
+    notes.push(vagueEnds + ' wire end' + (vagueEnds === 1 ? 's' : 's') + ' sit BETWEEN holes - routed ' +
+               'PCB-style, not into a hole. They were left unconnected rather than guessed; ' +
+               'check those runs against the picture.');
 
   /* --- cuts last, because a between-holes cut needs to know which of its
          two neighbor holes is free --- */

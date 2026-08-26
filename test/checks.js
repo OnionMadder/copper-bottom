@@ -2357,8 +2357,49 @@ if(!impV.failed){
      'both legs of a part along one vertical strip land on one CB row');
 }
 
+/* the v3 dialect: fully-qualified tags, java.awt.Point, nested value/unit.
+ * 258 of DIYLC's own 379-file cloud regression corpus are this shape. */
+const DIY_V3 = '<?xml version="1.0" encoding="UTF-8" ?>\n<org.diylc.core.Project>\n' +
+  '<fileVersion><major>3</major><minor>32</minor><build>0</build></fileVersion>\n' +
+  '<title>v3 relic</title>\n<components>\n' +
+  '<org.diylc.components.boards.VeroBoard><name>B</name>' +
+  '<firstPoint x="0.0" y="0.0"/><secondPoint x="1.0" y="0.8"/>' +
+  '<spacing><value>0.1</value><unit class="org.diylc.core.measures.SizeUnit">in</unit></spacing>' +
+  '<orientation>HORIZONTAL</orientation></org.diylc.components.boards.VeroBoard>\n' +
+  '<org.diylc.components.passive.Resistor><name>R1</name>' +
+  '<points><java.awt.Point x="0.1" y="0.1"/><java.awt.Point x="0.4" y="0.1"/></points>' +
+  '<value><value>10.0</value><unit>K</unit></value>' +
+  '</org.diylc.components.passive.Resistor>\n' +
+  '</components>\n</org.diylc.core.Project>';
+const impO = importDiylc(DIY_V3, 'v3.diy');
+ok(!impO.failed, 'a v3 file imports');
+if(!impO.failed){
+  const r1 = impO.project.parts[0];
+  ok(r1 && String(r1.pins[0]) === '0,0' && String(r1.pins[1]) === '0,3' && r1.value === '10k',
+     'v3 points and nested values read correctly');
+}
+
+/* a wire end drawn BETWEEN holes is refused and counted, never snapped -
+ * PCB-style perfboard routing produced the one false join the corpus ever
+ * showed, and this is what closed it */
+const DIY_VAGUE = DIY(`
+  <diylc.boards.PerfBoard><name>B1</name>
+    <firstPoint x="0.0" y="0.0"/><secondPoint x="1.0" y="1.0"/>
+    <spacing value="0.1" unit="in"/>
+  </diylc.boards.PerfBoard>
+  <diylc.connectivity.CopperTrace><name>T1</name>
+    <points>${PT(0.1, 0.1)}${PT(0.175, 0.125)}${PT(0.14, 0.11)}</points>
+  </diylc.connectivity.CopperTrace>
+`);
+const impW = importDiylc(DIY_VAGUE, 'vague.diy');
+ok(!impW.failed && !impW.project.parts.some(x => x.kind === 'link'),
+   'a trace ending between holes does not become a link');
+ok(impW.notes.some(n => /BETWEEN holes/.test(n)), 'and the unconnected end is reported');
+
 /* the honest refusals */
-ok(/not XML at all/.test((importDiylc('garbage', 'x.diy').failed || '')), 'non-XML refuses with the v1-binary hint');
+ok(/DIYLC v1 file/.test((importDiylc('<Layout Type="Stripboard" Width="9" Height="12"/>', 'x.diy').failed || '')),
+   'a v1 file is named as v1 with the convert-and-resave path');
+ok(/not XML at all/.test((importDiylc('garbage', 'x.diy').failed || '')), 'non-XML refuses plainly');
 ok(/not readable XML/.test((importDiylc('<project><broken', 'x.diy').failed || '')), 'broken XML refuses with a reason');
 ok(/no <project>/.test((importDiylc('<foo/>', 'x.diy').failed || '')), 'XML without a project refuses');
 const blank = importDiylc(DIY('<diylc.boards.BlankBoard><name>B1</name><firstPoint x="0" y="0"/><secondPoint x="1" y="1"/></diylc.boards.BlankBoard>'), 'b.diy');
