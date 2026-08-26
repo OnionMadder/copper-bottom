@@ -418,6 +418,30 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .ctx:empty{display:none}
 }
 
+/* ---- the crop step ---- */
+.cropbody{flex:1; display:flex; min-height:0}
+.cropstage{flex:1; position:relative; overflow:hidden; background:var(--void);
+  display:flex; align-items:center; justify-content:center; padding:14px}
+#cropImg{max-width:100%; max-height:100%; display:block; user-select:none; -webkit-user-drag:none}
+/* the box you drag; the huge shadow is what dims everything outside it */
+.cropr{position:absolute; border:2px solid var(--mint); cursor:move; touch-action:none;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.55)}
+.cropr .h{position:absolute; width:16px; height:16px; background:var(--mint);
+  border-radius:3px; touch-action:none}
+.cropr .nw{left:-8px; top:-8px; cursor:nwse-resize}
+.cropr .se{right:-8px; bottom:-8px; cursor:nwse-resize}
+.cropr .ne{right:-8px; top:-8px; cursor:nesw-resize}
+.cropr .sw{left:-8px; bottom:-8px; cursor:nesw-resize}
+.croptip{width:260px; flex:0 0 auto; padding:14px 16px; border-left:1px solid var(--line);
+  overflow-y:auto; font-size:13px; line-height:1.55; color:var(--gray)}
+.croptip b{color:#fff}
+.croptip p{margin:6px 0 10px}
+.cropdemo{width:100%; height:auto; display:block; margin:4px 0 6px}
+@media (max-width:900px){
+  .cropbody{flex-direction:column}
+  .croptip{width:auto; border-left:0; border-top:1px solid var(--line); max-height:45%}
+}
+
 /* ---- build sheet: a document, so it is white whatever the app is ---- */
 .sheet{position:fixed; inset:0; z-index:50; background:#0B0813; display:flex; flex-direction:column}
 .sheet[hidden]{display:none}
@@ -598,6 +622,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <span class="grp">fade <input id="ovFade" type="range" min="10" max="100" value="55"></span>
       <span class="rd" id="ovRead"></span>
       <button id="ovOpen">picture</button>
+      <button id="ovCrop" title="re-crop the traced copy from the full picture - the pane keeps the original">crop</button>
       <button id="ovOff" title="stop showing the picture behind the board; it stays under reference">off</button>
       <span class="say" id="ovSay"></span>
     </div>
@@ -630,7 +655,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
         Open a schematic, or a photo of somebody else&rsquo;s layout, and it stays here
         beside the board while you place parts.<br><br>
         It is a reference only. It never becomes part of the circuit, and it is not
-        written into your exported .json.
+        written into your exported .json.<br><br>
+        Going to trace it? Press <b>behind board</b> and you will get a crop step -
+        a picture cropped tight to the board traces best, and the full picture
+        stays here either way.
       </div>
     </div>
   </div>
@@ -669,6 +697,50 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <textarea id="partsText" spellcheck="false" placeholder="1 x 100k&#10;2 x 10n&#10;1 x 4.7uF electrolytic&#10;1 x 2N3904&#10;&#10;# a quantity and a value per line&#10;# the rest of the line is ignored&#10;# 0.1uF and 100n count as the same part"></textarea>
     </div>
     <div class="nlright" id="partsOut"></div>
+  </div>
+</div>
+
+<div class="sheet" id="crop" hidden>
+  <div class="sheetbar">
+    <b>CROP FOR TRACING</b>
+    <span class="nlnote">drag the box tight to the board - just the copper, edge to edge</span>
+    <span class="sp"></span>
+    <button id="cropUse">crop &amp; put behind board</button>
+    <button id="cropWhole" title="skip the crop - trace over the picture as it is">use the whole picture</button>
+    <button id="cropCancel">cancel</button>
+  </div>
+  <div class="cropbody">
+    <div class="cropstage" id="cropStage">
+      <img id="cropImg" alt="the picture being cropped">
+      <div class="cropr" id="cropR">
+        <span class="h nw"></span><span class="h ne"></span>
+        <span class="h sw"></span><span class="h se"></span>
+      </div>
+    </div>
+    <aside class="croptip">
+      <b>Why crop?</b>
+      <p>The drop-in fit works from the picture&rsquo;s edges. Cropped edge-to-edge to
+        the board, it lands nearly aligned and every hole stays big enough to read.
+        Knobs, jacks and bench left in the frame squash the board small and pull
+        the fit off.</p>
+      <svg class="cropdemo" viewBox="0 0 232 108" role="img" aria-label="Two crops of the same photo. Loose: the frame keeps knobs, a jack and bench around a small board. Tight: the frame holds just the board, edge to edge.">
+        <rect x="2" y="2" width="106" height="86" rx="3" fill="#22203A" stroke="#4A4661"/>
+        <circle cx="30" cy="20" r="9" fill="none" stroke="#7A7494" stroke-width="2.5"/>
+        <circle cx="58" cy="20" r="9" fill="none" stroke="#7A7494" stroke-width="2.5"/>
+        <rect x="88" y="12" width="14" height="16" rx="2" fill="none" stroke="#7A7494" stroke-width="2.5"/>
+        <rect x="28" y="42" width="54" height="36" rx="2" fill="#D9C09A" stroke="#8A7357"/>
+        <g fill="#8A7357"><circle cx="36" cy="50" r="1.6"/><circle cx="46" cy="50" r="1.6"/><circle cx="56" cy="50" r="1.6"/><circle cx="66" cy="50" r="1.6"/><circle cx="76" cy="50" r="1.6"/><circle cx="36" cy="60" r="1.6"/><circle cx="46" cy="60" r="1.6"/><circle cx="56" cy="60" r="1.6"/><circle cx="66" cy="60" r="1.6"/><circle cx="76" cy="60" r="1.6"/><circle cx="36" cy="70" r="1.6"/><circle cx="46" cy="70" r="1.6"/><circle cx="56" cy="70" r="1.6"/><circle cx="66" cy="70" r="1.6"/><circle cx="76" cy="70" r="1.6"/></g>
+        <rect x="5" y="5" width="100" height="80" fill="none" stroke="#FF5C7A" stroke-width="1.6" stroke-dasharray="5 3"/>
+        <text x="55" y="102" text-anchor="middle" font-size="10" fill="#FF5C7A">loose - fit lands off</text>
+        <rect x="124" y="2" width="106" height="86" rx="3" fill="#22203A" stroke="#4A4661"/>
+        <rect x="129" y="7" width="96" height="76" rx="2" fill="#D9C09A" stroke="#8A7357"/>
+        <g fill="#8A7357"><circle cx="141" cy="20" r="2.4"/><circle cx="159" cy="20" r="2.4"/><circle cx="177" cy="20" r="2.4"/><circle cx="195" cy="20" r="2.4"/><circle cx="213" cy="20" r="2.4"/><circle cx="141" cy="38" r="2.4"/><circle cx="159" cy="38" r="2.4"/><circle cx="177" cy="38" r="2.4"/><circle cx="195" cy="38" r="2.4"/><circle cx="213" cy="38" r="2.4"/><circle cx="141" cy="56" r="2.4"/><circle cx="159" cy="56" r="2.4"/><circle cx="177" cy="56" r="2.4"/><circle cx="195" cy="56" r="2.4"/><circle cx="213" cy="56" r="2.4"/><circle cx="141" cy="72" r="2.4"/><circle cx="159" cy="72" r="2.4"/><circle cx="177" cy="72" r="2.4"/><circle cx="195" cy="72" r="2.4"/><circle cx="213" cy="72" r="2.4"/></g>
+        <rect x="127" y="5" width="100" height="80" fill="none" stroke="#00FFA3" stroke-width="1.6" stroke-dasharray="5 3"/>
+        <text x="177" y="102" text-anchor="middle" font-size="10" fill="#00FFA3">tight - fit lands close</text>
+      </svg>
+      <p>Only the traced copy is cropped. The full picture stays in the reference
+        pane, knobs and all, so you can still read what the crop cut away.</p>
+    </aside>
   </div>
 </div>
 
@@ -4431,10 +4503,10 @@ function render(){
      events at all: the board's pointer is for building, and a picture that
      could be grabbed by accident would slide mid-trace without saying so.
      It moves only by its own controls. --- */
-  if(OV.on && REF.src && overlayOk(OV.T) && refImg.naturalWidth){
-    const iw = refImg.naturalWidth, ih = refImg.naturalHeight;
+  if(OV.on && ovSrcNow() && overlayOk(OV.T) && ovImgNow().naturalWidth){
+    const iw = ovImgNow().naturalWidth, ih = ovImgNow().naturalHeight;
     const ma = PITCH * OV.T.a, mb = PITCH * OV.T.b;
-    o.push('<image href="' + esc(REF.src) + '" x="0" y="0" width="' + iw + '" height="' + ih +
+    o.push('<image href="' + esc(ovSrcNow()) + '" x="0" y="0" width="' + iw + '" height="' + ih +
            '" opacity="' + OV.op + '" pointer-events="none" transform="matrix(' +
            ma + ' ' + mb + ' ' + (-mb) + ' ' + ma + ' ' +
            (MARGIN + PITCH * OV.T.tx) + ' ' + (MARGIN + PITCH * OV.T.ty) + ')"/>');
@@ -6869,9 +6941,21 @@ let REF = {src:null, x:0, y:0, z:1, w:38};
 
 /* Declared here rather than down in the overlay section because the restore
    below runs the moment this section is parsed, and a let in TDZ would take
-   the whole app with it. */
-let OV = {on:false, T:null, op:0.55};   // T maps image pixels to board holes
+   the whole app with it.
+
+   `src` is the traced copy: a crop of the pane's picture, or null to trace
+   over the whole thing. Two images on purpose - the crop step cuts the
+   knobs and jacks away from what sits behind the board, and the pane keeps
+   the full picture so you can still read what the crop removed. `box` is
+   the crop rectangle in image pixels, kept so re-crop opens where you left
+   it. T always maps THIS image's pixels to board holes, so a stored T and a
+   stored src live and die together. */
+let OV = {on:false, T:null, op:0.55, src:null, box:null};
 let ALIGN = null;                       // an alignment part-way through
+const ovImg = new Image();              // offscreen holder for the traced copy
+ovImg.onload = () => { if(OV.on) render(); };
+const ovSrcNow = () => OV.src || REF.src;
+const ovImgNow = () => OV.src ? ovImg : refImg;
 
 function refShown(){ return !ref.hidden; }
 
@@ -6911,11 +6995,14 @@ function refZoom(mult, cx, cy){
 
 function refSave(){
   try{
-    if(REF.src && REF.src.length <= REF_MAX)
-      localStorage.setItem(REF_KEY, JSON.stringify({src:REF.src, w:REF.w,
-        ov:{on:OV.on, T:OV.T, op:OV.op}}));
-    else
-      localStorage.removeItem(REF_KEY);
+    if(!REF.src || REF.src.length > REF_MAX){ localStorage.removeItem(REF_KEY); return; }
+    let ov = {on:OV.on, T:OV.T, op:OV.op, src:OV.src, box:OV.box};
+    /* Both images will not fit: forget the crop AND its transform together.
+       The transform maps the CROPPED image's pixels to holes - restored
+       against the full picture it would place every hole wrong, quietly. */
+    if(OV.src && REF.src.length + OV.src.length > REF_MAX)
+      ov = {on:false, T:null, op:OV.op, src:null, box:null};
+    localStorage.setItem(REF_KEY, JSON.stringify({src:REF.src, w:REF.w, ov:ov}));
   }catch(err){
     /* out of room: drop the picture rather than let it crowd out the layout */
     try{ localStorage.removeItem(REF_KEY); }catch(err2){}
@@ -6924,11 +7011,11 @@ function refSave(){
 
 function refSet(src){
   REF.src = src || null;
-  /* clearing the picture clears what was behind the board with it, transform
-     and all -- a transform kept for a picture that is gone would silently
-     mis-place the next one */
-  if(!src && OV.on){ OV.on = false; ALIGN = null; ovSync(); render(); }
-  if(!src) OV.T = null;
+  /* a new picture (or none) clears what was behind the board with it - the
+     transform AND the cropped copy. A crop kept from the old picture would
+     silently sit behind the board wearing the new one's name. */
+  if(OV.on){ OV.on = false; ALIGN = null; ovSync(); render(); }
+  OV.T = null; OV.src = null; OV.box = null; ovImg.removeAttribute('src');
   if(!src){ refApply(); refSave(); return; }
   refImg.onload = () => { refFitNow(); };
   refImg.src = src;
@@ -7020,6 +7107,13 @@ refFile.onchange = (e) => {
       OV.T = stored.ov.T;
       OV.on = !!stored.ov.on;
       if(Number.isFinite(stored.ov.op)) OV.op = stored.ov.op;
+      /* the cropped copy rides with its transform - refSave never stores
+         one without the other */
+      if(typeof stored.ov.src === 'string' && stored.ov.src.slice(0, 11) === 'data:image/'){
+        OV.src = stored.ov.src;
+        ovImg.src = OV.src;
+      }
+      if(stored.ov.box) OV.box = stored.ov.box;
     }
     refImg.onload = () => { if(refShown()) refFitNow(); if(OV.on) render(); };
     REF.src = stored.src; refImg.src = stored.src;
@@ -7047,9 +7141,10 @@ const OV_STEP  = 1.01;    // scale per press
 const OV_SPIN  = 0.25;    // degrees per press
 
 function ovSize(){
-  return refImg.naturalWidth ? [refImg.naturalWidth, refImg.naturalHeight] : null;
+  const el = ovImgNow();
+  return el.naturalWidth ? [el.naturalWidth, el.naturalHeight] : null;
 }
-function ovReady(){ return OV.on && REF.src && overlayOk(OV.T) && !!ovSize(); }
+function ovReady(){ return OV.on && !!ovSrcNow() && overlayOk(OV.T) && !!ovSize(); }
 
 /* The middle hole of the board: scaling and turning happen about it so the
    picture does not walk out of view every time it is touched. */
@@ -7096,26 +7191,159 @@ function ovSpin(deg){
   ovChanged();
 }
 
-function ovSet(on){
-  if(on){
-    if(!REF.src){ refFile.click(); return; }     /* nothing to put back there yet */
-    const sz = ovSize();
-    if(!sz){ ovTell('the picture has not finished loading', true); return; }
-    const fresh = !overlayOk(OV.T);
-    if(fresh) OV.T = overlayFitBox(sz[0], sz[1], S.board.rows, S.board.cols);
-    if(!overlayOk(OV.T)){ OV.on = false; ovSync(); return; }
-    OV.on = true;
-    ovTell(fresh ? 'dropped in square on and centered. if that is a photo of a board, press align'
-                 : 'back where you left it');
-  }else{
-    OV.on = false;
-    ALIGN = null;
-    ovTell('');
-  }
+/* Put the traced copy behind the board - the part of ovSet(true) that runs
+   AFTER the crop question has been answered, whichever way it went. */
+function ovEngage(msg){
+  const sz = ovSize();
+  if(!sz){ ovTell('the picture has not finished loading', true); return; }
+  const fresh = !overlayOk(OV.T);
+  if(fresh) OV.T = overlayFitBox(sz[0], sz[1], S.board.rows, S.board.cols);
+  if(!overlayOk(OV.T)){ OV.on = false; ovSync(); return; }
+  OV.on = true;
+  ovTell(msg || (fresh ? 'dropped in square on and centered. if that is a photo of a board, press align'
+                       : 'back where you left it'));
   ovSync();
   refSave();
   render();
 }
+
+function ovSet(on){
+  if(on){
+    if(!REF.src){ refFile.click(); return; }     /* nothing to put back there yet */
+    /* A fresh picture goes through the crop step first: the fit works from
+       the picture's edges, so cropped tight to the board it lands nearly
+       aligned - and most people will not have cropped that way before
+       uploading. A picture already placed, or already cropped, goes
+       straight back. */
+    if(!overlayOk(OV.T) && !OV.src){ cropOpen(); return; }
+    ovEngage();
+  }else{
+    OV.on = false;
+    ALIGN = null;
+    ovTell('');
+    ovSync();
+    refSave();
+    render();
+  }
+}
+
+/* ---- the crop step ----
+   The pane's picture, a box you drag tight to the board, and the reason
+   written beside it. What leaves this dialog cropped becomes the TRACED
+   copy only - the pane keeps the full frame. All geometry here is display
+   pixels; only cropUse converts to image pixels, once. */
+let CROP = null;   // {ix,iy,iw,ih: the image's box in the stage; x,y,w,h: the drag box}
+
+function cropOpen(){
+  if(!REF.src){ refFile.click(); return; }
+  crop.hidden = false;
+  cropImg.onload = () => cropInit();
+  if(cropImg.getAttribute('src') !== REF.src) cropImg.src = REF.src;
+  else if(cropImg.naturalWidth) cropInit();
+}
+
+function cropInit(){
+  if(!cropImg.naturalWidth) return;
+  const sb = cropStage.getBoundingClientRect();
+  const ib = cropImg.getBoundingClientRect();
+  CROP = {ix:ib.left - sb.left, iy:ib.top - sb.top, iw:ib.width, ih:ib.height, x:0, y:0, w:0, h:0};
+  /* open where the last crop was, scaled to today's display; else a 10% inset */
+  if(OV.box){
+    const s = CROP.iw / cropImg.naturalWidth;
+    CROP.x = CROP.ix + OV.box.x * s; CROP.y = CROP.iy + OV.box.y * s;
+    CROP.w = OV.box.w * s;           CROP.h = OV.box.h * s;
+  }else{
+    CROP.x = CROP.ix + CROP.iw * 0.1; CROP.y = CROP.iy + CROP.ih * 0.1;
+    CROP.w = CROP.iw * 0.8;           CROP.h = CROP.ih * 0.8;
+  }
+  cropClamp(); cropApply();
+}
+
+function cropClamp(){
+  CROP.w = Math.max(24, Math.min(CROP.w, CROP.iw));
+  CROP.h = Math.max(24, Math.min(CROP.h, CROP.ih));
+  CROP.x = Math.max(CROP.ix, Math.min(CROP.x, CROP.ix + CROP.iw - CROP.w));
+  CROP.y = Math.max(CROP.iy, Math.min(CROP.y, CROP.iy + CROP.ih - CROP.h));
+}
+function cropApply(){
+  cropR.style.left  = CROP.x + 'px'; cropR.style.top    = CROP.y + 'px';
+  cropR.style.width = CROP.w + 'px'; cropR.style.height = CROP.h + 'px';
+}
+
+(function(){
+  let drag = null;
+  cropR.addEventListener('pointerdown', e => {
+    if(!CROP) return;
+    const mode = e.target.classList.contains('h') ? e.target.className.replace('h ', '') : 'move';
+    drag = {mode:mode, px:e.clientX, py:e.clientY, x:CROP.x, y:CROP.y, w:CROP.w, h:CROP.h};
+    try{ cropR.setPointerCapture(e.pointerId); }catch(err){}
+    e.preventDefault();
+  });
+  cropR.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const dx = e.clientX - drag.px, dy = e.clientY - drag.py;
+    if(drag.mode === 'move'){ CROP.x = drag.x + dx; CROP.y = drag.y + dy; }
+    else{
+      if(drag.mode.indexOf('w') >= 0){ CROP.x = drag.x + dx; CROP.w = drag.w - dx; }
+      if(drag.mode.indexOf('e') >= 0){ CROP.w = drag.w + dx; }
+      if(drag.mode.indexOf('n') >= 0){ CROP.y = drag.y + dy; CROP.h = drag.h - dy; }
+      if(drag.mode.indexOf('s') >= 0){ CROP.h = drag.h + dy; }
+    }
+    cropClamp(); cropApply();
+  });
+  const up = () => { drag = null; };
+  cropR.addEventListener('pointerup', up);
+  cropR.addEventListener('pointercancel', up);
+  /* the box is keyboard-reachable too: arrows walk it, shift+arrows size it */
+  cropR.tabIndex = 0;
+  cropR.addEventListener('keydown', e => {
+    if(!CROP) return;
+    const step = 6;
+    let used = true;
+    if(e.shiftKey){
+      if(e.key === 'ArrowRight') CROP.w += step; else if(e.key === 'ArrowLeft') CROP.w -= step;
+      else if(e.key === 'ArrowDown') CROP.h += step; else if(e.key === 'ArrowUp') CROP.h -= step;
+      else used = false;
+    }else{
+      if(e.key === 'ArrowRight') CROP.x += step; else if(e.key === 'ArrowLeft') CROP.x -= step;
+      else if(e.key === 'ArrowDown') CROP.y += step; else if(e.key === 'ArrowUp') CROP.y -= step;
+      else used = false;
+    }
+    if(used){ cropClamp(); cropApply(); e.preventDefault(); }
+  });
+})();
+window.addEventListener('resize', () => { if(!crop.hidden) cropInit(); });
+
+cropCancel.onclick = () => { crop.hidden = true; };
+cropWhole.onclick = () => {
+  crop.hidden = true;
+  OV.src = null; OV.box = null; OV.T = null;
+  ovImg.removeAttribute('src');
+  ovEngage();
+};
+cropUse.onclick = () => {
+  if(!CROP || !cropImg.naturalWidth) return;
+  const s = cropImg.naturalWidth / CROP.iw;
+  const box = {x:Math.max(0, Math.round((CROP.x - CROP.ix) * s)),
+               y:Math.max(0, Math.round((CROP.y - CROP.iy) * s)),
+               w:Math.round(CROP.w * s), h:Math.round(CROP.h * s)};
+  box.w = Math.max(1, Math.min(box.w, cropImg.naturalWidth  - box.x));
+  box.h = Math.max(1, Math.min(box.h, cropImg.naturalHeight - box.y));
+  const cv = document.createElement('canvas');
+  cv.width = box.w; cv.height = box.h;
+  cv.getContext('2d').drawImage(cropImg, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+  /* line art keeps its lines; a photo takes the smaller jpeg */
+  const url = String(REF.src).slice(0, 14) === 'data:image/png'
+    ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.92);
+  crop.hidden = true;
+  OV.box = box;
+  OV.T = null;                     // the crop changed what the pixels mean
+  OV.src = url;
+  const go = () => ovEngage('the cropped copy is behind the board - the pane keeps the full picture. press align to land it');
+  if(ovImg.getAttribute('src') === url && ovImg.naturalWidth) go();
+  else ovImg.addEventListener('load', go, {once:true});
+  ovImg.src = url;
+};
 
 /* ---- alignment ----
    Four clicks: a spot on the picture, the hole it is, and again somewhere far
@@ -7206,6 +7434,7 @@ stage.addEventListener('pointerdown', e => {
 refOverlay.onclick = () => ovSet(true);
 ovOff.onclick      = () => ovSet(false);
 ovOpen.onclick     = () => refFile.click();
+ovCrop.onclick     = () => cropOpen();
 ovAlign.onclick    = () => { ALIGN ? ovAlignStop('') : ovAlignStart(); };
 /* held, these repeat - lining a photo up used to be a click per 0.1 hole */
 holdable(ovLeft,  () => ovMove(0, -OV_NUDGE));
