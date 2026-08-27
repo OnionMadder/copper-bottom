@@ -6505,6 +6505,26 @@ function exportSVG(side, fit){
       const pw = Math.max(ic.ref.length * 2.6, nm.length * 2.1) * 0.62 + 2.4;
       late.push('<rect x="' + (mx - pw/2) + '" y="' + (my - 2.5) + '" width="' + pw +
                 '" height="6" rx="0.8" fill="#fff" fill-opacity="0.94"/>');
+      /* A wire under the chip is a real wire - placed first, the socket over
+         it. The opaque body was swallowing them whole; the covered run comes
+         back DASHED, drawn over the name plate but under the haloed text,
+         because the first attempt drew it under the plate and the plate sat
+         exactly on the wire's corridor - invisible again, found only by
+         rendering it large and looking. */
+      let ucN = 0;
+      for(const p of S.parts){
+        if(p.kind !== 'link') continue;
+        const lax = x(p.pins[0][1]), lay = y(p.pins[0][0]);
+        const lbx = x(p.pins[1][1]), lby = y(p.pins[1][0]);
+        if(Math.max(lax, lbx) < x0 || Math.min(lax, lbx) > x1 ||
+           Math.max(lay, lby) < y0 || Math.min(lay, lby) > y1) continue;
+        const cid = 'uc' + ic.id + '_' + (ucN++);
+        late.push('<clipPath id="' + cid + '"><rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) +
+               '" height="' + (y1-y0) + '"/></clipPath>');
+        late.push('<line x1="' + lax + '" y1="' + lay + '" x2="' + lbx + '" y2="' + lby +
+               '" stroke="#000" stroke-width="0.5" stroke-dasharray="1.1 0.9" stroke-linecap="round" ' +
+               'clip-path="url(#' + cid + ')"/>');
+      }
       late.push(TL(mx, my, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
       late.push(TL(mx, my + 2.6, nm, 2.1, 'text-anchor="middle"'));
     }
@@ -6927,6 +6947,21 @@ function classicSVG(){
     for(let i = 1; i <= ic.pins; i++){
       const q = pinPos(ic, i);
       o.push('<circle cx="' + x(q[1]) + '" cy="' + y(q[0]) + '" r="2.4" fill="#333"/>');
+    }
+    /* wires running under the chip stay visible, dashed */
+    let ucN2 = 0;
+    for(const p of S.parts){
+      if(p.kind !== 'link') continue;
+      const lax = x(p.pins[0][1]), lay = y(p.pins[0][0]);
+      const lbx = x(p.pins[1][1]), lby = y(p.pins[1][0]);
+      if(Math.max(lax, lbx) < x0 || Math.min(lax, lbx) > x1 ||
+         Math.max(lay, lby) < y0 || Math.min(lay, lby) > y1) continue;
+      const cid = 'cuc' + ic.id + '_' + (ucN2++);
+      o.push('<clipPath id="' + cid + '"><rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) +
+             '" height="' + (y1 - y0) + '"/></clipPath>');
+      o.push('<line x1="' + lax + '" y1="' + lay + '" x2="' + lbx + '" y2="' + lby +
+             '" stroke="#24357E" stroke-width="2.6" stroke-dasharray="5 4" stroke-linecap="round" ' +
+             'clip-path="url(#' + cid + ')"/>');
     }
     late.push('<text x="' + ((x0 + x1) / 2) + '" y="' + ((y0 + y1) / 2 + 5) + '" font-size="13" ' +
               'font-family="Verdana, sans-serif" font-weight="bold" text-anchor="middle" fill="#111">' +
