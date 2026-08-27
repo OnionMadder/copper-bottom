@@ -2397,8 +2397,59 @@ ok(!impW.failed && !impW.project.parts.some(x => x.kind === 'link'),
 ok(impW.notes.some(n => /BETWEEN holes/.test(n)), 'and the unconnected end is reported');
 
 /* the honest refusals */
-ok(/DIYLC v1 file/.test((importDiylc('<Layout Type="Stripboard" Width="9" Height="12"/>', 'x.diy').failed || '')),
-   'a v1 file is named as v1 with the convert-and-resave path');
+{ /* v1 files import now - the refusal became a reader (calibrated 79/79
+     against DIYLC's v1 regression netlists; see importDiylcV1) */
+  const v1 = importDiylc('<Layout Type="Stripboard" Width="9" Height="12" Project="T">' +
+    '<Resistor Value="1.5M" X1="3" X2="3" Name="R1" Y1="7" Y2="3"/>' +
+    '<Electrolyte Value="100uF" Name="C2" X1="2" X2="2" Y1="1" Y2="2"/>' +
+    '<Transistor Value="BF245B" X1="4" X2="4" Name="Q1" Y1="3" Y2="1"/>' +
+    '<IC Value="LM386" Name="IC1" X1="3" X2="6" Y1="8" Y2="11"/>' +
+    '<Cut X1="3" Name="X1" Y1="2"/>' +
+    '<Jumper X1="1" X2="1" Name="J1" Y1="11" Y2="10"/>' +
+    '<Pad Name="IN" X1="9" Y1="1"/>' +
+    '<Text Name="T1" Value="hello" X1="1" Y1="1"/>' +
+    '</Layout>', 'x.diy');
+  ok(!v1.failed, 'a v1 stripboard file imports instead of refusing');
+  const vp = v1.project;
+  ok(vp.board.rows === 12 && vp.board.cols === 9 && vp.board.kind === 'strip',
+     'v1 Width x Height become cols x rows, strips along the rows');
+  ok(vp.cuts.length === 1 && vp.cuts[0] === '1,2', 'a v1 cut lands on its hole, 0-indexed');
+  const vr1 = vp.parts.find(x => x.ref === 'R1');
+  ok(vr1 && vr1.kind === 'res' && String(vr1.pins[0]) === '6,2' && String(vr1.pins[1]) === '2,2',
+     'a v1 resistor keeps its holes ([Y-1, X-1])');
+  const vc2 = vp.parts.find(x => x.ref === 'C2');
+  ok(vc2 && vc2.kind === 'ecap' && vc2.polarized && String(vc2.pins[0]) === '0,1',
+     'a v1 electrolytic is polarized with the first point as +');
+  const vq1 = vp.parts.find(x => x.ref === 'Q1');
+  ok(vq1 && vq1.kind === 'trans' && vq1.device === 'BF245B' &&
+     String(vq1.pins.map(String)) === '2,3,1,3,0,3',
+     'a v1 transistor sits on three consecutive holes toward its second point');
+  const vic = vp.ics[0];
+  ok(vic && vic.pins === 8 && String(vic.pin1) === '7,2' && vic.pinMap.length === 8 &&
+     String(vic.pinMap[3]) === '3,0' && String(vic.pinMap[4]) === '3,3' && String(vic.pinMap[7]) === '0,3',
+     'a v1 IC becomes a DIP-ordered footprint chip from its corner pins');
+  ok(vp.pads.length === 1 && vp.pads[0].label === 'IN' && String(vp.pads[0].at) === '0,8',
+     'a v1 pad keeps its name and hole');
+  { /* the pin axis follows the corner SIGNS, not the long side - a chip
+       drawn wider than tall still runs its pins down Y (V1FileParser rule;
+       the corpus caught the long-side guess seating chips sideways) */
+    const wide = importDiylc('<Layout Type="Stripboard" Width="12" Height="8">' +
+      '<IC Value="TL072" Name="IC1" X1="2" X2="7" Y1="2" Y2="5"/></Layout>', 'x.diy');
+    const wic = wide.project.ics[0];
+    ok(wic && wic.pins === 8 && String(wic.pinMap[1]) === '1,0' && String(wic.pinMap[4]) === '3,5',
+       'a wide-drawn v1 chip still runs its pins down Y, per the corner signs');
+  }
+  ok(v1.notes.some(n => /1 text label/.test(n)), 'text labels are counted, not copper');
+  ok(/PCB layout/.test((importDiylc('<Layout Type="PCB" Width="9" Height="12"/>', 'x.diy').failed || '')),
+     'a v1 PCB file refuses with the reason');
+  const vpf = importDiylc('<Layout Type="Perfboard" Width="9" Height="12">' +
+    '<Wire Color="blue" Seed="1" X1="1" X2="4" Name="W1" Y1="1" Y2="1"/>' +
+    '<Cut X1="3" Name="X1" Y1="2"/></Layout>', 'x.diy');
+  ok(!vpf.failed && vpf.project.board.kind === 'perf' && vpf.project.cuts.length === 0 &&
+     vpf.project.parts[0].kind === 'link',
+     'a v1 perfboard imports as perf, wires as links, cuts skipped');
+  ok(vpf.notes.some(n => /no strips to cut/.test(n)), 'and the skipped cut is said out loud');
+}
 ok(/not XML at all/.test((importDiylc('garbage', 'x.diy').failed || '')), 'non-XML refuses plainly');
 ok(/not readable XML/.test((importDiylc('<project><broken', 'x.diy').failed || '')), 'broken XML refuses with a reason');
 ok(/no <project>/.test((importDiylc('<foo/>', 'x.diy').failed || '')), 'XML without a project refuses');

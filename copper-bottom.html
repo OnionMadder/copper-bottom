@@ -586,7 +586,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 <div class="thanks hello" id="hello" hidden>
   <span class="msg"><b>New here?</b> This is a working example - poke it.
     <b>reference</b> puts a layout picture beside the board, or behind the grid to trace.
-    <b>import</b> reads DIYLC .diy files. <b>checks</b> says what is wrong and what it
+    <b>import</b> reads this editor's own .json layouts, netlist and all, and DIYLC .diy files. <b>checks</b> says what is wrong and what it
     would do on the bench. <b>build sheet</b> prints both sides at 1:1.</span>
   <button id="helloClose" title="close - this only appears once">got it</button>
 </div>
@@ -4686,8 +4686,8 @@ function importDiylc(text, fname){
                       'DIYLC v1 file is binary - open it in DIYLC 3 or 4 and save it again.'}; }
   const proj = root.kids.find(k => k.tag === 'project' || k.tag === 'org.diylc.core.Project');
   if(!proj){
-    if(root.kids.some(k => k.tag === 'Layout'))
-      return {failed:'This is a DIYLC v1 file. Open it in DIYLC 3 or 4, which converts it, and save it again.'};
+    const lay = root.tag === 'Layout' ? root : root.kids.find(k => k.tag === 'Layout');
+    if(lay) return importDiylcV1(lay);
     return {failed:String(text).indexOf('<') < 0
       ? 'This is not XML at all - not a DIYLC file this tool can read.'
       : 'This XML is not a DIYLC project file - no <project> element.'};
@@ -5039,6 +5039,250 @@ function importDiylc(text, fname){
     notes.push('off the board, imported only as wire names: ' + offBoard.join(', ') + '.');
   if(unplaced.length)
     notes.push('NOT TRANSLATED (check these by hand): ' + unplaced.join('; ') + '.');
+  return {ok:true, project:P, notes:notes};
+}
+
+/* ============================================================
+   THE v1 IMPORT
+   DIYLC v1 - the el34world era. A different format entirely: one <Layout>
+   element, everything grid-indexed in 1-based holes, strips running along
+   the rows. No pixels, so no quantization: every coordinate is already a
+   hole.
+
+   The facts here were decoded against DIYLC's own v1 regression corpus
+   (284 files with ground-truth netlists) and read from V1FileParser.java -
+   never recalled. The decode landed exact: 79 of 79 stripboard files
+   match their netlists with zero mismatches, once ONE artifact is
+   accounted for: the corpus netlists were generated with the v1 cuts
+   having no electrical effect (with cuts severing, every difference in
+   every file traces to a cut; with them ignored, everything matches).
+   On the board in your hand a cut severs the strip, so this importer
+   severs - the author drew those cuts to cut.
+
+   Conventions proven by that corpus, and by the converter's source:
+   - strips = rows (Y), holes 1..Width, strips 1..Height; nothing exists
+     outside them (a leg off the board is off the board - two files in the
+     corpus prove it).
+   - Electrolyte: first point is the + leg. Diode and LED: the SECOND
+     point is the cathode - both match this editor's own click order.
+   - Transistor: three consecutive holes from point 1 toward point 2
+     (every one of the 257 in the corpus spans exactly two holes).
+   - IC: the two points are opposite corner PINS; pin count is twice the
+     long side. Imported as a custom-footprint chip in real DIP order, so
+     it works in all four orientations. LineIC is the SIL version.
+   - Pot: three lugs, point 1 / midpoint / point 2. Trimmers are drawn as
+     body diagonals whose lug holes are not in the file - reported for
+     hand placement, never guessed. Switches: a straight span of two is a
+     SPDT and imports; anything bigger is reported.
+   ============================================================ */
+function importDiylcV1(lay){
+  const at = lay.attrs || {};
+  const type = String(at.Type || '').toLowerCase();
+  if(type === 'pcb')
+    return {failed:'This v1 file is a PCB layout. Copper Bottom does stripboard, perfboard and the ' +
+            'permanent breadboard - an etched PCB is a different tool\'s job.'};
+  if(type !== 'stripboard' && type !== 'perfboard')
+    return {failed:'Unrecognized v1 board type "' + (at.Type || '?') + '".'};
+  const bcols = parseInt(at.Width, 10), brows = parseInt(at.Height, 10);
+  if(!Number.isFinite(brows) || !Number.isFinite(bcols) || brows < 2 || bcols < 2 || brows > 60 || bcols > 80)
+    return {failed:'This v1 file has no board size this tool can hold (' + at.Width + ' x ' + at.Height + ').'};
+
+  /* v1 authors ran wires one hole past the drawn edge and met them there -
+     an off-board bus, and DIYLC's own converter honors it by making the
+     board one hole bigger each way. On perfboard those margin holes are
+     inert islands until used, so the board grows to hold exactly the
+     margin the file uses. Stripboard margin rows would be COPPER, which
+     would invent connections - so there the margin stays off the board
+     and anything on it is reported instead. */
+  let mCols = bcols, mRows = brows;
+  if(type === 'perfboard'){
+    for(const el of lay.kids){
+      const a2 = el.attrs || {};
+      for(const pair of [['X1','Y1'], ['X2','Y2']]){
+        const px = parseInt(a2[pair[0]], 10), py = parseInt(a2[pair[1]], 10);
+        if(el.tag !== 'Text' && px === bcols + 1) mCols = bcols + 1;
+        if(el.tag !== 'Text' && py === brows + 1) mRows = brows + 1;
+      }
+    }
+  }
+  const P = {version:2, name:at.Project || 'imported v1 layout',
+             board:{rows:mRows, cols:mCols, kind:type === 'perfboard' ? 'perf' : 'strip'},
+             cuts:[], parts:[], ics:[], pads:[]};
+  const notes = ['imported from a DIYLC v1 file (' + at.Type + ', ' + bcols + ' x ' + brows + ' holes)'];
+  if(mCols > bcols || mRows > brows)
+    notes.push('the author ran wiring one hole past the drawn edge - the board was widened to hold ' +
+               'that bus, the same way DIYLC itself converts these files.');
+  const unplaced = [];
+  const skippedCuts = [];
+  let textCount = 0, chainedTraces = 0;
+  const gcd2 = (p, q) => q ? gcd2(q, p % q) : p;
+
+  const num = (a, k) => { const v = parseInt(a[k], 10); return Number.isFinite(v) ? v : null; };
+  /* v1 wrote European decimals - 3,3K is 3.3K */
+  const val = (v) => String(v == null ? '' : v).trim().replace(/(\d),(\d)/g, '$1.$2');
+  const on = (x, y) => x !== null && y !== null && x >= 1 && x <= mCols && y >= 1 && y <= mRows;
+  const hole = (x, y) => [y - 1, x - 1];
+
+  /* v1 names are already refs (R1, C2) - keep them, made unique if a file
+     reuses one */
+  const used = new Set();
+  const mkRef = (want, fallback) => {
+    let r = String(want || '').trim() || fallback;
+    let n = 2;
+    while(used.has(r)) r = (String(want || '').trim() || fallback) + '_' + (n++);
+    used.add(r);
+    return r;
+  };
+
+  const KINDMAP = {Resistor:'res', Capacitor:'cap', Electrolyte:'ecap', Diode:'diode',
+                   Jumper:'link', Wire:'link', Trace:'link', Led:'diode'};
+
+  for(const el of lay.kids){
+    const a = el.attrs || {};
+    const x1 = num(a, 'X1'), y1 = num(a, 'Y1');
+    const x2 = num(a, 'X2'), y2 = num(a, 'Y2');
+    const nm = a.Name || '';
+
+    if(el.tag === 'Text'){ textCount++; continue; }
+
+    if(el.tag === 'Cut'){
+      if(P.board.kind === 'perf'){ skippedCuts.push(nm || (x1 + ',' + y1)); continue; }
+      if(on(x1, y1)) P.cuts.push(K(y1 - 1, x1 - 1));
+      continue;
+    }
+
+    if(KINDMAP[el.tag]){
+      if(!on(x1, y1) || !on(x2, y2)){
+        unplaced.push(el.tag + ' ' + nm + ' (a leg is off the board in the original)');
+        continue;
+      }
+      const kind = KINDMAP[el.tag];
+      /* On perfboard a copper Trace is a solder run: it connects every hole
+         it passes straight through, not just its ends - that is how the
+         el34-era layouts drew their rails, and the corpus netlists agree.
+         Chained as one link per step so the segmentation sees each joint.
+         On stripboard the strip already carries the run, so ends suffice. */
+      if(el.tag === 'Trace' && P.board.kind === 'perf'){
+        const dx = x2 - x1, dy = y2 - y1;
+        const g = gcd2(Math.abs(dx), Math.abs(dy)) || 1;
+        const sx = dx / g, sy = dy / g;
+        if(g > 1) chainedTraces++;
+        const base = mkRef(nm, 'J');
+        for(let i = 1; i <= g; i++)
+          P.parts.push({id:uid(), kind:'link', ref:g === 1 ? base : base + '_' + i, value:'',
+                        pins:[hole(x1 + sx * (i - 1), y1 + sy * (i - 1)),
+                              hole(x1 + sx * i, y1 + sy * i)]});
+        continue;
+      }
+      const p = {id:uid(), kind:kind, ref:mkRef(nm, kind.toUpperCase()),
+                 value:val(a.Value), pins:[hole(x1, y1), hole(x2, y2)]};
+      if(kind === 'ecap') p.polarized = true;                    /* first point is + */
+      if(kind === 'diode'){ p.polarized = true;                  /* second point is the band */
+        if(el.tag === 'Led') p.device = 'LED';
+      }
+      if(kind === 'link') p.value = '';
+      P.parts.push(p);
+      continue;
+    }
+
+    if(el.tag === 'Transistor' || el.tag === 'Pot'){
+      const straight = on(x1, y1) && on(x2, y2) && (x1 === x2 || y1 === y2) &&
+                       (Math.abs(x1 - x2) + Math.abs(y1 - y2)) === 2;
+      if(!straight){
+        unplaced.push(el.tag + ' ' + nm + ' (not the standard three-hole line)');
+        continue;
+      }
+      const dx = Math.sign(x2 - x1), dy = Math.sign(y2 - y1);
+      const mid = hole(x1 + dx, y1 + dy);
+      if(el.tag === 'Transistor')
+        P.parts.push({id:uid(), kind:'trans', ref:mkRef(nm, 'Q'), device:val(a.Value), value:'',
+                      pins:[hole(x1, y1), mid, hole(x2, y2)]});
+      else
+        P.parts.push({id:uid(), kind:'pot', ref:mkRef(nm, 'POT'), value:val(a.Value),
+                      pins:[hole(x1, y1), mid, hole(x2, y2)]});
+      continue;
+    }
+
+    if(el.tag === 'Switch'){
+      const sx = x2 === null ? -1 : Math.abs(x1 - x2), sy = y2 === null ? -1 : Math.abs(y1 - y2);
+      const straight = on(x1, y1) && on(x2, y2) && (sx === 0 || sy === 0);
+      if(straight && sx + sy === 2){
+        const dx = Math.sign(x2 - x1), dy = Math.sign(y2 - y1);
+        P.parts.push({id:uid(), kind:'spdt', ref:mkRef(nm, 'SW'), value:'',
+                      pins:[hole(x1, y1), hole(x1 + dx, y1 + dy), hole(x2, y2)]});
+      }else if(straight && sx + sy === 1){
+        P.parts.push({id:uid(), kind:'spst', ref:mkRef(nm, 'SW'), value:'',
+                      pins:[hole(x1, y1), hole(x2, y2)]});
+      }else{
+        unplaced.push('Switch ' + nm + ' (a shape this tool does not carry - wire it by hand)');
+      }
+      continue;
+    }
+
+    if(el.tag === 'Trimmer' || el.tag === 'Transformer' || el.tag === 'Jack'){
+      unplaced.push(el.tag + ' ' + nm + ' (v1 draws its body, not its lug holes - place it from the picture)');
+      continue;
+    }
+
+    if(el.tag === 'IC'){
+      if(!on(x1, y1) || !on(x2, y2) || x1 === x2 || y1 === y2){
+        unplaced.push('IC ' + nm + ' (corners do not make a chip)');
+        continue;
+      }
+      /* The two points are opposite corner pins, and the axis the pins run
+         along is decided by the corner SIGNS, exactly as DIYLC's own
+         V1FileParser decides orientation - a chip drawn wider than tall
+         with both deltas positive still runs its pins down Y. The corpus
+         told on the first cut of this, which sized chips by their long
+         side and seated several sideways. Custom footprint, real DIP
+         numbering: 1..h down the first corner's side, h+1..2h back up. */
+      const alongY = (x1 < x2 && y1 < y2) || (x1 > x2 && y1 > y2);
+      const h = (alongY ? Math.abs(y2 - y1) : Math.abs(x2 - x1)) + 1;
+      const dl = alongY ? [Math.sign(y2 - y1), 0] : [0, Math.sign(x2 - x1)];  /* along the pins */
+      const ds = alongY ? [0, x2 - x1] : [y2 - y1, 0];                         /* across the gap */
+      const pinMap = [];
+      for(let i = 0; i < h; i++) pinMap.push([dl[0] * i, dl[1] * i]);
+      for(let i = h - 1; i >= 0; i--) pinMap.push([dl[0] * i + ds[0], dl[1] * i + ds[1]]);
+      P.ics.push({id:uid(), ref:mkRef(nm, 'IC'), part:'DIP-' + (2 * h), alias:val(a.Value) || undefined,
+                  pins:2 * h, pin1:hole(x1, y1), span:Math.abs(alongY ? x2 - x1 : y2 - y1),
+                  autoCuts:[], pinMap:pinMap});
+      continue;
+    }
+
+    if(el.tag === 'LineIC'){
+      if(!on(x1, y1) || !on(x2, y2) || (x1 !== x2 && y1 !== y2)){
+        unplaced.push('LineIC ' + nm + ' (not a straight line)');
+        continue;
+      }
+      const n = Math.abs(x2 - x1) + Math.abs(y2 - y1) + 1;
+      const dl = [Math.sign(y2 - y1), Math.sign(x2 - x1)];
+      const pinMap = [];
+      for(let i = 0; i < n; i++) pinMap.push([dl[0] * i, dl[1] * i]);
+      P.ics.push({id:uid(), ref:mkRef(nm, 'IC'), part:'SIL-' + n, alias:val(a.Value) || undefined,
+                  pins:n, pin1:hole(x1, y1), span:1, autoCuts:[], pinMap:pinMap});
+      continue;
+    }
+
+    if(el.tag === 'Pad'){
+      if(!on(x1, y1)){ unplaced.push('Pad ' + nm + ' (off the board)'); continue; }
+      P.pads.push({id:uid(), label:(nm || 'PAD').trim(), at:hole(x1, y1)});
+      continue;
+    }
+
+    unplaced.push(el.tag + ' ' + nm + ' (a v1 element this tool does not know)');
+  }
+
+  if(chainedTraces)
+    notes.push(chainedTraces + ' copper trace' + (chainedTraces === 1 ? '' : 's') +
+               ' run through holes on the way and were imported as chained links - on the bench, solder decides; check them against the picture.');
+  if(textCount) notes.push(textCount + ' text label' + (textCount === 1 ? '' : 's') + ' left behind - labels, not copper.');
+  if(skippedCuts.length)
+    notes.push(skippedCuts.length + ' cut' + (skippedCuts.length === 1 ? '' : 's') +
+               ' skipped - a perfboard has no strips to cut.');
+  if(unplaced.length)
+    notes.push('NOT TRANSLATED (check these by hand): ' + unplaced.join('; ') + '.');
+  notes.push('v1 electrolytics: the FIRST drawn point is +. Diodes and LEDs: the second is the cathode. ' +
+             'Both carried over; check any part the original picture disagrees with.');
   return {ok:true, project:P, notes:notes};
 }
 
