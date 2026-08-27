@@ -6502,15 +6502,14 @@ function exportSVG(side, fit){
          label - a chip is the landmark a reader orients by, so nothing
          gets to print across it */
       const nm = icShown(ic), mx = (x0+x1)/2, my = (y0+y1)/2;
-      const pw = Math.max(ic.ref.length * 2.6, nm.length * 2.1) * 0.62 + 2.4;
-      late.push('<rect x="' + (mx - pw/2) + '" y="' + (my - 2.5) + '" width="' + pw +
-                '" height="6" rx="0.8" fill="#fff" fill-opacity="0.94"/>');
       /* A wire under the chip is a real wire - placed first, the socket over
          it. The opaque body was swallowing them whole; the covered run comes
-         back DASHED, drawn over the name plate but under the haloed text,
-         because the first attempt drew it under the plate and the plate sat
-         exactly on the wire's corridor - invisible again, found only by
-         rendering it large and looking. */
+         back DASHED at full link weight, because this sheet is read at arm's
+         length with an iron in hand and a whisper is a wire someone forgets.
+         Two earlier cuts of this died invisibly - under the body, then under
+         the name plate that sits exactly on the wire's corridor - so when a
+         wire runs underneath, the NAME moves beside the body instead: the
+         interior belongs to the wiring. */
       let ucN = 0;
       for(const p of S.parts){
         if(p.kind !== 'link') continue;
@@ -6521,14 +6520,21 @@ function exportSVG(side, fit){
         const cid = 'uc' + ic.id + '_' + (ucN++);
         late.push('<clipPath id="' + cid + '"><rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) +
                '" height="' + (y1-y0) + '"/></clipPath>');
-        /* full link weight: this sheet is read at arm's length with an iron
-           in hand, and a whisper-thin dash is a wire someone forgets */
         late.push('<line x1="' + lax + '" y1="' + lay + '" x2="' + lbx + '" y2="' + lby +
                '" stroke="#000" stroke-width="0.75" stroke-dasharray="1.6 1.1" stroke-linecap="round" ' +
                'clip-path="url(#' + cid + ')"/>');
       }
-      late.push(TL(mx, my, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
-      late.push(TL(mx, my + 2.6, nm, 2.1, 'text-anchor="middle"'));
+      if(ucN){
+        const side = solder ? 0 : 1;   /* component side: name goes right */
+        late.push(TL(x1 + 2.2, my - 0.2, ic.ref, 2.6, 'text-anchor="start" font-weight="bold"'));
+        late.push(TL(x1 + 2.2, my + 2.4, nm, 2.1, 'text-anchor="start"'));
+      }else{
+        const pw = Math.max(ic.ref.length * 2.6, nm.length * 2.1) * 0.62 + 2.4;
+        late.push('<rect x="' + (mx - pw/2) + '" y="' + (my - 2.5) + '" width="' + pw +
+                  '" height="6" rx="0.8" fill="#fff" fill-opacity="0.94"/>');
+        late.push(TL(mx, my, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
+        late.push(TL(mx, my + 2.6, nm, 2.1, 'text-anchor="middle"'));
+      }
     }
     const p1 = pinPos(ic, 1);
     o.push('<rect x="' + (x(p1[1]) - 0.9) + '" y="' + (y(p1[0]) - 0.9) +
