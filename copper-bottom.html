@@ -6521,8 +6521,10 @@ function exportSVG(side, fit){
         const cid = 'uc' + ic.id + '_' + (ucN++);
         late.push('<clipPath id="' + cid + '"><rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) +
                '" height="' + (y1-y0) + '"/></clipPath>');
+        /* full link weight: this sheet is read at arm's length with an iron
+           in hand, and a whisper-thin dash is a wire someone forgets */
         late.push('<line x1="' + lax + '" y1="' + lay + '" x2="' + lbx + '" y2="' + lby +
-               '" stroke="#000" stroke-width="0.5" stroke-dasharray="1.1 0.9" stroke-linecap="round" ' +
+               '" stroke="#000" stroke-width="0.75" stroke-dasharray="1.6 1.1" stroke-linecap="round" ' +
                'clip-path="url(#' + cid + ')"/>');
       }
       late.push(TL(mx, my, ic.ref, 2.6, 'text-anchor="middle" font-weight="bold"'));
