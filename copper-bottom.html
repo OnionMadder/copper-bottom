@@ -6259,14 +6259,87 @@ function exportSVG(side, fit){
     lineW(48, 2.4) + 6,                          // the maker's mark, letter-spaced
     solder ? lineW(ARROW_NOTE.length, 2.1) : 0,
     27 + lineW(74, 2.1));                        // the calibration bar and its caption
-  const W = +(fit ? EDGE*2 + (cols-1)*MM
-                  : Math.max(EDGE*2 + (cols-1)*MM, EDGE*2 + textW)).toFixed(3);
+
+  /* ---- pad labels live OFF the board ----
+     A pad is a wire leaving the board, so its name is for whoever is holding
+     the wire - but it used to sit right beside the ring, which put it on top
+     of whatever part was next to it (an LDR pad printed straight through
+     'C4 100u'). Each label now runs out to the NEAREST edge and waits in a
+     gutter, with a thin leader back to its own hole. The copper is still 1:1;
+     it just starts further in, which is why the gutters are measured here,
+     before the sheet is sized and the origin is fixed. */
+  const PAD_FS = 2.1;                 // label size, unchanged
+  const PAD_RULE = 5.4;               // left gutter clears the row ruler
+  const PAD_GAP = 3.2;                // right gutter has nothing to clear
+  const padPlan = S.pads.map(d => {
+    const dc = solder ? (cols - 1 - d.at[1]) : d.at[1], dr = d.at[0];
+    /* ties keep the earlier entry, so a corner pad goes sideways rather than
+       up: a side gutter costs width the sheet usually already has */
+    const near = [['left', dc], ['right', cols - 1 - dc], ['top', dr], ['bottom', rows - 1 - dr]];
+    let best = near[0];
+    for(const cand of near) if(cand[1] < best[1]) best = cand;
+    return {d, dc, dr, side: best[0], off: best[1], w: lineW(d.label.length, PAD_FS)};
+  });
+  const padGut = (side, clear) => {
+    let w = 0;
+    for(const p of padPlan) if(p.side === side) w = Math.max(w, p.w);
+    return w ? Math.max(0, w + clear + 2 - EDGE) : 0;
+  };
+  const GL = padGut('left', PAD_RULE), GR = padGut('right', PAD_GAP);
+  const W = +(fit ? EDGE*2 + GL + GR + (cols-1)*MM
+                  : Math.max(EDGE*2 + GL + GR + (cols-1)*MM, EDGE*2 + textW)).toFixed(3);
   const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
   /* the one line that makes the reading copy bigger: same viewBox, same
      drawing, a larger rendered box - so type grows with the copper */
   const mag = fit ? Math.min(fit[0] / W, fit[1] / H) : 1;
-  const x = c => EDGE + (solder ? (cols-1-c) : c) * MM;
+  const late = [];                            // everything that must print on top
+  const OX = EDGE + GL;                       // the board's own left margin, gutter included
+  const x = c => OX + (solder ? (cols-1-c) : c) * MM;
   const y = r => TOP + EDGE + r * MM;
+  /* second pass: where each label actually lands. Labels on one side share an
+     edge so the gutter reads as a column, and a run of pads on the same row
+     (or column) is stepped along rather than stacked on itself. */
+  for(const side of ['left', 'right']){
+    const g = padPlan.filter(p => p.side === side).sort((a, b) => a.dr - b.dr);
+    let prev = -1e9;
+    for(const p of g){
+      let ty = y(p.d.at[0]) + 0.7;
+      if(ty - prev < 2.35){ ty = prev + 2.35; p.nudged = true; }
+      prev = ty;
+      p.tx = side === 'left' ? OX - PAD_RULE : OX + (cols-1)*MM + PAD_GAP;
+      p.ty = ty;
+      p.anchor = side === 'left' ? 'end' : 'start';
+    }
+  }
+  for(const side of ['top', 'bottom']){
+    const g = padPlan.filter(p => p.side === side).sort((a, b) => a.dc - b.dc);
+    let prev = -1e9;
+    for(const p of g){
+      let tx = x(p.d.at[1]);
+      if(tx - p.w/2 < prev){ tx = prev + p.w/2; p.nudged = true; }
+      prev = tx + p.w/2 + 1.2;
+      p.tx = tx;
+      p.ty = side === 'top' ? y(0) - 6.4 : y(rows-1) + 5.4;
+      p.anchor = 'middle';
+    }
+  }
+  /* the leader stops at the edge of its text, and starts at the ring rather
+     than the hole - it is a thread to follow, not another thing to read */
+  const padLeaders = padPlan.map(p => {
+    /* a pad ON the edge it points at owns the only label beside it - the stub
+       said nothing and crowded the ruler */
+    if(!p.off && !p.nudged) return '';
+    const cx = x(p.d.at[1]), cy = y(p.d.at[0]);
+    const ex = p.side === 'left' ? p.tx + 0.9 : p.side === 'right' ? p.tx - 0.9 : p.tx;
+    const ey = p.side === 'top' ? p.ty + 0.9 : p.side === 'bottom' ? p.ty - 2.2 : p.ty - 0.7;
+    let dx = ex - cx, dy = ey - cy;
+    const d = Math.hypot(dx, dy);
+    if(d < 2.4) return '';
+    dx /= d; dy /= d;
+    return '<line x1="' + (cx + dx*1.85).toFixed(2) + '" y1="' + (cy + dy*1.85).toFixed(2) +
+           '" x2="' + ex.toFixed(2) + '" y2="' + ey.toFixed(2) +
+           '" stroke="#000" stroke-width="0.18" stroke-dasharray="0.9 0.9" opacity="0.5"/>';
+  });
   const cutSet = new Set(S.cuts);
   const o = [];
   const T = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
@@ -6293,11 +6366,13 @@ function exportSVG(side, fit){
   }
 
   /* rulers keep the layout's own numbering in both views, so a coordinate
-     from the cut list is findable on either sheet */
+     from the cut list is findable on either sheet. They print LAST and haloed:
+     a pad's leader runs along its own row, straight at that row's number, so
+     the number has to be the thing that wins. */
   for(let c = 0; c < cols; c++)
-    o.push(T(x(c), y(0) - 3.4, String(dCol(c)), 1.7, 'text-anchor="middle" fill="#666"'));
+    late.push(TL(x(c), y(0) - 3.4, String(dCol(c)), 1.7, 'text-anchor="middle" fill="#666"'));
   for(let r = 0; r < rows; r++)
-    o.push(T(EDGE - 3.4, y(r) + 0.6, isBread() ? BREAD_LABEL[r] : String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
+    late.push(TL(OX - 3.4, y(r) + 0.6, isBread() ? BREAD_LABEL[r] : String(dRow(r)), 1.7, 'text-anchor="middle" fill="#666"'));
 
   /* Copper runs, both sides. On the solder side the copper faces you, so
      the strips draw as the filled bands they are, broken at every cut - the
@@ -6339,8 +6414,11 @@ function exportSVG(side, fit){
                    : 'fill="none" stroke="#999" stroke-width="0.15"') + '/>');
   }
 
+  /* under everything: a leader that printed over a part label would be the
+     bug this whole arrangement exists to fix */
+  o.push(padLeaders.join(''));
+
   /* ---- component side: the parts ---- */
-  const late = [];
   if(!solder){
     for(const p of S.parts){
       const xs = p.pins.map(q => x(q[1])), ys = p.pins.map(q => y(q[0]));
@@ -6577,13 +6655,12 @@ function exportSVG(side, fit){
   }
 
   /* ---- pads ---- */
-  for(const d of S.pads){
-    const cx = x(d.at[1]), cy = y(d.at[0]);
+  for(const p of padPlan){
+    const cx = x(p.d.at[1]), cy = y(p.d.at[0]);
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="1.7" fill="none" stroke="#000" stroke-width="0.35"/>');
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="0.45" fill="#000"/>');
-    const leftish = solder ? d.at[1] < cols/2 : d.at[1] > cols/2;
-    late.push(TL(cx + (leftish ? -2.2 : 2.2), cy - 1.9, d.label, 2.1,
-                'text-anchor="' + (leftish ? 'end' : 'start') + '" font-weight="bold"'));
+    late.push(TL(p.tx, p.ty, p.d.label, PAD_FS,
+                'text-anchor="' + p.anchor + '" font-weight="bold"'));
   }
 
   o.push('<g fill="#000">' + late.join('') + '</g>');
