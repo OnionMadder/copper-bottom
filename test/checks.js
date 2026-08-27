@@ -2045,7 +2045,7 @@ S = {version:2, name:'caps', board:{rows:8, cols:12}, cuts:[], pads:[], ics:[], 
 ]};
 computeNets();
 ok(footprintOf(S.parts[0]).len === 1.60, 'the default film cap keeps the small square');
-ok(footprintOf(S.parts[1]).shape === 'disc' && footprintOf(S.parts[1]).dia === 1.97, 'a ceramic disc is a 5mm disc');
+ok(footprintOf(S.parts[1]).shape === 'disc' && footprintOf(S.parts[1]).dia === 1.2, 'a ceramic disc blocks the footprint of its seated wafer, not its 5mm face');
 ok(footprintOf(S.parts[2]).len === 2.83 && footprintOf(S.parts[2]).wid === 0.98, 'a box film is the 7.2 x 2.5 WIMA body');
 ok(Object.values(DEV_LIB.cap).every(d => !('value' in d)),
    'no cap device carries a value - switching the package can never rewrite the value');

@@ -826,6 +826,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <b>BUILD SHEET</b>
     <span class="sp"></span>
     <label class="barck" title="add full-page reading copies of both board maps at the end - the 1:1 copies stay as they are"><input type="checkbox" id="bigmaps"> full-page maps</label>
+    <button id="btnClassic" title="the layout as the classic share image - title, tan strips, parts list - as a .png">layout .png</button>
     <button id="btnSvgC">component .svg</button>
     <button id="btnSvgS">solder .svg</button>
     <button id="btnMd">copy markdown</button>
@@ -1314,7 +1315,7 @@ const DEV_PKG = {
   'DO-41': {shape:'box',  len:2.05, wid:1.06, leads:'axial'},   // plastic rectifier
   'LED5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LED
   'LED3':  {shape:'disc', dia:1.18, leads:'radial'},            // 3mm round LED
-  'CDISC': {shape:'disc', dia:1.97, leads:'radial'},            // 5mm ceramic disc
+  'CDISC': {shape:'disc', dia:1.2, leads:'radial'},             // ceramic disc: a thin wafer edge-on, drawn (and DRC'd) at the footprint it actually blocks, not its 5mm face
   'BOXF':  {shape:'box',  len:2.83, wid:0.98, leads:'radial'},  // box film, WIMA MKS2-style 7.2 x 2.5 mm
   'LDR5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LDR
 };
@@ -5645,12 +5646,17 @@ function render(){
     }else if(p.kind === 'cap'){
       const cfp = footprintOf(p);
       if(cfp.shape === 'disc'){
-        /* ceramic disc: a thin tan wafer seen edge-on-ish from above */
-        const CR2 = PITCH * cfp.dia / 2;
-        tint = '#E8C89A'; off = CR2 + 12; half = CR2;
+        /* Ceramic disc: a thin wafer, so it draws as one - a small flattened
+           lens with a quiet fill, not a saturated circle. The first cut drew
+           the full 5mm face and a 10n blob outweighed the chip beside it
+           (her words: huge and not a disc at all). */
+        const CR2 = PITCH * cfp.dia / 2, CRY = CR2 * 0.72;
+        tint = '#E8C89A'; off = CRY + 12; half = CR2;
         o.push(g +
-          '<circle cx="0" cy="0" r="' + CR2 + '" fill="#D9A45B" stroke="#6E5023" stroke-width="1.1"/>' +
-          '<circle cx="' + (-CR2*0.25) + '" cy="' + (-CR2*0.25) + '" r="' + (CR2*0.35) + '" fill="#EFC98E" fill-opacity="0.7"/>' +
+          '<ellipse cx="0" cy="0" rx="' + CR2 + '" ry="' + CRY +
+          '" fill="#E3C79A" stroke="#8A6B3A" stroke-width="0.9"/>' +
+          '<ellipse cx="' + (-CR2*0.2) + '" cy="' + (-CRY*0.25) + '" rx="' + (CR2*0.3) + '" ry="' + (CRY*0.28) +
+          '" fill="#F4E2C2" fill-opacity="0.8"/>' +
           '</g>');
       }else{
         const CW2 = PITCH * cfp.len, CH2 = PITCH * cfp.wid;
@@ -6436,7 +6442,7 @@ function exportSVG(side, fit){
         if(cfp2.shape === 'disc'){
           const cr = cfp2.dia * MM / 2;
           half = cr;
-          o.push(g + '<circle cx="0" cy="0" r="' + cr.toFixed(2) + '"/></g>');
+          o.push(g + '<ellipse cx="0" cy="0" rx="' + cr.toFixed(2) + '" ry="' + (cr*0.72).toFixed(2) + '"/></g>');
         }else{
           const cl = cfp2.len * MM / 2, cw = cfp2.wid * MM / 2;
           half = cl;
@@ -6733,6 +6739,256 @@ function downloadSVG(side){
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+/* ============================================================
+   THE CLASSIC LAYOUT IMAGE
+   The share picture, in the dialect every vero builder already reads: title
+   up top, tan strips with lettered rows, blue resistor boxes, round caps,
+   half-moon transistors, the parts list in columns underneath. Twenty years
+   of stripboard forums standardized this look, and an image that speaks it
+   gets read as a layout instead of a screenshot.
+
+   It is a PICTURE, deliberately: no netlist authority, no 1:1 promise, no
+   calibration bar. The build sheet remains the working document; this is
+   the one you post.
+   ============================================================ */
+function classicSVG(){
+  const rows = S.board.rows, cols = S.board.cols;
+  const CP = 30;                       // hole pitch in image px
+  /* the margins earn their width from the pad labels that live in them -
+     fixed margins clipped +5V and SPK_A off both edges on the first cut */
+  let padL = 0, padR = 0;
+  for(const d of S.pads){
+    if(d.at[1] < cols / 2) padL = Math.max(padL, String(d.label).length);
+    else padR = Math.max(padR, String(d.label).length);
+  }
+  const BX = 74 + padL * 9, BW = (cols - 1) * CP + CP;   // board block: left edge, width
+  const TITLE_H = 86;
+  const boardTop = TITLE_H + 34;
+  const boardH = (rows - 1) * CP + CP;
+  const cutSet = new Set(S.cuts);
+  const rowName = r => (r >= 26 ? 'a' : '') + String.fromCharCode(97 + (r % 26));
+  const x = c => BX + CP / 2 + c * CP;
+  const y = r => boardTop + CP / 2 + r * CP;
+  const o = [];
+  /* serif is only the title voice; anything that says font-family in its
+     extras gets its way (duplicate attributes in SVG resolve to the FIRST,
+     which is how the parts list once printed 10n in old-style figures as
+     what looked like 1on) */
+  const T = (tx, ty, str, size, extra) =>
+    o.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" ' +
+           ((extra || '').indexOf('font-family') >= 0 ? '' : 'font-family="Georgia, \'Times New Roman\', serif" ') +
+           (extra || '') + '>' + esc(str) + '</text>');
+
+  /* ---- parts list, measured first so the sheet can size itself ---- */
+  const listed = [];
+  for(const p of S.parts){
+    if(p.kind === 'link') continue;
+    listed.push([p.ref, p.value || p.device || '']);
+  }
+  for(const ic of S.ics) listed.push([ic.ref, icShown(ic)]);
+  const colOf = ref => /^R/i.test(ref) ? 0 : /^C/i.test(ref) ? 1 : 2;
+  const listCols = [[], [], []];
+  for(const row of listed) listCols[colOf(row[0])].push(row);
+  const byRef = (a, b) => a[0].localeCompare(b[0], undefined, {numeric:true});
+  for(const lc of listCols) lc.sort(byRef);
+  const listRows = Math.max(...listCols.map(lc => lc.length), 0);
+  const listTop = boardTop + boardH + 44;
+  const listH = listRows ? listRows * 19 + 8 : 0;
+  const W = Math.max(BX + BW + 74 + padR * 9, 460);
+  const H = listTop + listH + 46;
+
+  o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
+         '" viewBox="0 0 ' + W + ' ' + H + '">');
+  o.push('<rect width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+  /* ---- title block ---- */
+  T(W / 2, 40, S.name || 'untitled', 30, 'text-anchor="middle" fill="#1926C8" font-weight="bold"');
+  T(W / 2, 64, cols + ' x ' + rows + ' stripboard', 15, 'text-anchor="middle" fill="#333"');
+
+  /* ---- rulers: numbers across, letters down (the classic frame) ---- */
+  for(let c = 0; c < cols; c++)
+    T(x(c), boardTop - 8, String(c + 1), 11, 'text-anchor="middle" fill="#777" font-family="Verdana, sans-serif"');
+  for(let r = 0; r < rows; r++)
+    T(BX - 12, y(r) + 4, rowName(r), 11, 'text-anchor="middle" fill="#777" font-family="Verdana, sans-serif"');
+
+  /* ---- strips, broken at cuts, holes as pale dots ---- */
+  for(let r = 0; r < rows; r++){
+    let c = 0;
+    while(c < cols){
+      if(cutSet.has(K(r, c))){ c++; continue; }
+      let e = c;
+      while(e + 1 < cols && !cutSet.has(K(r, e + 1))) e++;
+      o.push('<rect x="' + (x(c) - CP * 0.42) + '" y="' + (y(r) - 8.5) + '" width="' +
+             (x(e) - x(c) + CP * 0.84) + '" height="17" rx="8" fill="#EBA83E" stroke="#C88A25" stroke-width="0.8"/>');
+      c = e + 1;
+    }
+    for(let c2 = 0; c2 < cols; c2++){
+      if(cutSet.has(K(r, c2))){
+        /* a cut in this dialect: the strip simply stops, and a small x marks why */
+        o.push('<path d="M' + (x(c2) - 4) + ' ' + (y(r) - 4) + 'l8 8M' + (x(c2) + 4) + ' ' + (y(r) - 4) +
+               'l-8 8" stroke="#999" stroke-width="1.4" stroke-linecap="round"/>');
+        continue;
+      }
+      o.push('<circle cx="' + x(c2) + '" cy="' + y(r) + '" r="2.1" fill="#FDF3DF" stroke="#B07A1E" stroke-width="0.6"/>');
+    }
+  }
+
+  /* ---- pads: a dot on the hole, the label pushed to the nearer margin ---- */
+  const late = [];
+  for(const d of S.pads){
+    const px = x(d.at[1]), py = y(d.at[0]);
+    o.push('<circle cx="' + px + '" cy="' + py + '" r="4.4" fill="#24357E"/>');
+    const leftish = d.at[1] < cols / 2;
+    late.push('<text x="' + (leftish ? BX - 26 : BX + BW + 26) + '" y="' + (py + 5) +
+              '" font-size="14" font-family="Verdana, sans-serif" font-weight="bold" fill="#111" text-anchor="' +
+              (leftish ? 'end' : 'start') + '">' + esc(d.label) + '</text>');
+    late.push('<line x1="' + px + '" y1="' + py + '" x2="' +
+              (leftish ? BX - 20 : BX + BW + 20) + '" y2="' + py +
+              '" stroke="#24357E" stroke-width="1" stroke-dasharray="2 3"/>');
+  }
+
+  /* ---- the parts, in the vocabulary the sample images use ---- */
+  const label = (cx, cy, str, deg, fill, size) =>
+    late.push('<text transform="translate(' + cx + ',' + cy + ') rotate(' + deg + ')" ' +
+              'font-size="' + (size || 11) + '" font-family="Verdana, sans-serif" font-weight="bold" ' +
+              'text-anchor="middle" fill="' + (fill || '#111') + '" y="4">' + esc(str) + '</text>');
+  for(const p of S.parts){
+    const pts = p.pins.map(q => [x(q[1]), y(q[0])]);
+    const cx = pts.reduce((a, q) => a + q[0], 0) / pts.length;
+    const cy = pts.reduce((a, q) => a + q[1], 0) / pts.length;
+    const a2 = Math.atan2(pts[pts.length - 1][1] - pts[0][1], pts[pts.length - 1][0] - pts[0][0]);
+    let deg = a2 * 180 / Math.PI;
+    if(deg > 90) deg -= 180; if(deg < -90) deg += 180;   // labels never upside down
+    const dev = devOf(p);
+
+    if(p.kind === 'link'){
+      o.push('<line x1="' + pts[0][0] + '" y1="' + pts[0][1] + '" x2="' + pts[1][0] + '" y2="' + pts[1][1] +
+             '" stroke="#24357E" stroke-width="3.6" stroke-linecap="round"/>');
+      for(const q of pts) o.push('<circle cx="' + q[0] + '" cy="' + q[1] + '" r="3.4" fill="#24357E"/>');
+      continue;
+    }
+    for(const q of pts)
+      o.push('<circle cx="' + q[0] + '" cy="' + q[1] + '" r="2.6" fill="#333"/>');
+    const lead = (i) => o.push('<line x1="' + pts[i][0] + '" y1="' + pts[i][1] + '" x2="' + cx + '" y2="' + cy +
+                               '" stroke="#555" stroke-width="1.4"/>');
+
+    if(p.kind === 'res' || (p.kind === 'diode' && !(dev && dev.draw === 'led')) || p.kind === 'cap'){
+      pts.forEach((q, i) => lead(i));
+      const len = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+      const bw = p.kind === 'res' ? Math.min(Math.max(len * 0.55, 26), 44) : Math.min(Math.max(len * 0.5, 22), 34);
+      const bh = 15;
+      const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a2 * 180 / Math.PI) + ')">';
+      o.push(g + '<rect x="' + (-bw / 2) + '" y="' + (-bh / 2) + '" width="' + bw + '" height="' + bh +
+             '" rx="3" fill="#fff" stroke="#3B4FC0" stroke-width="1.6"/>' +
+             (p.kind === 'diode'
+               ? '<rect x="' + (bw / 2 - 5) + '" y="' + (-bh / 2) + '" width="4" height="' + bh + '" fill="#111"/>'
+               : '') + '</g>');
+      label(cx, cy, p.ref, deg, '#1926C8');
+      continue;
+    }
+    if(p.kind === 'ecap' || (p.kind === 'cap' && false)){
+      pts.forEach((q, i) => lead(i));
+      o.push('<circle cx="' + cx + '" cy="' + cy + '" r="12.5" fill="#F4BFE3" stroke="#B75A9C" stroke-width="1.5"/>');
+      label(cx, cy, p.ref, 0, '#7E2A66');
+      continue;
+    }
+    if(p.kind === 'diode' && dev && dev.draw === 'led'){
+      pts.forEach((q, i) => lead(i));
+      o.push('<circle cx="' + cx + '" cy="' + cy + '" r="11.5" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
+      label(cx, cy, p.ref, 0, '#fff');
+      continue;
+    }
+    if(p.kind === 'trans' || p.kind === 'reg'){
+      pts.forEach((q, i) => lead(i));
+      const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a2 * 180 / Math.PI) + ')">';
+      o.push(g + '<path d="M-14 7 A14 14 0 0 1 14 7 Z" fill="#D9A45B" stroke="#8A6323" stroke-width="1.4"/></g>');
+      label(cx, cy - 14, p.ref, 0, '#111');
+      const ll = legLabels(p);
+      if(ll) pts.forEach((q, i) =>
+        late.push('<text x="' + (q[0] - 9) + '" y="' + (q[1] + 4) + '" font-size="9" ' +
+                  'font-family="Verdana, sans-serif" fill="#444" text-anchor="middle">' + esc(ll[i]) + '</text>'));
+      continue;
+    }
+    /* trimpots, pots, switches: a plain labelled round body on its lugs */
+    pts.forEach((q, i) => lead(i));
+    o.push('<circle cx="' + cx + '" cy="' + cy + '" r="12" fill="#fff" stroke="#666" stroke-width="1.5"/>');
+    label(cx, cy, p.ref, 0, '#333');
+  }
+
+  /* ---- chips ---- */
+  for(const ic of S.ics){
+    const ex = icExtent(ic);
+    const x0 = Math.min(x(ex.c0), x(ex.c1)) - 6, x1 = Math.max(x(ex.c0), x(ex.c1)) + 6;
+    const y0 = Math.min(y(ex.r0), y(ex.r1)) - 6, y1 = Math.max(y(ex.r0), y(ex.r1)) + 6;
+    o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) + '" height="' + (y1 - y0) +
+           '" rx="3" fill="#F5F5F0" stroke="#333" stroke-width="1.6"/>');
+    o.push('<path d="M' + ((x0 + x1) / 2 - 5) + ' ' + y0 + 'a5 5 0 0 0 10 0" fill="#fff" stroke="#333" stroke-width="1.2"/>');
+    for(let i = 1; i <= ic.pins; i++){
+      const q = pinPos(ic, i);
+      o.push('<circle cx="' + x(q[1]) + '" cy="' + y(q[0]) + '" r="2.4" fill="#333"/>');
+    }
+    late.push('<text x="' + ((x0 + x1) / 2) + '" y="' + ((y0 + y1) / 2 + 5) + '" font-size="13" ' +
+              'font-family="Verdana, sans-serif" font-weight="bold" text-anchor="middle" fill="#111">' +
+              esc(ic.ref + '  ' + icShown(ic)) + '</text>');
+  }
+
+  o.push(late.join(''));
+
+  /* ---- the parts list, three columns like the images people trade ---- */
+  if(listRows){
+    const colX = [W * 0.18, W * 0.5, W * 0.82];
+    listCols.forEach((lc, ci) => {
+      lc.forEach((row, ri) => {
+        T(colX[ci], listTop + ri * 19, row[0] + ': ' + (row[1] || '-'), 14,
+          'text-anchor="middle" fill="#111" font-family="Verdana, sans-serif"');
+      });
+    });
+  }
+
+  /* ---- the maker's mark ---- */
+  o.push('<text x="' + (W / 2) + '" y="' + (H - 16) + '" font-size="12" font-family="Verdana, sans-serif" ' +
+         'text-anchor="middle" fill="#999">Made with Copper Bottom · messopedals.com/diy/copper-bottom</text>');
+  o.push('</svg>');
+  return o.join('');
+}
+
+/* The classic image downloads as PNG - that is what forums and galleries
+   take. Rendered through a canvas at 2x for crisp text; if the canvas path
+   fails for any reason, the SVG itself downloads sooner than nothing. */
+function downloadClassic(){
+  const svg = classicSVG();
+  const name = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-layout';
+  const blob = new Blob([svg], {type:'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    try{
+      const cv = document.createElement('canvas');
+      cv.width = img.width * 2; cv.height = img.height * 2;
+      const cx2 = cv.getContext('2d');
+      cx2.scale(2, 2);
+      cx2.drawImage(img, 0, 0);
+      const a = document.createElement('a');
+      a.href = cv.toDataURL('image/png');
+      a.download = name + '.png';
+      a.click();
+    }catch(err){
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name + '.svg';
+      a.click();
+    }
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => {
+    const a = document.createElement('a');
+    a.href = url; a.download = name + '.svg'; a.click();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
 
 /* ============================================================
    THE BREADBOARD PICTURE
@@ -8759,6 +9015,7 @@ bigmaps.onchange = () => {
   try{ localStorage.setItem(BIGMAPS_KEY, bigmaps.checked ? '1' : '0'); }catch(err){}
   renderSheet();
 };
+btnClassic.onclick = () => downloadClassic();
 btnSvgC.onclick    = () => downloadSVG('component');
 btnSvgS.onclick    = () => downloadSVG('solder');
 btnMd.onclick      = () => {
