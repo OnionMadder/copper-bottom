@@ -637,6 +637,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span class="grp">
     <button id="btnImport" title="a Copper Bottom .json, or a DIYLC .diy stripboard layout">import</button>
     <button id="btnExport">export .json</button>
+    <button id="btnShare" title="copy a link that carries this whole layout - no server, nothing uploaded">share link</button>
     <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
     <button id="btnNew" class="danger" title="clear the board and start again - ctrl+z brings it back">new</button>
   </span>
@@ -8459,6 +8460,41 @@ function holdable(btn, fn){
 
 function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2))); render(); }
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
+btnShare.onclick = async () => {
+  try{
+    const payload = await encodeShare();
+    const url = location.origin + location.pathname + '#s=' + payload;
+    /* Clipboard first, because the point is to paste it somewhere. A denied
+       or missing clipboard is normal in a file:// window, so the URL bar
+       becomes the fallback rather than the failure. */
+    let copied = false;
+    try{ await navigator.clipboard.writeText(url); copied = true; }catch(err){}
+    try{ history.replaceState(null, '', '#s=' + payload); }catch(err){}
+    const size = payload.length;
+    flash((copied ? 'link copied' : 'link in the address bar') +
+          ' - ' + size + ' chars' +
+          (size > SHARE_WARN ? ', long enough that some apps will cut it: send the .json instead' : ''));
+  }catch(err){
+    flash('could not make a link - ' + err.message);
+  }
+};
+
+/* A layout in the address bar wins over the autosaved one, the way opening a
+   file does. load() pushes undo first, so ctrl+z is still holding whatever
+   the person had before they clicked somebody's link. */
+async function openShareLink(){
+  const m = /[#&]s=([A-Za-z0-9\-_]+)/.exec(location.hash || '');
+  if(!m) return false;
+  try{
+    load(await decodeShare(m[1]));
+    flash('opened a shared layout - ctrl+z for your own board back');
+    return true;
+  }catch(err){
+    flash('that shared link would not open - ' + err.message);
+    return false;
+  }
+}
+
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
 /* ---- theme ----
@@ -8564,6 +8600,87 @@ holdable(cUp, stepBoard('c',  1));
 holdable(cDn, stepBoard('c', -1));
 
 /* ---- persistence ---- */
+/* ---- share links -------------------------------------------------------
+   A layout in a URL. No server, no account, nothing uploaded: the whole
+   board rides in the fragment, which browsers never send anywhere. That is
+   the only reason this is allowed to exist in a file that has to work at a
+   bench with no network.
+
+   Only the file-format fields are packed, named explicitly rather than
+   JSON.stringify(S), so nothing can hitch a ride into a link somebody
+   pastes in public. The traced photo lives outside the project and stays
+   there - a share link is a layout, never a picture of somebody's desk.
+
+   Compressed, because it has to be: Paul's Theremin is 6.0k of base64 raw
+   and 1.5k deflated, and the raw form is past the length where links start
+   getting cut in half by chat clients. The tag byte says which codec, so a
+   link made today still opens if that ever changes. */
+const SHARE_TAG = {deflateRaw:'z', deflate:'d', plain:'j'};
+const SHARE_WARN = 2000;        // where links start getting mangled in the wild
+
+function shareProject(){
+  return {version:2, name:S.name, board:S.board, cuts:S.cuts,
+          parts:S.parts, ics:S.ics, pads:S.pads};
+}
+function b64url(bytes){
+  let s = '';
+  for(const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64url(str){
+  const s = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(s.length);
+  for(let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+async function squeeze(bytes, how){
+  const cs = new CompressionStream(how);
+  const w = cs.writable.getWriter(); w.write(bytes); w.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+async function unsqueeze(bytes, how){
+  const ds = new DecompressionStream(how);
+  const w = ds.writable.getWriter(); w.write(bytes); w.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+async function encodeShare(){
+  const bytes = new TextEncoder().encode(JSON.stringify(shareProject()));
+  if(typeof CompressionStream === 'function'){
+    for(const how of ['deflate-raw', 'deflate']){
+      try{ return (how === 'deflate-raw' ? SHARE_TAG.deflateRaw : SHARE_TAG.deflate) +
+                  b64url(await squeeze(bytes, how)); }
+      catch(err){}
+    }
+  }
+  return SHARE_TAG.plain + b64url(bytes);
+}
+async function decodeShare(str){
+  const tag = str[0], body = str.slice(1);
+  /* Every failure below is the same failure in practice - a link that got cut
+     in half by whatever it was pasted into - and the person holding it needs
+     to be told THAT, not the browser's word for it. Decompressing a truncated
+     payload surfaces as "Failed to fetch", which is true and useless. */
+  const cut = 'the link looks cut short - links get truncated by chat apps and email; ask for the whole one, or the .json';
+  if(tag !== SHARE_TAG.plain && tag !== SHARE_TAG.deflateRaw && tag !== SHARE_TAG.deflate)
+    throw new Error('this is not a Copper Bottom link');
+  let bytes;
+  try{ bytes = unb64url(body); }catch(err){ throw new Error(cut); }
+  if(tag === SHARE_TAG.plain){
+    try{ return JSON.parse(new TextDecoder().decode(bytes)); }
+    catch(err){ throw new Error(cut); }
+  }
+  /* A compressed link opened in a browser with no DecompressionStream cannot
+     be read, and guessing at it is not an option - so it says so out loud
+     rather than failing into an empty board. */
+  if(typeof DecompressionStream !== 'function')
+    throw new Error('this link is compressed and this browser cannot unpack it - ask for the .json');
+  const how = tag === SHARE_TAG.deflateRaw ? 'deflate-raw' : 'deflate';
+  let json;
+  try{ json = new TextDecoder().decode(await unsqueeze(bytes, how)); }
+  catch(err){ throw new Error(cut); }
+  try{ return JSON.parse(json); }catch(err){ throw new Error(cut); }
+}
+
 const LS = 'stripboard.autosave.v1';
 let _sv;
 function autosave(){
@@ -9488,6 +9605,7 @@ thanksClose.onclick = () => {
   THEME = (t === 'light' || t === 'dark' || t === 'auto') ? t : 'auto';
   applyTheme();
   setTool('inspect');
+  openShareLink();
 })();
 </script>
 </body>
