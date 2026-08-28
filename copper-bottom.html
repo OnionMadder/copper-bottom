@@ -5622,6 +5622,63 @@ function trimBoard(){
   return {before:before, after:{rows:S.board.rows, cols:S.board.cols}, took:took};
 }
 
+/* ============================================================
+   PARTS THAT LIVE OFF THE BOARD
+   A panel pot with every leg flown is three labelled terminals on the copper
+   and nothing else - which loses the one fact that matters about it: those
+   three holes are ONE COMPONENT, and its lugs are 1, W and 3 in that order.
+   Faking it with three pads had the same problem, and that is why the `pot`
+   part exists at all.
+
+   So a fully-flown part gets a body drawn outside the nearest board edge,
+   with a line from each lug to the hole its wire lands in. Every position
+   here is in HOLE units and edge-relative, so the screen and the printed
+   sheet place it identically and neither has to know about the other.
+
+   ONE leg lifted is a bent lead, not a part on a panel - only a part whose
+   every leg is flying is off the board. And the body is diagrammatic, never
+   a template: it is drawn outline-only and outside the copper, because the
+   board is 1:1 and a shape that is not would be a lie if anybody measured it.
+   ============================================================ */
+function offBoardBodies(){
+  const out = [];
+  for(const p of S.parts){
+    if(p.kind === 'link') continue;
+    if(!isFlying(p) || p.fly.length !== p.pins.length) continue;
+    const rs = p.pins.map(q => q[0]), cs = p.pins.map(q => q[1]);
+    const row = rs.reduce((a, b) => a + b, 0) / rs.length;
+    const col = cs.reduce((a, b) => a + b, 0) / cs.length;
+    const near = [['left', col], ['right', S.board.cols - 1 - col],
+                  ['top', row], ['bottom', S.board.rows - 1 - row]];
+    let best = near[0];
+    for(const cand of near) if(cand[1] < best[1]) best = cand;
+    out.push({part:p, ref:p.ref, side:best[0], row:row, col:col,
+              lugs:legLabels(p) || p.pins.map((_, i) => String(i + 1))});
+  }
+  /* two pots off the same edge must not sit on top of each other: they are
+     spread along it, in the order their legs appear down the board */
+  for(const side of ['left', 'right', 'top', 'bottom']){
+    const g = out.filter(b => b.side === side)
+                 .sort((a, b) => (side === 'top' || side === 'bottom')
+                                 ? a.col - b.col : a.row - b.row);
+    let prev = -Infinity;
+    for(const b of g){
+      const along = (side === 'top' || side === 'bottom') ? b.col : b.row;
+      b.along = Math.max(along, prev + OFFBOARD_SPREAD);
+      prev = b.along;
+    }
+  }
+  return out;
+}
+/* how far apart two off-board bodies sit along the same edge, in holes */
+const OFFBOARD_SPREAD = 4.2;
+/* body radius and the gap between the board edge and the body, in holes */
+const OFFBOARD_R = 1.5, OFFBOARD_GAP = 2.2;
+/* the room a side needs beyond the copper, in holes - zero if nothing is there */
+function offBoardMargin(side, bodies){
+  return bodies.some(b => b.side === side) ? OFFBOARD_GAP + OFFBOARD_R * 2 + 0.9 : 0;
+}
+
 /*#endregion model */
 /* ============================================================
    RENDER
@@ -5681,15 +5738,22 @@ function render(){
     }
   }
   const rows = S.board.rows, cols = S.board.cols;
-  const W = MARGIN * 2 + (cols - 1) * PITCH;
-  const H = MARGIN * 2 + (rows - 1) * PITCH;
+  /* Room for anything living off the board. The viewBox is EXTENDED rather
+     than the origin moved: X()/Y() keep the values they have always had, so
+     the hit rects, the drag maths and boardPointFromEvent are all untouched -
+     getScreenCTM already accounts for a shifted viewBox. */
+  const OBB = offBoardBodies();
+  const obL = offBoardMargin('left', OBB) * PITCH, obR = offBoardMargin('right', OBB) * PITCH;
+  const obT = offBoardMargin('top', OBB) * PITCH,  obB = offBoardMargin('bottom', OBB) * PITCH;
+  const W = MARGIN * 2 + (cols - 1) * PITCH + obL + obR;
+  const H = MARGIN * 2 + (rows - 1) * PITCH + obT + obB;
   const hl = highlightedNet();
   const cutSet = new Set(S.cuts);
   const o = [];
 
-  o.push('<svg id="board" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
+  o.push('<svg id="board" viewBox="' + (-obL) + ' ' + (-obT) + ' ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
          '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
-  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board') + '" stroke="' + C('boardEdge') + '"/>');
+  o.push('<rect x="' + (-obL) + '" y="' + (-obT) + '" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board') + '" stroke="' + C('boardEdge') + '"/>');
 
   /* --- the overlay picture, first thing after the board itself so that
      every hole, strip, cut and part is drawn ON it. It carries no pointer
@@ -5913,8 +5977,11 @@ function render(){
                     esc(ll[i] || '') + '</text>');
       });
       const name = p.device || p.value || '';
-      labels.push('<text class="lbl" style="fill:' + C('tintDiode') + '" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
-                  esc(p.ref + (name ? ' ' + name : '')) + '</text>');
+      /* a fully flown part is named beside its own body off the board; naming
+         it again over the holes labels bare copper */
+      if(!OBB.some(b => b.part === p))
+        labels.push('<text class="lbl" style="fill:' + C('tintDiode') + '" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
+                    esc(p.ref + (name ? ' ' + name : '')) + '</text>');
       continue;
     }
 
@@ -6102,6 +6169,35 @@ function render(){
     labels.push('<text class="lbl" style="fill:' + tint + '" x="' + tx +
                 '" y="' + ty + '">' + esc(label) + '</text>');
   }
+  /* ---- parts that live off the board ----
+     Three terminals on the copper do not say "this is one component". The
+     body does, and the lines from its lugs say which hole is lug 1. */
+  for(const b of OBB){
+    const R = OFFBOARD_R * PITCH, gap = (OFFBOARD_GAP + OFFBOARD_R) * PITCH;
+    let bx, by;
+    if(b.side === 'left'){       bx = X(0) - gap;          by = Y(b.along); }
+    else if(b.side === 'right'){ bx = X(cols - 1) + gap;   by = Y(b.along); }
+    else if(b.side === 'top'){   bx = X(b.along);          by = Y(0) - gap; }
+    else {                       bx = X(b.along);          by = Y(rows - 1) + gap; }
+    /* a wire from every lug to the hole its wire actually lands in */
+    const obWire = (x1, y1, x2, y2, colr, w) =>
+      '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+      '" stroke="' + colr + '" stroke-width="' + w + '" stroke-linecap="round"/>';
+    b.part.pins.forEach((q, i) => {
+      o.push(obWire(bx, by, X(q[1]), Y(q[0]), C('halo'), 5));
+      o.push(obWire(bx, by, X(q[1]), Y(q[0]), C('lead'), 1.6));
+    });
+    o.push('<circle cx="' + bx + '" cy="' + by + '" r="' + R + '" fill="' + C('board') +
+           '" stroke="' + C('lead') + '" stroke-width="2"/>');
+    o.push('<circle cx="' + bx + '" cy="' + by + '" r="' + (R * 0.34) + '" fill="none" stroke="' +
+           C('lead') + '" stroke-width="1.6"/>');
+    labels.push('<text class="lbl" style="fill:' + C('tintSwitch') + '" x="' + bx + '" y="' + (by - R - 6) + '">' +
+                esc(b.ref + (b.part.value ? ' ' + b.part.value : '')) + '</text>');
+    /* No lug names here on purpose: the flying terminals already carry them
+       at the holes, which is the end you are soldering. Saying it twice made
+       the wires look like they were labelled at both ends. */
+  }
+
   o.push(labels.join(''));
 
   /* grab handles on the IC being reshaped */
@@ -6673,17 +6769,23 @@ function exportSVG(side, fit){
     for(const p of padPlan) if(p.side === side) w = Math.max(w, p.w);
     return w ? Math.max(0, w + clear + 2 - EDGE) : 0;
   };
-  const GL = padGut('left', PAD_RULE), GR = padGut('right', PAD_GAP);
+  const GLpad = padGut('left', PAD_RULE), GRpad = padGut('right', PAD_GAP);
+  /* room for anything living off the board, the same placement the screen
+     uses - one model function, so the sheet and the board cannot disagree */
+  const OB = offBoardBodies();
+  const obL = offBoardMargin('left', OB) * MM,  obR = offBoardMargin('right', OB) * MM;
+  const obT = offBoardMargin('top', OB) * MM,   obB = offBoardMargin('bottom', OB) * MM;
+  const GL = GLpad + obL, GR = GRpad + obR;
   const W = +(fit ? EDGE*2 + GL + GR + (cols-1)*MM
                   : Math.max(EDGE*2 + GL + GR + (cols-1)*MM, EDGE*2 + textW)).toFixed(3);
-  const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT).toFixed(3);
+  const H = +(TOP + EDGE*2 + (rows-1)*MM + BOT + obT + obB).toFixed(3);
   /* the one line that makes the reading copy bigger: same viewBox, same
      drawing, a larger rendered box - so type grows with the copper */
   const mag = fit ? Math.min(fit[0] / W, fit[1] / H) : 1;
   const late = [];                            // everything that must print on top
   const OX = EDGE + GL;                       // the board's own left margin, gutter included
   const x = c => OX + (solder ? (cols-1-c) : c) * MM;
-  const y = r => TOP + EDGE + r * MM;
+  const y = r => TOP + EDGE + obT + r * MM;
   /* second pass: where each label actually lands. Labels on one side share an
      edge so the gutter reads as a column, and a run of pads on the same row
      (or column) is stepped along rather than stacked on itself. */
@@ -6916,10 +7018,16 @@ function exportSVG(side, fit){
         });
         /* the ref sits ON the body where nothing else can be; what it is goes
            just below, haloed against the legs and strips it crosses */
+        /* A fully flown part is named beside its own body off the board. Naming
+           it again over the holes labels bare copper - and here it also landed
+           exactly where the middle lug's name goes, hiding it. */
+        const offBoardHere = OB.some(b => b.part === p);
         /* the ref sits ON the body, which is its own space - it does not move */
-        placed.push(labBox(cx, cy + 0.7, p.ref, 1.9, 'middle', false));
-        late.push(TL(cx, cy + 0.7, p.ref, 1.9, 'text-anchor="middle" font-weight="bold"'));
-        const what3 = p.device || p.value || '';
+        if(!offBoardHere){
+          placed.push(labBox(cx, cy + 0.7, p.ref, 1.9, 'middle', false));
+          late.push(TL(cx, cy + 0.7, p.ref, 1.9, 'text-anchor="middle" font-weight="bold"'));
+        }
+        const what3 = offBoardHere ? '' : (p.device || p.value || '');
         if(what3){
           const devAt = (dx, dy, anch) => ({
             box:labBox(cx + dx, cy + dy, what3, 1.5, anch, false),
@@ -7164,6 +7272,28 @@ function exportSVG(side, fit){
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="0.45" fill="#000"/>');
     late.push(TL(p.tx, p.ty, p.d.label, PAD_FS,
                 'text-anchor="' + p.anchor + '" font-weight="bold"'));
+  }
+
+  /* ---- parts that live off the board ----
+     A panel pot is one component with lugs 1, W and 3, and three terminals on
+     the copper never said so. Outline only, and plainly outside the copper:
+     the BOARD is 1:1 and this is not, so it must not read as a template. */
+  if(!solder) for(const b of OB){
+    const R = OFFBOARD_R * MM, gap = (OFFBOARD_GAP + OFFBOARD_R) * MM;
+    let bx, by;
+    if(b.side === 'left'){       bx = x(0) - gap;         by = y(b.along); }
+    else if(b.side === 'right'){ bx = x(cols - 1) + gap;  by = y(b.along); }
+    else if(b.side === 'top'){   bx = x(b.along);         by = y(0) - gap; }
+    else {                       bx = x(b.along);         by = y(rows - 1) + gap; }
+    for(const q of b.part.pins)
+      o.push('<line x1="' + bx.toFixed(2) + '" y1="' + by.toFixed(2) + '" x2="' + x(q[1]) +
+             '" y2="' + y(q[0]) + '" stroke="#000" stroke-width="0.3" stroke-linecap="round"/>');
+    o.push('<circle cx="' + bx.toFixed(2) + '" cy="' + by.toFixed(2) + '" r="' + R.toFixed(2) +
+           '" fill="#fff" stroke="#000" stroke-width="0.4"/>');
+    o.push('<circle cx="' + bx.toFixed(2) + '" cy="' + by.toFixed(2) + '" r="' + (R*0.34).toFixed(2) +
+           '" fill="none" stroke="#000" stroke-width="0.3"/>');
+    late.push(TL(bx, by - R - 1.2, b.ref + (b.part.value ? ' ' + b.part.value : ''), 2.0,
+                 'text-anchor="middle" font-weight="bold"'));
   }
 
   o.push('<g fill="#000">' + late.join('') + '</g>');

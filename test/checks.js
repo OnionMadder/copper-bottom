@@ -2657,6 +2657,38 @@ S = {version:2, name:'strip', board:{rows:10, cols:10}, cuts:[], parts:[], ics:[
 computeNets();
 ok(dRow(7) === 8, 'a stripboard row is still a number');
 ok(holeShort(7, 9) === 'r8 c10', 'and its holes are still r8 c10');
+/* ---- parts that live off the board ---- */
+console.log('-- off-board bodies --');
+S = {version:2, name:'panel', board:{rows:12, cols:20}, cuts:[], ics:[], pads:[],
+     parts:[
+       {id:'v1', kind:'pot', ref:'POT1', value:'100k', pins:[[2,1],[3,1],[4,1]], fly:[0,1,2]},
+       {id:'v2', kind:'pot', ref:'POT2', value:'10k',  pins:[[8,1],[9,1],[10,1]], fly:[0,1,2]},
+       {id:'r1', kind:'res', ref:'R1', value:'1k', pins:[[5,5],[5,8]]},
+       {id:'q1', kind:'trans', ref:'Q1', pins:[[6,12],[6,13],[6,14]], fly:[0]}]};
+computeNets();
+let ob = offBoardBodies();
+ok(ob.length === 2, 'only the fully flown parts are off the board');
+ok(ob.every(b => b.ref !== 'R1'), 'a part with both legs down is not one of them');
+ok(ob.every(b => b.ref !== 'Q1'), 'and one lifted leg is a bent lead, not a panel part');
+ok(ob[0].side === 'left', 'a part on column 2 goes off the left edge');
+ok(String(ob[0].lugs) === '1,W,3', 'a pot carries its lug names');
+ok(ob[0].along < ob[1].along, 'two on the same edge are spread along it');
+ok(ob[1].along - ob[0].along >= 4, 'far enough apart not to overlap');
+ok(offBoardMargin('left', ob) > 0, 'the left edge needs room made for them');
+ok(offBoardMargin('right', ob) === 0, 'and an empty edge needs none');
+
+/* the nearest edge is chosen, not assumed */
+S.parts = [{id:'v3', kind:'pot', ref:'POT3', pins:[[1,8],[1,9],[1,10]], fly:[0,1,2]}];
+computeNets();
+ob = offBoardBodies();
+ok(ob[0].side === 'top', 'a part one row down mid-board goes off the TOP, not a side');
+
+/* a corner part is equally near two edges; the tie is broken in a fixed
+   order - left, right, top, bottom - so the same board always draws the same
+   way rather than depending on which check ran first */
+S.parts = [{id:'v4', kind:'pot', ref:'POT4', pins:[[1,17],[1,18],[1,19]], fly:[0,1,2]}];
+computeNets();
+ok(offBoardBodies()[0].side === 'right', 'a corner tie resolves to the earlier edge, every time');
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
