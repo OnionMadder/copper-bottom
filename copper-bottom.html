@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>COPPER BOTTOM</title>
 <meta name="description" content="Stripboard layout editor with design-rule checking and a 1:1 build sheet.">
+<script>
+/* The one script that has to run in <head>, and the reason is the whole point
+   of the feature: if the theme were set after the stylesheet, a machine whose
+   OS is light would paint a white frame before flipping to dark. For somebody
+   who picked dark because light hurts, that frame IS the problem. Default is
+   dark, not the machine's preference - "follow the OS" is the wrong default
+   when the OS is light and light is what you are avoiding. Auto stays a
+   choice you can make; it is no longer a choice made for you. */
+(function(){
+  try{
+    var t = localStorage.getItem('stripboard.theme');
+    if(t === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+  }catch(e){ document.documentElement.setAttribute('data-theme', 'dark'); }
+})();
+</script>
 <!--
   Copper Bottom - a stripboard layout editor that tells you what is
   actually connected to what.
@@ -561,6 +577,35 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .tick span{display:block; width:11px; height:11px; border:1.4px solid #333; border-radius:2px}
 .tick input:checked + span{background:#333; box-shadow:inset 0 0 0 2px #fff}
 
+/* ---- the build sheet, on a dark screen ----------------------------------
+   The sheet is paper and prints white by definition, which meant that in the
+   dark theme pressing `build sheet` threw a full screen of white at you. The
+   board drawings inside it are white-backed SVG too, so tinting the page
+   alone would not have covered it.
+
+   So the whole document is dimmed with a filter rather than recoloured: one
+   rule, it catches the SVGs as well as the paper, and it changes nothing
+   about what the sheet IS. Text stays #111 on the dimmed white, which
+   measures about 12:1. The print block below resets it, so what comes out of
+   the printer is byte for byte what it always was - a preview that lies
+   about the paper would be a worse bug than the flash. */
+.themeask{position:fixed; inset:0; z-index:60; display:flex; align-items:center;
+  justify-content:center; background:rgba(0,0,0,.55); padding:20px}
+.themeask[hidden]{display:none}
+.askcard{max-width:380px; background:var(--panel); border:1px solid var(--line2);
+  border-radius:10px; padding:18px 20px 16px}
+.askt{font:700 15px/1.2 var(--mono); letter-spacing:.06em; color:var(--ink); margin-bottom:8px}
+.askp{margin:0 0 14px; color:var(--soft); font-size:13px; line-height:1.6}
+.askp b{color:var(--ink)}
+.askrow{display:flex; gap:8px}
+.askbtn{flex:1 1 0; padding:8px 10px; font-size:13px}
+#askDark{border-color:var(--mint); color:var(--mint)}
+
+:root[data-theme="dark"] .sheetdoc{ filter:brightness(.82) }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .sheetdoc{ filter:brightness(.82) }
+}
+
 @media print{
   /* the app is dark; paper is not. Without this the page after the last line
      of content prints as a slab of the app's background wherever the print
@@ -569,7 +614,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .hdr,.main,.foot,.sheetbar,.thanks{display:none !important}
   .sheet{position:static; background:#fff}
   .sheet[hidden]{display:none}
-  .sheetdoc{overflow:visible; padding:0; color:#000}
+  .sheetdoc{overflow:visible; padding:0; color:#000; filter:none !important}
   .sheetdoc svg{border:none}
   .sheetdoc h2{page-break-after:avoid}
   .sheetdoc .svgwrap{page-break-inside:avoid}
@@ -898,6 +943,17 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <div class="sheetdoc" id="sheetdoc"></div>
 </div>
 
+<div class="themeask" id="themeask" role="dialog" aria-modal="true" aria-labelledby="askTitle" hidden>
+  <div class="askcard">
+    <div class="askt" id="askTitle">light or dark?</div>
+    <p class="askp">Copper Bottom starts dark. If you would rather have light, say so now
+      and it will remember. You can change it any time from <b>theme</b> in the footer.</p>
+    <div class="askrow">
+      <button id="askDark" class="askbtn">keep it dark</button>
+      <button id="askLight" class="askbtn">use light</button>
+    </div>
+  </div>
+</div>
 <div class="foot">
   <button id="btnChecks" class="checkstoggle" title="show the checks panel">checks</button>
   <span>rows <button id="rDn" title="one row fewer - hold to keep going">&minus;</button><input id="rows" type="number" min="2" max="60" value="13"><button id="rUp" title="one row more - hold to keep going">+</button></span>
@@ -8517,6 +8573,7 @@ function applyTheme(){
 ttheme.onclick = () => {
   THEME = THEME_ORDER[(THEME_ORDER.indexOf(THEME) + 1) % THEME_ORDER.length];
   try{ localStorage.setItem(THEME_KEY, THEME); }catch(err){}
+  themeAnswered();
   applyTheme();
 };
 /* a machine whose preference changes under us - night mode on a schedule,
@@ -9592,6 +9649,35 @@ thanksClose.onclick = () => {
   try{ localStorage.setItem(THANKS_KEY, '1'); }catch(err){}
 };
 
+/* ---- the one-time theme question ----
+   Asked once, on DARK, so the asking itself cannot be the bright flash it is
+   there to prevent. The answer is remembered and never asked again; using the
+   footer toggle counts as answering, so nobody gets asked twice. */
+const THEME_ASKED = 'stripboard.theme.asked';
+function themeAnswered(){
+  try{ localStorage.setItem(THEME_ASKED, '1'); }catch(err){}
+  const box = document.getElementById('themeask');
+  if(box) box.hidden = true;
+}
+function askTheme(){
+  let asked = null;
+  try{ asked = localStorage.getItem(THEME_ASKED); }catch(err){}
+  if(asked) return;
+  const box = document.getElementById('themeask');
+  if(!box) return;
+  box.hidden = false;
+  const pick = (t) => {
+    THEME = t;
+    try{ localStorage.setItem(THEME_KEY, t); }catch(err){}
+    themeAnswered();
+    applyTheme();
+  };
+  document.getElementById('askDark').onclick = () => pick('dark');
+  document.getElementById('askLight').onclick = () => pick('light');
+  box.addEventListener('keydown', e => { if(e.key === 'Escape') pick('dark'); });
+  document.getElementById('askDark').focus();
+}
+
 /* ---- boot ---- */
 (function boot(){
   let stored = null;
@@ -9602,10 +9688,11 @@ thanksClose.onclick = () => {
   cols.value = S.board.cols;
   let t = null;
   try{ t = localStorage.getItem(THEME_KEY); }catch(err){}
-  THEME = (t === 'light' || t === 'dark' || t === 'auto') ? t : 'auto';
+  THEME = (t === 'light' || t === 'dark' || t === 'auto') ? t : 'dark';
   applyTheme();
   setTool('inspect');
   openShareLink();
+  askTheme();
 })();
 </script>
 </body>
