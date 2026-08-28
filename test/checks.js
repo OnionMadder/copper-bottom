@@ -2636,6 +2636,27 @@ ok(S.board.rows === 2, 'trimming stops at the two-row floor');
 ok(S.board.cols === 5, 'and still trims the columns after the rows hit it');
 ok(S.parts.length === 1 && S.pads.length === 1, 'nothing was lost getting there');
 ok(boardSlack().any === false, 'and it now reports nothing left to trim');
+/* ---- a breadboard is lettered, not numbered ---- */
+console.log('-- bench names --');
+S = {version:2, name:'bb', board:{rows:14, cols:20, kind:'bread'}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(dRow(7) === 'E', 'row 7 of a breadboard is E');
+ok(holeShort(7, 9) === 'E10', 'and a hole in it is E10, the way the board is printed');
+ok(holeText(7, 9) === 'E10', 'long form agrees - there is no longer way to say E10');
+/* the two + rails are different copper, so the name has to say which */
+ok(dRow(0) === 'top +', 'the top rail says which end it is');
+ok(dRow(13) === 'bottom +', 'and so does the bottom one');
+ok(dRow(0) !== dRow(13), 'the two + rails never share a name');
+ok(dRow(1) === 'top -' && dRow(12) === 'bottom -', 'same for the two - rails');
+ok(holeText(0, 9) === 'the top + rail at col 10', 'a rail hole reads as a rail, not as a row');
+ok(holeShort(0, 9) === 'top+ 10', 'and short form keeps the end without the space');
+/* the ruler keeps the bare glyph: up there, position says which end */
+ok(BREAD_LABEL[0] === '+' && BREAD_LABEL[13] === '+', 'the ruler glyph is unchanged');
+/* stripboard is untouched */
+S = {version:2, name:'strip', board:{rows:10, cols:10}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(dRow(7) === 8, 'a stripboard row is still a number');
+ok(holeShort(7, 9) === 'r8 c10', 'and its holes are still r8 c10');
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

@@ -2656,12 +2656,36 @@ function cutList(){
    board is wrong in a way that looks right. The cut list had the inconsistency in
    a single row already: `back` was 1-based while `row` and `col` beside it were
    0-based, so one table was speaking both dialects at once. */
-function dRow(r){ return r + 1; }
+/* A permanent breadboard is not numbered, it is LETTERED, and that is what is
+   printed down the side of the board in front of you. Nobody at a bench says
+   "row 3" of a breadboard; they say E10, which is also how the guides on the
+   site name holes. Row numbers stay the model's business.
+
+   The rails need their end said as well. There are two + rails and two - and
+   they are not the same copper, so "+10" on its own names two different
+   holes. The RULERS keep the bare glyph, because there the position on the
+   board already tells you which end you are looking at; prose does not have
+   that, so prose gets the long name. */
+function breadRowName(r){
+  const t = BREAD_LABEL[r];
+  if(t !== '+' && t !== '-') return t;
+  return (r < BREAD_ROWS / 2 ? 'top ' : 'bottom ') + t;
+}
+function isBreadRail(r){ const t = BREAD_LABEL[r]; return t === '+' || t === '-'; }
+function dRow(r){ return isBread() ? breadRowName(r) : r + 1; }
 function dCol(c){ return c + 1; }
 /* the long form, for anywhere there is room to be unambiguous */
-function holeText(r, c){ return 'row ' + dRow(r) + ' \u00b7 col ' + dCol(c); }
+function holeText(r, c){
+  if(!isBread()) return 'row ' + dRow(r) + ' \u00b7 col ' + dCol(c);
+  return isBreadRail(r) ? 'the ' + breadRowName(r) + ' rail at col ' + dCol(c)
+                        : breadRowName(r) + dCol(c);
+}
 /* the short form, still labeled, for table cells and lists */
-function holeShort(r, c){ return 'r' + dRow(r) + ' c' + dCol(c); }
+function holeShort(r, c){
+  if(!isBread()) return 'r' + dRow(r) + ' c' + dCol(c);
+  return isBreadRail(r) ? breadRowName(r).replace(' ', '') + ' ' + dCol(c)
+                        : breadRowName(r) + dCol(c);
+}
 
 /* Solder the flat things first or you will not be able to reach them later. */
 const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8, trim:9, pot:10, spst:11, spdt:12};
@@ -3005,7 +3029,8 @@ const WALK_NOTES = {
 
 function walkthrough(){
   const L = [];
-  const at = (h) => 'row ' + dRow(h[0]) + ', col ' + dCol(h[1]);
+  const at = (h) => isBread() ? holeText(h[0], h[1])
+                             : 'row ' + dRow(h[0]) + ', col ' + dCol(h[1]);
   const seen = {};
   let n = 0;
   const step = (head, body) => {
@@ -3027,11 +3052,17 @@ function walkthrough(){
     L.push('wire links are the whole circuit. A leg that no link reaches is');
     L.push('connected to nothing at all.');
   }else if(isBread()){
+    /* Named the way the board in front of you is printed, because every
+       coordinate below now is: no row numbers in a document that then tells
+       you to click E5. */
     L.push('This is a PERMANENT BREADBOARD - the solderable PCB with breadboard');
-    L.push('copper. Rows 1-2 and 13-14 are the power rails, running the whole');
-    L.push('board. Rows 3-7 are bank J down to F, rows 8-12 bank E down to A,');
-    L.push('and a column of five in one bank is a single piece of copper. The');
-    L.push('channel between rows 7 and 8 is where a chip straddles.');
+    L.push('copper. Holes are named the way the board is printed: a bench');
+    L.push('letter and a column, E10. The + and - rails run the whole length at');
+    L.push('each end, and there are two of each - top and bottom - which is why');
+    L.push('they are named that way here. The top bank is J down to F, the');
+    L.push('bottom E down to A, and a column of five within one bank is a');
+    L.push('single piece of copper. The channel between F and E is where a');
+    L.push('chip straddles.');
   }else{
     L.push('Every part crosses the strips - watch the ROW change between clicks.');
     L.push('All the holes in one row are a single piece of copper, so a part with');
@@ -6411,8 +6442,10 @@ function renderReadout(){
        coordinate pair as across-then-down, and the column ruler across the top
        reinforces it - so a walkthrough saying [3,3] then [4,3] gets built along
        one strip instead of across three. Name the axes and the trap is gone. */
-    o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">row ' + dRow(r) +
-           ' <span style="color:var(--dim)">·</span> col ' + dCol(c) + '</div>');
+    o.push('<div class="big" style="color:' + (net ? net.color : '#D926A9') + '">' +
+           (isBread() ? esc(holeText(r, c))
+                      : 'row ' + dRow(r) + ' <span style="color:var(--dim)">·</span> col ' + dCol(c)) +
+           '</div>');
     o.push('<div class="row">' + (net ? 'net ' + net.id + ' · <b>' + net.holes.length + '</b> holes · <b>' +
            net.segs.length + '</b> segment' + (net.segs.length > 1 ? 's' : '') : '<b>cut</b> - dead hole') + '</div>');
     for(const oc of occupants(r, c)){
