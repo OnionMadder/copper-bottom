@@ -6773,6 +6773,61 @@ function exportSVG(side, fit){
      bug this whole arrangement exists to fix */
   o.push(padLeaders.join(''));
 
+  /* ---- keeping labels off each other ----
+     The white halo makes a label readable over LINEWORK. It cannot make two
+     labels readable over each other, and measured across the six saved
+     layouts there were 17 such overlaps in 667 labels - all on the component
+     side, mostly around 3-pin parts where a device name sits under one body
+     and a neighbour's name sits over the next.
+
+     Each label is placed against the ones already down. One that would land
+     on another tries a short list of MIRRORS of its own position - the other
+     side of the same anchor - and takes the first that is clear. It never
+     drifts: if no side is clear it stays exactly where it belongs, because a
+     name that has wandered somewhere tidy is worse than one that overlaps.
+     The chip's name, its pin 1 and the pad names are put down FIRST and never
+     move; they are the landmarks a reader orients by. */
+  const placed = [];
+  /* The box has to be what the EYE sees, which includes the white halo: it is
+     0.8 of stroke, so 0.4 stands out on every side. Estimating the glyphs
+     alone made near-misses read as clear, and the placement below then had
+     nothing to avoid - two rounds of widening the candidate list changed the
+     overlap count by exactly zero until this was fixed. Measured against
+     rendered text: monospace runs about 0.6 of its size per character, and a
+     line stands about 1.15 of its size tall around the baseline. */
+  const LAB_PAD = 0.45;
+  const labBox = (x, y, text, size, anchor, vertical) => {
+    const w = String(text).length * size * 0.6 + LAB_PAD * 2;
+    const h = size * 1.15 + LAB_PAD * 2;
+    if(vertical) return {x:x - h/2, y:y - w/2, w:h, h:w};
+    const x0 = anchor === 'middle' ? x - w/2 : anchor === 'end' ? x - w : x - LAB_PAD;
+    return {x:x0, y:y - size * 0.85 - LAB_PAD, w:w, h:h};
+  };
+  const labClash = (b) => placed.some(q =>
+    Math.min(q.x + q.w, b.x + b.w) - Math.max(q.x, b.x) > 0.4 &&
+    Math.min(q.y + q.h, b.y + b.h) - Math.max(q.y, b.y) > 0.4);
+  /* cands: [{box, emit}] in order of preference */
+  const placeLab = (cands) => {
+    for(const c of cands){
+      if(!labClash(c.box)){ placed.push(c.box); late.push(c.emit()); return; }
+    }
+    placed.push(cands[0].box); late.push(cands[0].emit());
+  };
+
+  /* landmarks first, so everything else gets out of THEIR way */
+  if(!solder){
+    for(const p of padPlan)
+      placed.push(labBox(p.tx, p.ty, p.d.label, PAD_FS, p.anchor, false));
+    for(const ic of S.ics){
+      const ex = icExtent(ic);
+      const mx = (x(ex.c0) + x(ex.c1)) / 2, my = (y(ex.r0) + y(ex.r1)) / 2;
+      placed.push(labBox(mx, my, ic.ref, 2.6, 'middle', false));
+      placed.push(labBox(mx, my + 2.6, icShown(ic), 2.1, 'middle', false));
+      const p1 = pinPos(ic, 1);
+      placed.push(labBox(x(p1[1]) + 2.6, y(p1[0]) - 1.6, 'pin1', 1.7, 'middle', false));
+    }
+  }
+
   /* ---- component side: the parts ---- */
   if(!solder){
     for(const p of S.parts){
@@ -6815,13 +6870,30 @@ function exportSVG(side, fit){
                  (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
         }
         const ll = legLabels(p);
-        if(ll) p.pins.forEach((q, i) =>
-          late.push(TL(xs[i] + 1.3, ys[i] + 0.7, ll[i] || '', 1.9, 'font-weight="bold"')));
+        if(ll) p.pins.forEach((q, i) => {
+          const t = ll[i] || '';
+          if(!t) return;
+          /* a leg name sits beside its own hole; the mirror is the other side */
+          const legAt = (dx, dy, anch) => ({
+            box:labBox(xs[i] + dx, ys[i] + dy, t, 1.9, anch, false),
+            emit:() => TL(xs[i] + dx, ys[i] + dy, t, 1.9,
+                          (anch === 'start' ? '' : 'text-anchor="' + anch + '" ') + 'font-weight="bold"')});
+          placeLab([legAt(1.3, 0.7, 'start'), legAt(-1.3, 0.7, 'end'),
+                    legAt(0, -1.6, 'middle'), legAt(0, 2.9, 'middle')]);
+        });
         /* the ref sits ON the body where nothing else can be; what it is goes
            just below, haloed against the legs and strips it crosses */
+        /* the ref sits ON the body, which is its own space - it does not move */
+        placed.push(labBox(cx, cy + 0.7, p.ref, 1.9, 'middle', false));
         late.push(TL(cx, cy + 0.7, p.ref, 1.9, 'text-anchor="middle" font-weight="bold"'));
         const what3 = p.device || p.value || '';
-        if(what3) late.push(TL(cx, cy + R + 2.2, what3, 1.5, 'text-anchor="middle"'));
+        if(what3){
+          const devAt = (dx, dy, anch) => ({
+            box:labBox(cx + dx, cy + dy, what3, 1.5, anch, false),
+            emit:() => TL(cx + dx, cy + dy, what3, 1.5, 'text-anchor="' + anch + '"')});
+          placeLab([devAt(0, R + 2.2, 'middle'), devAt(0, -R - 1.2, 'middle'),
+                    devAt(R + 1.4, 0.6, 'start'), devAt(-R - 1.4, 0.6, 'end')]);
+        }
         continue;
       }
 
@@ -6912,6 +6984,10 @@ function exportSVG(side, fit){
         half = 2.2;
         o.push(g + '<circle cx="0" cy="0" r="2.2"/>' +
                '<path d="M1.03 -1.94A2.2 2.2 0 0 1 1.03 1.94Z" fill="#ccc"/></g>');
+        /* polarity does not move. It means nothing except beside the lead it
+           belongs to, so it is registered as a landmark and other names get
+           out of ITS way. */
+        placed.push(labBox(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'middle', false));
         late.push(T(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'text-anchor="middle" font-weight="bold"'));
       }
       }
@@ -6929,9 +7005,24 @@ function exportSVG(side, fit){
       let rot = deg % 360;
       if(rot > 90) rot -= 180; else if(rot < -90) rot += 180;
       const fit = Math.max(1.2, Math.min(2.0, (2*half + 2.6) / (label.length * 0.62)));
-      late.push('<text transform="translate(' + mx + ',' + my + ') rotate(' + rot.toFixed(1) + ')" y="0.6" ' +
-                'font-size="' + fit.toFixed(2) + '" font-family="monospace" text-anchor="middle" font-weight="bold" ' +
-                'paint-order="stroke" stroke="#fff" stroke-width="0.8" stroke-linejoin="round">' + esc(label) + '</text>');
+      /* on the body first; if that is taken, step to one side of it and then
+         the other, perpendicular to the part, which is the only direction
+         that keeps the name obviously attached to THIS part */
+      const upright = Math.abs(Math.abs(rot) - 90) < 45;
+      const off = fit + 1.0;
+      const mk = (px, py) => () =>
+        '<text transform="translate(' + px.toFixed(2) + ',' + py.toFixed(2) + ') rotate(' + rot.toFixed(1) + ')" y="0.6" ' +
+        'font-size="' + fit.toFixed(2) + '" font-family="monospace" text-anchor="middle" font-weight="bold" ' +
+        'paint-order="stroke" stroke="#fff" stroke-width="0.8" stroke-linejoin="round">' + esc(label) + '</text>';
+      /* perpendicular first, then slid ALONG the body - a name that has moved
+         down its own resistor still plainly belongs to that resistor */
+      const along = half * 0.85, ax2 = Math.cos(ang), ay2 = Math.sin(ang);
+      const cands = [[0,0], [0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]].map(k => {
+        const px = mx + nx * off * k[1] + ax2 * along * k[0];
+        const py = my + ny * off * k[1] + ay2 * along * k[0];
+        return {box:labBox(px, py, label, fit, 'middle', upright), emit:mk(px, py)};
+      });
+      placeLab(cands);
     }
   }
 
