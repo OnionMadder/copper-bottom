@@ -1802,8 +1802,21 @@ function computeNets(){
   return NET;
 }
 
-const PALETTE = ['#00FFA3','#00F0FF','#D926A9','#7B2CBF','#FFB300','#FF5C7A',
-                 '#4DFF88','#5BA8FF','#C77DFF','#00D4B4','#FF8A3D','#9DFF4D'];
+/* Twelve net colours, and the second six used to be lighter reruns of the
+   first six - four of the twelve sat in one green-cyan band and two were
+   the same violet. #00FFA3 and #4DFF88 measured DE2000 5.0 apart at FULL
+   opacity, which is a hair over the just-noticeable threshold, and they are
+   nets 1 and 7. The brand six stay (mint, cyan, magenta, amber, rose, and
+   violet lightened - #7B2CBF is too dark to read as a strip on a near-black
+   board) and the tail was re-picked to fill the empty parts of the wheel:
+   lime, sky, yellow, green, orchid, orange. Worst pair is now 8.5 apart,
+   median 27.6, measured on the colour as it actually composites over the
+   board rather than on the hex.
+
+   Twelve is the ceiling, not a promise: a board with more nets than this
+   wraps around and reuses colours. Hovering a net is what identifies it. */
+const PALETTE = ['#00FFA3','#00F0FF','#D926A9','#A263FF','#FFB300','#FF5C7A',
+                 '#BAFA06','#7EC0FF','#FFF07A','#05FC30','#F6A4FE','#FF7A45'];
 const netColor = i => PALETTE[i % PALETTE.length];
 
 /* what is sitting in a given hole */
@@ -5385,13 +5398,25 @@ function render(){
   const copperBar = (x0, y0, w, h, net) => {
     const col = net ? net.color : '#555';
     const on  = net && net.id === hl;
+    const quiet = hl !== null && !on;
     const rr = Math.min(w, h) / 2;
     const bar = (f, fo, s, so, sw) =>
       o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w + '" height="' + h +
              '" rx="' + rr + '" fill="' + f +
              '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
-    if(on)             bar(col, 0.34, col, 1, 1.6);
-    else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+    /* The EDGE carries the colour, not the wash. Half this palette is red,
+       magenta or violet, and those are low-luminance hues: at 11% over a
+       near-black board the violet reached 1.06:1, which is nothing. A thin
+       stroke at near-full opacity draws the actual colour instead, so a dark
+       hue reads as well as a bright one. The lit net is then told apart by
+       the WEIGHT of that edge rather than by being the only coloured thing. */
+    /* and when one net IS lit, the others step back. Raising the idle state
+       is what makes the board readable at rest; without this it would also
+       be what stops the lit net meaning anything. Stepped back they still
+       hold 2.1:1 at the edge, so the rest of the board stays legible - it
+       just stops competing. */
+    if(on)             bar(col, 0.44, col, 1, 2.6);
+    else if(NETCOLOUR) bar(col, quiet ? 0.16 : 0.26, col, quiet ? 0.55 : 0.9, 1.2);
     else { bar('#B0703A', 0.13, '#C98B4B', 0.26, 1); bar(col, 0.06, col, 0.14, 1); }
   };
   if(isBread()){
@@ -5432,7 +5457,7 @@ function render(){
     const rim = on ? col : (NETCOLOUR ? col : '#C98B4B');
     if(on) o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
     o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="#07050D" stroke="' + rim +
-           '" stroke-opacity="' + (on ? 1 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
+           '" stroke-opacity="' + (on ? 1 : NETCOLOUR ? 0.85 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
   }
 
   /* --- ICs --- */
@@ -5940,13 +5965,14 @@ function renderSolderView(hl){
   const bBar = (x0, y0, w, h, net) => {
     const col = net ? net.color : '#555';
     const on  = net && net.id === hl;
+    const quiet = hl !== null && hl !== undefined && !on;
     const rr = Math.min(w, h) / 2;
     const bar = (f, fo, s, so, sw) =>
       o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w + '" height="' + h +
              '" rx="' + rr + '" fill="' + f +
              '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
-    if(on)             bar(col, 0.34, col, 1, 1.6);
-    else if(NETCOLOUR) bar(col, 0.11, col, 0.32, 1);
+    if(on)             bar(col, 0.44, col, 1, 2.6);
+    else if(NETCOLOUR) bar(col, quiet ? 0.16 : 0.26, col, quiet ? 0.55 : 0.9, 1.2);
     else               bar('#B0703A', 0.30, '#C98B4B', 0.55, 1);
   };
   if(isBread()){
