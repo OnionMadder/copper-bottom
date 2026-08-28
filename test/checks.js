@@ -2582,6 +2582,44 @@ S.parts[0].mount = 'vertical';
 ok(clashes() < flatClash, 'standing R1 up clears the clash its flat body caused');
 ok(clashes() === 0, 'and leaves the pair clean');
 
+/* ---- how much board is actually in use ---- */
+console.log('-- board slack --');
+S = {version:2, name:'roomy', board:{rows:10, cols:12}, cuts:[], ics:[], pads:[],
+     parts:[{id:'r1', kind:'res', ref:'R1', value:'1k', pins:[[3,2],[3,5]]},
+            {id:'r2', kind:'res', ref:'R2', value:'2k', pins:[[5,4],[5,7]]}]};
+computeNets();
+let ex = usedExtent();
+ok(ex.r0 === 3 && ex.r1 === 5 && ex.c0 === 2 && ex.c1 === 7, 'the used rectangle is rows 3-5, cols 2-7');
+ok(ex.rows === 3 && ex.cols === 6, 'which is 3 x 6 of a 10 x 12 board');
+let sl = boardSlack();
+ok(sl.top === 3 && sl.bottom === 4 && sl.left === 2 && sl.right === 4, 'blank edges counted per side');
+ok(sl.rowsFree === 7 && sl.colsFree === 6, 'seven spare rows and six spare columns');
+
+/* a cut is somebody's work, so it holds its row open */
+S.cuts = ['0,11'];
+computeNets();
+ex = usedExtent();
+ok(ex.r0 === 0 && ex.c1 === 11, 'a lone cut still counts as the board being used there');
+S.cuts = [];
+computeNets();
+
+/* trimming removes only the blank edges, and never takes a part with it */
+const t = trimBoard();
+computeNets();
+ok(t.before.rows === 10 && t.before.cols === 12, 'trim reports what it started from');
+ok(S.board.rows === 3 && S.board.cols === 6, 'the board shrinks to exactly the used rectangle');
+ok(t.took === null, 'and took nothing with it');
+ok(S.parts.length === 2, 'both parts survive');
+ok(String(S.parts[0].pins[0]) === '0,0', 'the layout is shifted flush to the corner');
+ok(String(S.parts[1].pins[1]) === '2,5', 'and its shape is unchanged');
+ok(boardSlack().any === false, 'a trimmed board has no slack left');
+
+/* an empty board occupies nothing, and trimming it is not a guess worth making */
+S = {version:2, name:'empty', board:{rows:6, cols:6}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(usedExtent() === null, 'an empty board has no used rectangle');
+ok(boardSlack() === null, 'so it reports no slack rather than all of it');
+ok(trimBoard().after.rows === 6, 'and trimming leaves it alone');
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

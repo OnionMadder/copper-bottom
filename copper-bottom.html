@@ -5501,6 +5501,80 @@ function importDiylcV1(lay){
   return {ok:true, project:P, notes:notes};
 }
 
+/* ============================================================
+   HOW MUCH BOARD IS ACTUALLY IN USE
+   Stripboard gets cut to size, and the size decides whether the finished
+   thing fits the enclosure you already bought. Nothing else here tells you
+   that you are carrying blank copper.
+
+   This measures rather than suggests. It reports the rectangle the layout
+   OCCUPIES; it does not try to re-pack anything, because re-packing a board
+   is a judgement about somebody's wiring and this file does not guess. Blank
+   edges are a fact. A tighter arrangement is an opinion.
+
+   Cuts count as occupancy. A cut is something a person decided to make, and
+   trimming a row out from under one would be deleting their work to save
+   them a hole.
+   ============================================================ */
+function usedExtent(){
+  let r0 = Infinity, r1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+  const hit = (r, c) => {
+    if(r < r0) r0 = r; if(r > r1) r1 = r;
+    if(c < c0) c0 = c; if(c > c1) c1 = c;
+  };
+  for(const p of S.parts) for(const q of p.pins) hit(q[0], q[1]);
+  for(const d of S.pads) hit(d.at[0], d.at[1]);
+  for(const ic of S.ics){
+    const e = icExtent(ic);
+    hit(e.r0, e.c0); hit(e.r1, e.c1);
+  }
+  for(const k of S.cuts){
+    const q = k.split(',');
+    hit(+q[0], +q[1]);
+  }
+  if(r1 < 0) return null;                 // an empty board occupies nothing
+  return {r0:r0, r1:r1, c0:c0, c1:c1,
+          rows:r1 - r0 + 1, cols:c1 - c0 + 1};
+}
+
+/* Blank lines at each edge, which are the only ones that can go without
+   taking something with them. A permanent breadboard is always its fourteen
+   rows, so its rows are never spare. */
+function boardSlack(){
+  const e = usedExtent();
+  if(!e) return null;
+  const rowsFree = isBread() ? 0 : e.r0 + (S.board.rows - 1 - e.r1);
+  const colsFree = e.c0 + (S.board.cols - 1 - e.c1);
+  return {top:isBread() ? 0 : e.r0, bottom:isBread() ? 0 : S.board.rows - 1 - e.r1,
+          left:e.c0, right:S.board.cols - 1 - e.c1,
+          rowsFree:rowsFree, colsFree:colsFree,
+          fitsRows:isBread() ? S.board.rows : e.rows, fitsCols:e.cols,
+          any:(rowsFree + colsFree) > 0};
+}
+
+/* Delete the blank edges, outside in. Every line removed here is empty by
+   construction, so deleteLine can never be taking anything with it - and if
+   it ever reports otherwise, that is a bug worth hearing about rather than
+   swallowing, so the trim stops. */
+function trimBoard(){
+  const before = {rows:S.board.rows, cols:S.board.cols};
+  let guard = 0, took = null;
+  while(guard++ < 400){
+    const sl = boardSlack();
+    if(!sl || !sl.any) break;
+    let r = null;
+    if(sl.top)         r = deleteLine(0, 0);
+    else if(sl.bottom) r = deleteLine(0, S.board.rows - 1);
+    else if(sl.left)   r = deleteLine(1, 0);
+    else if(sl.right)  r = deleteLine(1, S.board.cols - 1);
+    if(!r || !r.ok) break;
+    const lost = r.removed &&
+      (r.removed.parts.length + r.removed.ics.length + r.removed.pads.length);
+    if(lost){ took = r.removed; break; }
+  }
+  return {before:before, after:{rows:S.board.rows, cols:S.board.cols}, took:took};
+}
+
 /*#endregion model */
 /* ============================================================
    RENDER
@@ -7722,6 +7796,27 @@ function renderCtx(){
              'cuts the track there.</div>');
     }
   }else if(TOOL === 'line'){
+    /* what the layout actually occupies, which is the number that decides
+       whether the finished board fits the box you already bought */
+    const sl = boardSlack();
+    if(sl){
+      o.push('<label>IN USE</label><input value="' + sl.fitsRows + ' rows x ' + sl.fitsCols +
+             ' cols  of  ' + S.board.rows + ' x ' + S.board.cols + '" readonly>');
+      if(sl.any){
+        const bits = [];
+        if(sl.top) bits.push(sl.top + ' above');
+        if(sl.bottom) bits.push(sl.bottom + ' below');
+        if(sl.left) bits.push(sl.left + ' left');
+        if(sl.right) bits.push(sl.right + ' right');
+        o.push('<button id="lnTrim">trim to ' + sl.fitsRows + ' x ' + sl.fitsCols + '</button>');
+        o.push('<div class="hint">blank edges: ' + bits.join(', ') +
+               '. trimming removes only those, so nothing on the board moves relative to ' +
+               'anything else. it does not rearrange your layout - a tighter arrangement is ' +
+               'a judgement about your wiring, and this does not make those.</div>');
+      }else{
+        o.push('<div class="hint">no blank edges - the board is already cut to what it holds.</div>');
+      }
+    }
     if(!LINE){
       o.push('<div class="hint">click any hole.<br>its row and column light up, then add or remove one.</div>');
     }else{
@@ -7961,6 +8056,25 @@ function renderCtx(){
   on('lnDR', 'onclick', () => lineGo(0, -1));
   on('lnIC', 'onclick', () => lineGo(1, 1));
   on('lnDC', 'onclick', () => lineGo(1, -1));
+  on('lnTrim', 'onclick', () => {
+    pushUndo();
+    const t = trimBoard();
+    commit();
+    if(t.took){
+      /* cannot happen by construction - every line trimmed is outside the
+         used rectangle - so if it ever does, say so loudly rather than let a
+         part vanish quietly */
+      flash('trim stopped: it would have taken ' +
+            [].concat(t.took.parts, t.took.ics, t.took.pads).join(', ') + ' - ctrl+z');
+      return;
+    }
+    const dr = t.before.rows - t.after.rows, dc = t.before.cols - t.after.cols;
+    flash(dr || dc
+      ? 'trimmed ' + (dr ? dr + ' row' + (dr === 1 ? '' : 's') : '') +
+        (dr && dc ? ' and ' : '') + (dc ? dc + ' col' + (dc === 1 ? '' : 's') : '') +
+        ' - now ' + t.after.rows + ' x ' + t.after.cols + ' - ctrl+z'
+      : 'nothing to trim');
+  });
 
   /* editing the selection */
   const edit = fn => { pushUndo(); fn(); commit(); };
