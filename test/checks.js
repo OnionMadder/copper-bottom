@@ -2620,6 +2620,22 @@ computeNets();
 ok(usedExtent() === null, 'an empty board has no used rectangle');
 ok(boardSlack() === null, 'so it reports no slack rather than all of it');
 ok(trimBoard().after.rows === 6, 'and trimming leaves it alone');
+/* a layout only one row tall cannot become a one-row board: two is the floor,
+   and hitting it on one axis must not abandon the other. Found on the live
+   build, where the button offered 1 x 5 and produced 2 x 20. */
+S = {version:2, name:'thin', board:{rows:12, cols:20}, cuts:[], ics:[],
+     pads:[{id:'p1', label:'IN', at:[4,3]}],
+     parts:[{id:'r1', kind:'res', ref:'R1', value:'1k', pins:[[4,4],[4,7]]}]};
+computeNets();
+const thin = boardSlack();
+ok(thin.fitsRows === 2, 'a one-row layout is offered two rows, not one');
+ok(thin.fitsCols === 5, 'and its five columns, which are achievable');
+trimBoard();
+computeNets();
+ok(S.board.rows === 2, 'trimming stops at the two-row floor');
+ok(S.board.cols === 5, 'and still trims the columns after the rows hit it');
+ok(S.parts.length === 1 && S.pads.length === 1, 'nothing was lost getting there');
+ok(boardSlack().any === false, 'and it now reports nothing left to trim');
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

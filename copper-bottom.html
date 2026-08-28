@@ -5545,11 +5545,17 @@ function boardSlack(){
   if(!e) return null;
   const rowsFree = isBread() ? 0 : e.r0 + (S.board.rows - 1 - e.r1);
   const colsFree = e.c0 + (S.board.cols - 1 - e.c1);
+  /* A board cannot go below two of either, so a one-row layout can only ever
+     be trimmed to two rows. Reporting the raw extent made the button promise
+     a size it could not deliver - it offered "trim to 1 x 5" and produced
+     2 x 20. What is offered is what is achievable. */
+  const fitsRows = isBread() ? S.board.rows : Math.max(2, e.rows);
+  const fitsCols = Math.max(2, e.cols);
   return {top:isBread() ? 0 : e.r0, bottom:isBread() ? 0 : S.board.rows - 1 - e.r1,
           left:e.c0, right:S.board.cols - 1 - e.c1,
           rowsFree:rowsFree, colsFree:colsFree,
-          fitsRows:isBread() ? S.board.rows : e.rows, fitsCols:e.cols,
-          any:(rowsFree + colsFree) > 0};
+          fitsRows:fitsRows, fitsCols:fitsCols,
+          any:(S.board.rows > fitsRows) || (S.board.cols > fitsCols)};
 }
 
 /* Delete the blank edges, outside in. Every line removed here is empty by
@@ -5562,15 +5568,25 @@ function trimBoard(){
   while(guard++ < 400){
     const sl = boardSlack();
     if(!sl || !sl.any) break;
-    let r = null;
-    if(sl.top)         r = deleteLine(0, 0);
-    else if(sl.bottom) r = deleteLine(0, S.board.rows - 1);
-    else if(sl.left)   r = deleteLine(1, 0);
-    else if(sl.right)  r = deleteLine(1, S.board.cols - 1);
-    if(!r || !r.ok) break;
-    const lost = r.removed &&
-      (r.removed.parts.length + r.removed.ics.length + r.removed.pads.length);
-    if(lost){ took = r.removed; break; }
+    /* Every blank edge is a candidate, and a refusal on one is not the end of
+       the trim - it means THAT axis is at its floor. Taking the first refusal
+       as final left a board trimmed on its rows and untouched on its columns. */
+    const tries = [];
+    if(sl.top)    tries.push([0, 0]);
+    if(sl.bottom) tries.push([0, S.board.rows - 1]);
+    if(sl.left)   tries.push([1, 0]);
+    if(sl.right)  tries.push([1, S.board.cols - 1]);
+    let did = false;
+    for(const t of tries){
+      const r = deleteLine(t[0], t[1]);
+      if(!r.ok) continue;
+      const lost = r.removed &&
+        (r.removed.parts.length + r.removed.ics.length + r.removed.pads.length);
+      if(lost){ took = r.removed; break; }
+      did = true;
+      break;
+    }
+    if(took || !did) break;
   }
   return {before:before, after:{rows:S.board.rows, cols:S.board.cols}, took:took};
 }
