@@ -39,6 +39,23 @@
      GRAYER now rather than darker - darkness was the part that failed. */
   --gray:#B0B0B0; --soft:#B2ACC9; --dim:#AAA5B8;
 
+  /* The rest of the surface, named rather than repeated. These existed as
+     literals scattered through the sheet until light mode needed them in one
+     place; a theme is only switchable if every colour has a name. */
+  --ink:#fff; --field:#171325; --field-on:#1c1630; --chipbg:#241F36;
+  --thumb:#4B4170; --on-mint:#0B0813;
+  --bad-ink:#F2C8E4; --bad-bg:#20132A; --warn-ink:#D8C8F0; --warn-line:#A46BE8;
+  --gold:#E0B870; --gold-bg:#2c2410;
+  --hello-bg:#171225; --hello-line:#4A3C6E; --hello-ink:#D8D2E8;
+  --tip-bg:#141F1C; --tip-line:#1E4A3C; --tip-ink:#CFE9DF;
+
+  /* the board's own stylesheet - the classed text drawn on the copper.
+     icpart was #8B849E and measured 5.04:1 on the chip body, which is under
+     this project's own AAA bar and had been there since the chip got a name;
+     found while checking the light values, fixed in both. */
+  --rule-ink:#AAA5B8; --lbl-ink:#FFFFFF; --lbl-halo:#0B0813; --pin-ink:#0B0813;
+  --icpart-ink:#A9A2BC; --pin-in:#00F0FF; --pin-out:#00FFA3; --pin-pwr:#FFB300;
+
   /* Two families, and the split is not decorative. Monospace is for anything
      you would COUNT or type back - coordinates, refs, values, netlists, the
      board itself. Prose is prose: a DRC finding explaining what your board
@@ -48,6 +65,50 @@
      double-click at a bench with no network. */
   --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+}
+
+/* ---- LIGHT ----------------------------------------------------------------
+   Asked for on r/synthdiy, and the joke writes itself: a tool built by
+   somebody who cannot see well had one theme, and it was the dark one.
+
+   This is NOT a corporate-clean light theme. Same doctrine as the dark one -
+   real boundaries, saturated accents, no hairline grey on white. Every text
+   pair in here was measured against its own background and clears 7:1; the
+   accents are darkened until they do, which is why mint is a deep green
+   rather than a neon one. The tightest seats were the kbd chip (8.1:1) and
+   the active tool's label on its own tint (7.6:1).
+
+   Two rules for anyone adding to this. Define the dark value in :root and the
+   light value in BOTH blocks below, or a toggled page and a system-preference
+   page will disagree. And never add a colour straight into a rule - it will
+   be invisible in one theme and nobody will notice until it ships. */
+:root[data-theme="light"]{
+  --void:#EDE9F2; --panel:#FFFFFF; --panel2:#E4DEEE; --line:#AFA3C8; --line2:#877BA6;
+  --mint:#004E30; --cyan:#005E68; --mag:#9C006A; --violet:#5A1C99;
+  --gray:#3C3747; --soft:#413B52; --dim:#454054;
+  --ink:#14101F; --field:#FFFFFF; --field-on:#F1EBFD; --chipbg:#E4DEEE;
+  --thumb:#A196BC; --on-mint:#FFFFFF;
+  --bad-ink:#8A0040; --bad-bg:#FAE6EF; --warn-ink:#402360; --warn-line:#7238BE;
+  --gold:#5F4300; --gold-bg:#FAF0D6;
+  --hello-bg:#F1EDFA; --hello-line:#B3A3DA; --hello-ink:#271F3C;
+  --tip-bg:#E3F3EC; --tip-line:#6FB59A; --tip-ink:#0F3527;
+  --rule-ink:#454054; --lbl-ink:#14101F; --lbl-halo:#FFFFFF; --pin-ink:#0B0813;
+  --icpart-ink:#454054; --pin-in:#005E68; --pin-out:#005636; --pin-pwr:#5F4300;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --void:#EDE9F2; --panel:#FFFFFF; --panel2:#E4DEEE; --line:#AFA3C8; --line2:#877BA6;
+    --mint:#004E30; --cyan:#005E68; --mag:#9C006A; --violet:#5A1C99;
+    --gray:#3C3747; --soft:#413B52; --dim:#454054;
+    --ink:#14101F; --field:#FFFFFF; --field-on:#F1EBFD; --chipbg:#E4DEEE;
+    --thumb:#A196BC; --on-mint:#FFFFFF;
+    --bad-ink:#8A0040; --bad-bg:#FAE6EF; --warn-ink:#402360; --warn-line:#7238BE;
+    --gold:#5F4300; --gold-bg:#FAF0D6;
+    --hello-bg:#F1EDFA; --hello-line:#B3A3DA; --hello-ink:#271F3C;
+    --tip-bg:#E3F3EC; --tip-line:#6FB59A; --tip-ink:#0F3527;
+    --rule-ink:#454054; --lbl-ink:#14101F; --lbl-halo:#FFFFFF; --pin-ink:#0B0813;
+    --icpart-ink:#454054; --pin-in:#005E68; --pin-out:#005636; --pin-pwr:#5F4300;
+  }
 }
 *{box-sizing:border-box}
 
@@ -62,11 +123,11 @@
   background:var(--line2); border-radius:7px;
   border:3px solid transparent; background-clip:padding-box;
 }
-::-webkit-scrollbar-thumb:hover{background:#4B4170; background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--thumb); background-clip:padding-box}
 ::-webkit-scrollbar-corner{background:transparent}
 html,body{height:100%}
 body{
-  margin:0; background:var(--void); color:#fff;
+  margin:0; background:var(--void); color:var(--ink);
   font:14px/1.55 var(--ui);
   display:flex; flex-direction:column; overflow:hidden;
 }
@@ -82,13 +143,13 @@ body{
 .hdr .sp{flex:1 1 auto; min-width:8px}
 .hdr .grp{display:flex; align-items:center; gap:6px}
 .hdr .grp + .grp{margin-left:4px; padding-left:14px; border-left:1px solid var(--line)}
-.hdr .danger:hover{border-color:var(--mag); color:#F2C8E4; background:#20132A}
-.brand{font:700 12px/1 var(--mono); letter-spacing:.24em; color:#fff}
+.hdr .danger:hover{border-color:var(--mag); color:var(--bad-ink); background:var(--bad-bg)}
+.brand{font:700 12px/1 var(--mono); letter-spacing:.24em; color:var(--ink)}
 .brand span{color:var(--mint)}
 .hdr .sp{flex:1}
 /* fields hold data, so they are mono; buttons are labels, so they are not */
 input,select,textarea,button{
-  color:#fff; background:#171325; font-size:13px;
+  color:var(--ink); background:var(--field); font-size:13px;
   border:1px solid var(--line2); border-radius:5px; padding:4px 9px;
 }
 input,select,textarea{font-family:var(--mono)}
@@ -97,7 +158,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--cyan); border-co
 button:hover{border-color:var(--soft); background:var(--panel2)}
 button:focus-visible{outline:2px solid var(--mint); outline-offset:1px}
 button[disabled]{opacity:.38; cursor:default}
-button[disabled]:hover{border-color:var(--line2); background:#171325}
+button[disabled]:hover{border-color:var(--line2); background:var(--field)}
 .main{flex:1; display:flex; min-height:0; position:relative}
 
 /* ---- tool rail ---- */
@@ -116,8 +177,8 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
   padding:6px 8px; margin-bottom:2px; background:transparent; border:1px solid transparent;
   color:var(--gray); border-radius:5px; font-size:14px;
 }
-.tool:hover{background:#171325; color:#fff; border-color:var(--line2)}
-.tool.on{background:#1c1630; border-color:var(--mint); color:var(--mint)}
+.tool:hover{background:var(--field); color:var(--ink); border-color:var(--line2)}
+.tool.on{background:var(--field-on); border-color:var(--mint); color:var(--mint)}
 /* a tool the current board kind has no use for - still clickable, and the
    click explains itself, but the eye should not reach for it */
 .tool.dead{opacity:.4}
@@ -133,10 +194,10 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .tool kbd{order:2}
 .tool .tbadge{order:3; flex:0 0 auto; display:none; min-width:15px; padding:0 4px; height:15px; line-height:15px; text-align:center; font-family:var(--mono); font-size:10.5px; border-radius:8px; background:#2c2410; color:#E0B870; border:1px solid #7a6636}
 .tool .tbadge.show{display:block}
-.tool.has-fly:not(.on){color:#E0B870}
+.tool.has-fly:not(.on){color:var(--gold)}
 .tool kbd{
   font:11.5px/1.4 var(--mono); min-width:18px; text-align:center; padding:1px 4px; border-radius:3px;
-  background:#241F36; color:var(--soft); border:1px solid var(--line2);
+  background:var(--chipbg); color:var(--soft); border:1px solid var(--line2);
 }
 .tool.on kbd{color:var(--mint); border-color:var(--mint)}
 .ctx{border-top:1px solid var(--line); padding:10px; display:flex; flex-direction:column; gap:7px}
@@ -146,11 +207,11 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 .ctx .chk input{width:auto}
 .ctx .flyrow{display:flex; gap:5px; flex-wrap:wrap}
 .ctx .flyleg{flex:0 0 auto; width:auto; min-width:30px; padding:3px 9px; font-family:var(--mono); font-size:12px; border:1px solid var(--line2); border-radius:5px; background:var(--panel); color:var(--gray); cursor:pointer}
-.ctx .flyleg:hover{border-color:var(--soft); color:#fff}
-.ctx .flyleg.on{border-color:#E0B870; color:#E0B870; background:#2c2410}
+.ctx .flyleg:hover{border-color:var(--soft); color:var(--ink)}
+.ctx .flyleg.on{border-color:var(--gold); color:var(--gold); background:var(--gold-bg)}
 .ctx .bentleg{flex:0 0 auto; width:auto; min-width:30px; padding:3px 9px; font-family:var(--mono); font-size:12px; border:1px solid var(--line2); border-radius:5px; background:var(--panel); color:var(--gray); cursor:pointer}
-.ctx .bentleg:hover{border-color:var(--soft); color:#fff}
-.ctx .bentleg.on{border-color:var(--soft); color:#C9C3DA; background:#221E30; text-decoration:line-through}
+.ctx .bentleg:hover{border-color:var(--soft); color:var(--ink)}
+.ctx .bentleg.on{border-color:var(--soft); color:var(--ink); background:var(--panel2); text-decoration:line-through}
 .hint{color:var(--soft); font-size:12.5px; line-height:1.6; padding:0 2px}
 
 /* ---- reference pane ---- */
@@ -199,11 +260,11 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:9px; text-align:center; padding:0 24px;
 }
-.startup .t{font-size:15px; font-weight:600; color:#fff}
+.startup .t{font-size:15px; font-weight:600; color:var(--ink)}
 .startup p{margin:0; color:var(--soft); font-size:12.5px; line-height:1.65; max-width:46ch}
 .startup b{color:var(--gray); font-weight:600}
 .startup kbd{
-  font:11px/1.4 var(--mono); background:#241F36; color:var(--soft);
+  font:11px/1.4 var(--mono); background:var(--chipbg); color:var(--soft);
   border:1px solid var(--line2); border-radius:3px; padding:1px 5px;
 }
 .ovbar[hidden]{display:none}
@@ -240,8 +301,8 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
    is worse than no banner */
 .thanks{
   display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; flex:0 0 auto;
-  padding:9px 14px; background:#141F1C; border-bottom:1px solid #1E4A3C;
-  color:#CFE9DF; font-size:13px; line-height:1.5;
+  padding:9px 14px; background:var(--tip-bg); border-bottom:1px solid var(--tip-line);
+  color:var(--tip-ink); font-size:13px; line-height:1.5;
 }
 .thanks .msg{flex:1 1 auto; min-width:0}
 .thanks b{color:var(--mint); font-weight:600}
@@ -253,7 +314,7 @@ button[disabled]:hover{border-color:var(--line2); background:#171325}
 }
 /* the first-visit welcome wears the violet, so it reads as the app talking
    rather than the thank-you's green */
-.hello{background:#171225; border-bottom-color:#4A3C6E; color:#D8D2E8}
+.hello{background:var(--hello-bg); border-bottom-color:var(--hello-line); color:var(--hello-ink)}
 .hello b{color:var(--mint)}
 @media (max-width:900px){ .hello{font-size:12px; padding:7px 10px} }
 
@@ -291,7 +352,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     white-space:nowrap;
   }
   .drawertab[hidden]{display:none}
-  .drawertab.bad{color:#F2C8E4; border-color:var(--mag)}
+  .drawertab.bad{color:var(--bad-ink); border-color:var(--mag)}
 }
 /* The right-hand column: what you are editing, then what is wrong with it.
    A wrapper rather than one panel, because below 900px these two want
@@ -312,9 +373,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .readout{padding:11px 13px; border-bottom:1px solid var(--line); min-height:96px; font-size:13px}
 .readout .big{font:700 14px/1.3 var(--mono); letter-spacing:.04em}
 .readout .row{color:var(--gray); margin-top:3px}
-.readout .row b{color:#fff; font-weight:400}
+.readout .row b{color:var(--ink); font-weight:400}
 .readout .why{
-  color:#C9C3DC; margin-top:7px; padding-top:6px; line-height:1.55;
+  color:var(--soft); margin-top:7px; padding-top:6px; line-height:1.55;
   border-top:1px dashed var(--line2);
 }
 .readout .why + .why{border-top:0; margin-top:4px; padding-top:0}
@@ -330,8 +391,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    border-left:3px solid transparent; font-size:13.5px; line-height:1.5}
 .f .msg{flex:1 1 auto; min-width:0}
 .f:hover{background:var(--panel2)}
-.f.error{border-left-color:var(--mag); color:#F2C8E4}
-.f.warn{border-left-color:#A46BE8; color:#D8C8F0}
+.f.error{border-left-color:var(--mag); color:var(--bad-ink)}
+.f.warn{border-left-color:var(--warn-line); color:var(--warn-ink)}
 .f .loc{color:var(--dim); font-family:var(--mono); font-size:11px}
 .checkstoggle{display:none}
 @media (max-width:900px){ .checkstoggle{display:inline-block} }
@@ -340,7 +401,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   padding-left:9px; border-left:1px solid var(--line2);
 }
 .f .fix{padding:1px 7px; font-size:11px; border-color:var(--mint); color:var(--mint); background:transparent}
-.f .fix:hover{background:var(--mint); color:#0B0813}
+.f .fix:hover{background:var(--mint); color:var(--on-mint)}
 .clean{padding:11px 13px; color:var(--mint); font-size:13.5px; line-height:1.6}
 .net{
   display:flex; align-items:center; gap:8px; padding:5px 12px; cursor:pointer;
@@ -348,7 +409,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 }
 .net:hover,.net.on{background:var(--panel2); border-left-color:currentColor}
 .sw{width:10px; height:10px; border-radius:2px; flex:0 0 auto}
-.net .nm{flex:1; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.net .nm{flex:1; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .net .ct{color:var(--dim); font-size:11px}
 
 /* ---- footer ---- */
@@ -452,7 +513,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .cropr .sw{left:-8px; bottom:-8px; cursor:nesw-resize}
 .croptip{width:260px; flex:0 0 auto; padding:14px 16px; border-left:1px solid var(--line);
   overflow-y:auto; font-size:13px; line-height:1.55; color:var(--gray)}
-.croptip b{color:#fff}
+.croptip b{color:var(--ink)}
 .croptip p{margin:6px 0 10px}
 .cropdemo{width:100%; height:auto; display:block; margin:4px 0 6px}
 @media (max-width:900px){
@@ -461,7 +522,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 }
 
 /* ---- build sheet: a document, so it is white whatever the app is ---- */
-.sheet{position:fixed; inset:0; z-index:50; background:#0B0813; display:flex; flex-direction:column}
+.sheet{position:fixed; inset:0; z-index:50; background:var(--void); display:flex; flex-direction:column}
 .sheet[hidden]{display:none}
 .sheetbar{
   display:flex; align-items:center; gap:8px; padding:0 12px; height:38px; flex:0 0 auto;
@@ -471,7 +532,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .sheetbar .sp{flex:1}
 .sheetbar .barck{display:flex; align-items:center; gap:5px; font-size:11.5px;
   color:var(--soft); cursor:pointer; white-space:nowrap}
-.sheetbar .barck input{accent-color:#00FFA3}
+.sheetbar .barck input{accent-color:var(--mint)}
 .sheetdoc{
   flex:1; overflow:auto; background:#fff; color:#111; padding:16mm 14mm 24mm;
   font:12px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
@@ -529,7 +590,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .nlnote{color:var(--soft); font-size:11.5px}
 .walkbody{flex:1; overflow:auto; padding:18px 22px; background:var(--void)}
 .walkbody pre{
-  margin:0; white-space:pre-wrap; color:#CFC8E0;
+  margin:0; white-space:pre-wrap; color:var(--soft);
   font:12px/1.65 ui-monospace,"Cascadia Mono","Consolas",monospace;
 }
 /* the breadboard picture sits above its steps, on the same dark page */
@@ -538,18 +599,18 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .nlbody{flex:1; display:flex; min-height:0}
 .nlleft{width:46%; min-width:280px; display:flex; border-right:1px solid var(--line)}
 .nlleft textarea{
-  flex:1; resize:none; border:0; outline:0; background:#0E0B18; color:#D8D4E4;
+  flex:1; resize:none; border:0; outline:0; background:var(--field); color:var(--ink);
   font:12px/1.7 ui-monospace,"Cascadia Mono",Consolas,monospace; padding:12px 14px;
 }
 .nlright{flex:1; overflow-y:auto; padding:12px 14px; font-size:11.5px; line-height:1.6}
 .nlright h4{margin:0 0 7px; font-size:11px; letter-spacing:.03em; color:var(--soft); font-weight:600}
 .nlright .grp{margin-bottom:16px}
 .nlok{color:var(--mint)}
-.nlbad{color:#F2C8E4; border-left:3px solid var(--mag); padding:4px 0 4px 8px; margin-bottom:5px}
+.nlbad{color:var(--bad-ink); border-left:3px solid var(--mag); padding:4px 0 4px 8px; margin-bottom:5px}
 .nldim{color:var(--dim)}
 .nlchip{
   display:inline-block; padding:1px 6px; margin:0 4px 4px 0; border-radius:4px;
-  background:#171325; border:1px solid var(--line2); color:var(--gray);
+  background:var(--field); border:1px solid var(--line2); color:var(--gray);
   font-family:var(--mono); font-size:11px;
 }
 
@@ -771,8 +832,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
         <rect x="124" y="2" width="106" height="86" rx="3" fill="#22203A" stroke="#4A4661"/>
         <rect x="129" y="7" width="96" height="76" rx="2" fill="#D9C09A" stroke="#8A7357"/>
         <g fill="#8A7357"><circle cx="141" cy="20" r="2.4"/><circle cx="159" cy="20" r="2.4"/><circle cx="177" cy="20" r="2.4"/><circle cx="195" cy="20" r="2.4"/><circle cx="213" cy="20" r="2.4"/><circle cx="141" cy="38" r="2.4"/><circle cx="159" cy="38" r="2.4"/><circle cx="177" cy="38" r="2.4"/><circle cx="195" cy="38" r="2.4"/><circle cx="213" cy="38" r="2.4"/><circle cx="141" cy="56" r="2.4"/><circle cx="159" cy="56" r="2.4"/><circle cx="177" cy="56" r="2.4"/><circle cx="195" cy="56" r="2.4"/><circle cx="213" cy="56" r="2.4"/><circle cx="141" cy="72" r="2.4"/><circle cx="159" cy="72" r="2.4"/><circle cx="177" cy="72" r="2.4"/><circle cx="195" cy="72" r="2.4"/><circle cx="213" cy="72" r="2.4"/></g>
-        <rect x="127" y="5" width="100" height="80" fill="none" stroke="#00FFA3" stroke-width="1.6" stroke-dasharray="5 3"/>
-        <text x="177" y="102" text-anchor="middle" font-size="10" fill="#00FFA3">tight - fit lands close</text>
+        <rect x="127" y="5" width="100" height="80" fill="none" stroke="var(--mint)" stroke-width="1.6" stroke-dasharray="5 3"/>
+        <text x="177" y="102" text-anchor="middle" font-size="10" fill="var(--mint)">tight - fit lands close</text>
       </svg>
       <p>Only the traced copy is cropped. The full picture stays in the reference
         pane, knobs and all, so you can still read what the crop cut away.</p>
@@ -844,6 +905,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
+  <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
   <div class="sp"></div>
   <span id="stat"></span>
   <span id="netbadge"></span>
@@ -1802,6 +1864,79 @@ function computeNets(){
   return NET;
 }
 
+/* ---- theme ---------------------------------------------------------------
+   The DOM chrome themes itself with CSS custom properties. The BOARD cannot:
+   its colours are SVG presentation attributes, and var() inside a presentation
+   attribute is a newer thing than this file is willing to lean on - it has to
+   open by double-click at a bench, in whatever browser is on that machine. So
+   the board reads its colours from the table below, and render() runs again on
+   a theme change the way it already does for everything else. Opacities live
+   here too, which a CSS variable in an attribute could never have carried.
+
+   Anything CLASSED in the board's own <style> block DOES use var(), because
+   that is a real stylesheet and entirely safe.
+
+   Add a colour to one theme and you must add it to the other. A literal left
+   in a drawing call is invisible in exactly one theme, which is the kind of
+   bug nobody sees until somebody else is holding it. */
+const THEME_KEY = 'stripboard.theme';
+let THEME = 'auto';                        // auto | light | dark
+function themeNow(){
+  if(THEME === 'light' || THEME === 'dark') return THEME;
+  /* the model region runs headless in the test harness, where there is no
+     window and so no preference to read - it answers dark, which is what the
+     suite has always measured */
+  if(typeof window === 'undefined' || !window.matchMedia) return 'dark';
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+const BOARD_INK = {
+  dark: {
+    board:'#0E0B18', boardEdge:'#241F36', hole:'#07050D', holeRim:'#C98B4B',
+    copper:'#B0703A', copperEdge:'#C98B4B', copperFill:0.13, copperStroke:0.26,
+    backFill:0.30, backStroke:0.55,
+    chip:'#191426', chipFill:0.94, chipEdge:'#5B5280', pin:'#8B849E',
+    halo:'#07050D', lead:'#A9A3BC', link:'#F4F2FA', bent:'#6B6580', gold:'#E0B870',
+    accent:'#00FFA3', pink:'#FF3DBE', markFill:'#050409', edge:'#0B0813', nonet:'#555',
+    cut:'#FF6FD0', hint:'#00F0FF', mag:'#D926A9', ghost:'#8B849E', padMark:'#FFB300',
+    railPlus:'#FF5C7A', railMinus:'#5BA8FF', board2:'#100C1B',
+    tintDefault:'#FFFFFF', tintLed:'#D9D2B4', tintRes:'#EBD3A6', tintCer:'#E8C89A',
+    tintCapBox:'#F2A8A8', tintCapDisc:'#A8C6F2', tintDiode:'#CFC8E0',
+    tintSwitch:'#C9C3DA', tintEcap:'#DAD6E4',
+    /* neon on near-black; see the palette note below */
+    nets:['#00FFA3','#00F0FF','#D926A9','#A263FF','#FFB300','#FF5C7A',
+          '#BAFA06','#7EC0FF','#FFF07A','#05FC30','#F6A4FE','#FF7A45']
+  },
+  light: {
+    /* the light board is white and its copper is the printed sheet's copper -
+       that renderer had already solved "a stripboard on paper", so this one
+       does not get to invent a second answer */
+    board:'#FFFFFF', boardEdge:'#AFA3C8', hole:'#FFFFFF', holeRim:'#8A7357',
+    copper:'#E9DCC6', copperEdge:'#C09A62', copperFill:0.85, copperStroke:1,
+    backFill:0.95, backStroke:1,
+    chip:'#FFFFFF', chipFill:1, chipEdge:'#6B6280', pin:'#9E97B0',
+    halo:'#FFFFFF', lead:'#3E3850', link:'#1C1730', bent:'#6B6580', gold:'#8A6A18',
+    accent:'#005636', pink:'#B0007A', markFill:'#FFFFFF', edge:'#EDE9F2', nonet:'#8B849E',
+    cut:'#C4007F', hint:'#005E68', mag:'#9C006A', ghost:'#4B4560', padMark:'#7A5200',
+    railPlus:'#C40033', railMinus:'#0A4FA8', board2:'#FFFFFF'
+    ,
+    tintDefault:'#14101F', tintLed:'#54430C', tintRes:'#5F4110', tintCer:'#5E4116',
+    tintCapBox:'#7C1A12', tintCapDisc:'#123A72', tintDiode:'#332A4E',
+    tintSwitch:'#2E2840', tintEcap:'#332F4A',
+    /* Re-derived against WHITE, not darkened by eye. Same objective as the
+       dark set - maximise the smallest DE2000 gap, measured both as the idle
+       wash and as the full-opacity edge - plus two constraints the dark board
+       never needed: every colour clears 3.4:1 against the paper, and none may
+       come within DE 22 of bare copper, or a net would read as an unpowered
+       strip. Worst pair 8.2 as a wash, 11.6 as an edge; nearest approach to
+       copper 22.1. Hue-matching the dark set was tried and abandoned: holding
+       the hues cost the worst pair almost half its separation, and nobody
+       remembers which net was the green one across a theme switch. */
+    nets:['#008655','#FE0067','#0046FB','#942400','#A575C7','#9400FA',
+          '#809100','#0190DA','#00A000','#FC2F32','#6783D5','#DA4BD9']
+  }
+};
+const C = k => BOARD_INK[themeNow()][k];
+
 /* Twelve net colours, and the second six used to be lighter reruns of the
    first six - four of the twelve sat in one green-cyan band and two were
    the same violet. #00FFA3 and #4DFF88 measured DE2000 5.0 apart at FULL
@@ -1815,9 +1950,7 @@ function computeNets(){
 
    Twelve is the ceiling, not a promise: a board with more nets than this
    wraps around and reuses colours. Hovering a net is what identifies it. */
-const PALETTE = ['#00FFA3','#00F0FF','#D926A9','#A263FF','#FFB300','#FF5C7A',
-                 '#BAFA06','#7EC0FF','#FFF07A','#05FC30','#F6A4FE','#FF7A45'];
-const netColor = i => PALETTE[i % PALETTE.length];
+const netColor = i => { const p = C('nets'); return p[i % p.length]; };
 
 /* what is sitting in a given hole */
 function occupants(r, c){
@@ -5367,7 +5500,7 @@ function render(){
 
   o.push('<svg id="board" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
          '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
-  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="#0E0B18" stroke="#241F36"/>');
+  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board') + '" stroke="' + C('boardEdge') + '"/>');
 
   /* --- the overlay picture, first thing after the board itself so that
      every hole, strip, cut and part is drawn ON it. It carries no pointer
@@ -5396,7 +5529,7 @@ function render(){
      eye lands on. The lit net always goes bright, and NETCOLOUR mode
      paints every net at once. --- */
   const copperBar = (x0, y0, w, h, net) => {
-    const col = net ? net.color : '#555';
+    const col = net ? net.color : C('nonet');
     const on  = net && net.id === hl;
     const quiet = hl !== null && !on;
     const rr = Math.min(w, h) / 2;
@@ -5417,19 +5550,19 @@ function render(){
        just stops competing. */
     if(on)             bar(col, 0.44, col, 1, 2.6);
     else if(NETCOLOUR) bar(col, quiet ? 0.16 : 0.26, col, quiet ? 0.55 : 0.9, 1.2);
-    else { bar('#B0703A', 0.13, '#C98B4B', 0.26, 1); bar(col, 0.06, col, 0.14, 1); }
+    else { bar(C('copper'), C('copperFill'), C('copperEdge'), C('copperStroke'), 1); bar(col, 0.06, col, 0.14, 1); }
   };
   if(isBread()){
     /* the channel, so the anatomy reads at a glance */
     o.push('<rect x="' + (X(0) - PITCH * 0.5) + '" y="' + (Y(6) + PITCH * 0.36) + '" width="' +
            ((cols - 1) * PITCH + PITCH) + '" height="' + (PITCH * 0.28) +
-           '" fill="#07050D" stroke="#241F36" stroke-width="1"/>');
+           '" fill="' + C('hole') + '" stroke="' + C('boardEdge') + '" stroke-width="1"/>');
     for(const r of [0, 1, 12, 13]){
       copperBar(X(0) - PITCH * 0.44, Y(r) - 9.5, (cols - 1) * PITCH + PITCH * 0.88, 19, NET.netAt(r, 0));
       /* the polarity line a real board prints beside its rail */
       o.push('<rect x="' + (X(0) - PITCH * 0.44) + '" y="' + (Y(r) + (r < 2 ? -14 : 11)) + '" width="' +
              ((cols - 1) * PITCH + PITCH * 0.88) + '" height="2.4" rx="1.2" fill="' +
-             (BREAD_LABEL[r] === '+' ? '#FF5C7A' : '#5BA8FF') + '" fill-opacity="0.8"/>');
+             (BREAD_LABEL[r] === '+' ? C('railPlus') : C('railMinus')) + '" fill-opacity="0.8"/>');
     }
     for(const band of [[2, 6], [7, 11]])
       for(let c = 0; c < cols; c++)
@@ -5452,11 +5585,11 @@ function render(){
   for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
     if(cutSet.has(K(r,c))) continue;
     const net = NET.netAt(r, c);
-    const col = net ? net.color : '#555';
+    const col = net ? net.color : C('nonet');
     const on  = net && net.id === hl;
-    const rim = on ? col : (NETCOLOUR ? col : '#C98B4B');
+    const rim = on ? col : (NETCOLOUR ? col : C('holeRim'));
     if(on) o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
-    o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="#07050D" stroke="' + rim +
+    o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="' + C('hole') + '" stroke="' + rim +
            '" stroke-opacity="' + (on ? 1 : NETCOLOUR ? 0.85 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
   }
 
@@ -5467,20 +5600,20 @@ function render(){
     const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
     if(SEL && SEL.type === 'ic' && SEL.id === ic.id)
       o.push('<rect x="' + (x0-5) + '" y="' + (y0-5) + '" width="' + (x1-x0+10) + '" height="' + (y1-y0+10) +
-             '" rx="8" fill="#00FFA3" fill-opacity="0.16" stroke="#00FFA3" stroke-width="1.6"/>');
+             '" rx="8" fill="' + C('accent') + '" fill-opacity="0.16" stroke="' + C('accent') + '" stroke-width="1.6"/>');
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
-           '" rx="4" fill="#191426" fill-opacity="0.94" stroke="#5B5280" stroke-width="1.2"/>');
+           '" rx="4" fill="' + C('chip') + '" fill-opacity="' + C('chipFill') + '" stroke="' + C('chipEdge') + '" stroke-width="1.2"/>');
     if(!custom)
-      o.push('<path d="M' + ((x0+x1)/2 - 8) + ' ' + y0 + 'a8 8 0 0 0 16 0" fill="#0E0B18" stroke="#5B5280" stroke-width="1.2"/>');
+      o.push('<path d="M' + ((x0+x1)/2 - 8) + ' ' + y0 + 'a8 8 0 0 0 16 0" fill="' + C('board') + '" stroke="' + C('chipEdge') + '" stroke-width="1.2"/>');
     o.push('<text class="icref" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 - 3) + '">' + esc(ic.ref) + '</text>');
     o.push('<text class="icpart" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 + 11) + '">' + esc(icShown(ic)) + '</text>');
     for(let i = 1; i <= ic.pins; i++){
       const p = pinPos(ic, i), x = X(p[1]), y = Y(p[0]);
       const net = NET.netAt(p[0], p[1]);
       const on = net && net.id === hl;
-      o.push('<rect x="' + (x-7) + '" y="' + (y-6) + '" width="14" height="12" rx="' + (i === 1 ? 0 : 2) + '" fill="#8B849E" ' +
+      o.push('<rect x="' + (x-7) + '" y="' + (y-6) + '" width="14" height="12" rx="' + (i === 1 ? 0 : 2) + '" fill="' + C('pin') + '" ' +
              (on ? 'stroke="' + net.color + '" stroke-width="1.6"' : '') + '/>');
-      o.push('<circle cx="' + x + '" cy="' + y + '" r="3" fill="#07050D"/>');
+      o.push('<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + C('hole') + '"/>');
       /* number sits on whichever side faces the body, which works for a
          reshaped package as well as a plain DIP */
       const inward = x <= (x0 + x1) / 2 ? 13 : -13;
@@ -5516,21 +5649,21 @@ function render(){
       const mx2 = fx + (hx - fx) * 0.45, my2 = fy + (hy - fy) * 0.45;
       let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
       const tx = mx2 - dy * PITCH * 0.4, ty = my2 + dx * PITCH * 0.4;
-      return wire(fx, fy, mx2, my2, '#07050D', 4.2) + wire(fx, fy, mx2, my2, '#6B6580', 1.5) +
-        wire(mx2, my2, tx, ty, '#07050D', 4.2) + wire(mx2, my2, tx, ty, '#6B6580', 1.5) +
-        '<circle cx="' + tx + '" cy="' + ty + '" r="2" fill="#6B6580"/>';
+      return wire(fx, fy, mx2, my2, C('halo'), 4.2) + wire(fx, fy, mx2, my2, C('bent'), 1.5) +
+        wire(mx2, my2, tx, ty, C('halo'), 4.2) + wire(mx2, my2, tx, ty, C('bent'), 1.5) +
+        '<circle cx="' + tx + '" cy="' + ty + '" r="2" fill="' + C('bent') + '"/>';
     };
     const flyTerm = (hx, hy, fx, fy) => {
       let dx = hx - fx, dy = hy - fy; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
       const ex = hx + dx * PITCH * 0.72, ey = hy + dy * PITCH * 0.72;
-      return wire(hx, hy, ex, ey, '#07050D', 4.4) + wire(hx, hy, ex, ey, '#E0B870', 1.7) +
-        '<circle cx="' + hx + '" cy="' + hy + '" r="4.1" fill="none" stroke="#E0B870" stroke-width="1.7"/>' +
-        '<circle cx="' + ex + '" cy="' + ey + '" r="2.2" fill="#E0B870" stroke="#07050D" stroke-width="0.8"/>';
+      return wire(hx, hy, ex, ey, C('halo'), 4.4) + wire(hx, hy, ex, ey, C('gold'), 1.7) +
+        '<circle cx="' + hx + '" cy="' + hy + '" r="4.1" fill="none" stroke="' + C('gold') + '" stroke-width="1.7"/>' +
+        '<circle cx="' + ex + '" cy="' + ey + '" r="2.2" fill="' + C('gold') + '" stroke="' + C('halo') + '" stroke-width="0.8"/>';
     };
 
     if(sel){
       const d = xs.map((x, i) => (i ? 'L' : 'M') + x + ' ' + ys[i]).join('');
-      o.push('<path d="' + d + '" fill="none" stroke="#00FFA3" stroke-width="' + (PITCH*0.66) +
+      o.push('<path d="' + d + '" fill="none" stroke="' + C('accent') + '" stroke-width="' + (PITCH*0.66) +
              '" stroke-opacity="0.25" stroke-linecap="round" stroke-linejoin="round"/>');
     }
 
@@ -5543,8 +5676,8 @@ function render(){
       for(let i = 0; i < xs.length; i++){
         if(legBent(p, i)){ o.push(bentStub(xs[i], ys[i], cx, cy)); continue; }
         if(legFlying(p, i)){ o.push(flyTerm(xs[i], ys[i], cx, cy)); continue; }
-        o.push(wire(xs[i], ys[i], cx, cy, '#07050D', 4.6));
-        o.push(wire(xs[i], ys[i], cx, cy, '#A9A3BC', 1.5));
+        o.push(wire(xs[i], ys[i], cx, cy, C('halo'), 4.6));
+        o.push(wire(xs[i], ys[i], cx, cy, C('lead'), 1.5));
       }
       if(!allFly3){
       const g3 = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a3*180/Math.PI) +
@@ -5591,7 +5724,7 @@ function render(){
                     esc(ll[i] || '') + '</text>');
       });
       const name = p.device || p.value || '';
-      labels.push('<text class="lbl" style="fill:#CFC8E0" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
+      labels.push('<text class="lbl" style="fill:' + C('tintDiode') + '" x="' + cx + '" y="' + (cy - TR*1.9) + '">' +
                   esc(p.ref + (name ? ' ' + name : '')) + '</text>');
       continue;
     }
@@ -5603,19 +5736,19 @@ function render(){
     const nx = Math.sin(ang), ny = -Math.cos(ang);
 
     if(p.kind === 'link'){
-      o.push(wire(ax, ay, bx, by, '#07050D', 6.6));
-      o.push(wire(ax, ay, bx, by, '#F4F2FA', 3.4));
+      o.push(wire(ax, ay, bx, by, C('halo'), 6.6));
+      o.push(wire(ax, ay, bx, by, C('link'), 3.4));
       continue;
     }
     const flyA = legFlying(p, 0), flyB = legFlying(p, 1);
     const allFly2 = flyA && flyB;
-    const lead2 = (x, y) => { o.push(wire(x, y, mx, my, '#07050D', 4.6)); o.push(wire(x, y, mx, my, '#A9A3BC', 1.5)); };
+    const lead2 = (x, y) => { o.push(wire(x, y, mx, my, C('halo'), 4.6)); o.push(wire(x, y, mx, my, C('lead'), 1.5)); };
     const bentA = legBent(p, 0), bentB = legBent(p, 1);
     if(bentA) o.push(bentStub(ax, ay, mx, my)); else if(flyA) o.push(flyTerm(ax, ay, mx, my)); else lead2(ax, ay);
     if(bentB) o.push(bentStub(bx, by, mx, my)); else if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
 
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
-    let tint = '#fff', off = 18, half = 12;
+    let tint = C('tintDefault'), off = 18, half = 12;
 
     const dev = devOf(p);
 
@@ -5624,7 +5757,7 @@ function render(){
       /* face-on: a light window with the serpentine track across it. No band,
          no polarity - the whole point of filing this under `res`. */
       const LR = PITCH * footprintOf(p).dia / 2;
-      tint = '#D9D2B4'; off = LR + 12; half = LR;
+      tint = C('tintLed'); off = LR + 12; half = LR;
       o.push(g +
         '<circle cx="0" cy="0" r="' + LR + '" fill="#CFC7A6" stroke="#5A5340" stroke-width="1.3"/>' +
         '<path d="M' + (-LR*0.62) + ' ' + (-LR*0.5) + 'q' + (LR*0.31) + ' ' + (LR*0.5) + ' 0 ' + (LR) +
@@ -5659,7 +5792,7 @@ function render(){
         '</g>');
 
     }else if(p.kind === 'res'){
-      tint = '#EBD3A6'; off = RH/2 + 13; half = RW/2;
+      tint = C('tintRes'); off = RH/2 + 13; half = RW/2;
       o.push(g +
         '<rect x="' + (-RW/2) + '" y="' + (-RH/2) + '" width="' + RW + '" height="' + RH +
         '" rx="' + (RH*0.42) + '" fill="#C8A97E" stroke="#141020" stroke-width="1.1"/>' +
@@ -5676,7 +5809,7 @@ function render(){
            the full 5mm face and a 10n blob outweighed the chip beside it
            (her words: huge and not a disc at all). */
         const CR2 = PITCH * cfp.dia / 2, CRY = CR2 * 0.72;
-        tint = '#E8C89A'; off = CRY + 12; half = CR2;
+        tint = C('tintCer'); off = CRY + 12; half = CR2;
         o.push(g +
           '<ellipse cx="0" cy="0" rx="' + CR2 + '" ry="' + CRY +
           '" fill="#E3C79A" stroke="#8A6B3A" stroke-width="0.9"/>' +
@@ -5686,7 +5819,7 @@ function render(){
       }else{
         const CW2 = PITCH * cfp.len, CH2 = PITCH * cfp.wid;
         const boxy = p.device === 'box film';
-        tint = boxy ? '#F2A8A8' : '#A8C6F2'; off = CH2/2 + 12; half = CW2/2;
+        tint = boxy ? C('tintCapBox') : C('tintCapDisc'); off = CH2/2 + 12; half = CW2/2;
         o.push(g +
           '<rect x="' + (-CW2/2) + '" y="' + (-CH2/2) + '" width="' + CW2 + '" height="' + CH2 +
           '" rx="' + (CH2*0.24) + '" fill="' + (boxy ? '#B03A2E' : '#3B6FC4') + '" stroke="' + (boxy ? '#3D120D' : '#0C1526') + '" stroke-width="1.1"/>' +
@@ -5699,7 +5832,7 @@ function render(){
       /* cathode band at the B end, matching how the real part is printed */
       const dfp = footprintOf(p);
       const DW = PITCH * dfp.len, DH = PITCH * dfp.wid;
-      tint = '#CFC8E0'; off = DH/2 + 12; half = DW/2;
+      tint = C('tintDiode'); off = DH/2 + 12; half = DW/2;
       const bx0 = DW*0.22, bw = DW*0.17;
       /* a zener wears the same body; the tails on its band are the only thing
          that tells you it is one, so they are drawn rather than implied */
@@ -5718,7 +5851,7 @@ function render(){
     }else if(p.kind === 'spst'){
       /* a panel toggle on two lugs. Off-board when flown. */
       const SW = PITCH * 0.62;
-      tint = '#C9C3DA'; off = SW + 12; half = SW;
+      tint = C('tintSwitch'); off = SW + 12; half = SW;
       o.push(g +
         '<rect x="' + (-SW) + '" y="' + (-SW*0.72) + '" width="' + (2*SW) + '" height="' + (SW*1.44) +
         '" rx="' + (SW*0.28) + '" fill="#2A2636" stroke="#0B0A12" stroke-width="1.1"/>' +
@@ -5729,7 +5862,7 @@ function render(){
     }else{
       /* electrolytic seen from above: dark can with a silver stripe down the
          NEGATIVE side, which is how the real part is actually marked */
-      tint = '#DAD6E4'; off = ER + 12; half = ER;
+      tint = C('tintEcap'); off = ER + 12; half = ER;
       o.push(g +
         '<circle cx="0" cy="0" r="' + ER + '" fill="#17151F" stroke="#B9B4C7" stroke-width="1.3"/>' +
         '<path d="M' + (ER*0.47) + ' ' + (-ER*0.883) + 'A' + ER + ' ' + ER + ' 0 0 1 ' +
@@ -5761,7 +5894,7 @@ function render(){
     if(si) for(let i = 1; i <= si.pins; i++){
       const q = pinPos(si, i);
       o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.26) +
-             '" fill="#00FFA3" stroke="#0B0813" stroke-width="1.5"/>');
+             '" fill="' + C('accent') + '" stroke="' + C('edge') + '" stroke-width="1.5"/>');
       o.push('<text class="pin" x="' + X(q[1]) + '" y="' + (Y(q[0]) + 3) + '">' + esc(icPinName(si, i)) + '</text>');
     }
   }
@@ -5771,7 +5904,7 @@ function render(){
     const sp = S.parts.find(x => x.id === SEL.id);
     if(sp) for(const q of sp.pins)
       o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.23) +
-             '" fill="#00FFA3" stroke="#0B0813" stroke-width="1.5"/>');
+             '" fill="' + C('accent') + '" stroke="' + C('edge') + '" stroke-width="1.5"/>');
   }
 
   /* --- pads (off-board wire exits) --- */
@@ -5779,9 +5912,9 @@ function render(){
     const x = X(d.at[1]), y = Y(d.at[0]);
     if(SEL && SEL.type === 'pad' && SEL.id === d.id)
       o.push('<circle cx="' + x + '" cy="' + y + '" r="' + (PITCH*0.5) +
-             '" fill="#00FFA3" fill-opacity="0.22" stroke="#00FFA3" stroke-width="1.8"/>');
+             '" fill="' + C('accent') + '" fill-opacity="0.22" stroke="' + C('accent') + '" stroke-width="1.8"/>');
     const net = NET.netAt(d.at[0], d.at[1]);
-    const col = net ? net.color : '#888';
+    const col = net ? net.color : C('nonet');
     o.push('<circle cx="' + x + '" cy="' + y + '" r="13" fill="none" stroke="' + col +
            '" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3"/>');
     o.push('<circle cx="' + x + '" cy="' + y + '" r="9.5" fill="none" stroke="' + col + '" stroke-width="2"/>');
@@ -5800,10 +5933,10 @@ function render(){
     const x = X(c), y = Y(r), s = 7.5;
     const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
                   'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="#FF3DBE" fill-opacity="0.14"/>');
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="#050409" stroke="#FF3DBE" stroke-width="1.8"/>');
-    o.push('<path d="' + cross + '" stroke="#0B0813" stroke-width="6" stroke-linecap="round"/>');
-    o.push('<path d="' + cross + '" stroke="#FF6FD0" stroke-width="3.2" stroke-linecap="round"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="' + C('pink') + '" fill-opacity="0.14"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="' + C('markFill') + '" stroke="' + C('pink') + '" stroke-width="1.8"/>');
+    o.push('<path d="' + cross + '" stroke="' + C('edge') + '" stroke-width="6" stroke-linecap="round"/>');
+    o.push('<path d="' + cross + '" stroke="' + C('cut') + '" stroke-width="3.2" stroke-linecap="round"/>');
   }
 
   /* --- pending placement ghost --- */
@@ -5811,16 +5944,16 @@ function render(){
     const pts = pending.map(q => [X(q[1]), Y(q[0])]);
     if(hoverHole) pts.push([X(hoverHole[1]), Y(hoverHole[0])]);
     o.push('<path d="' + pts.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join('') +
-           '" fill="none" stroke="#00F0FF" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round"/>');
+           '" fill="none" stroke="' + C('hint') + '" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round"/>');
     for(const q of pending)
-      o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="10" fill="none" stroke="#00F0FF" stroke-width="2"/>');
+      o.push('<circle cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="10" fill="none" stroke="' + C('hint') + '" stroke-width="2"/>');
   }
 
   /* --- DRC focus ring --- */
   if(focusHole && focusHole[0] < rows && focusHole[1] < cols){
     const fx = X(focusHole[1]), fy = Y(focusHole[0]);
-    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="14" fill="none" stroke="#D926A9" stroke-width="2.2"/>');
-    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="19.5" fill="none" stroke="#D926A9" stroke-width="1" stroke-opacity="0.4"/>');
+    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="14" fill="none" stroke="' + C('mag') + '" stroke-width="2.2"/>');
+    o.push('<circle cx="' + fx + '" cy="' + fy + '" r="19.5" fill="none" stroke="' + C('mag') + '" stroke-width="1" stroke-opacity="0.4"/>');
   }
 
   /* --- hit layer --- */
@@ -5830,9 +5963,9 @@ function render(){
 
   if(LINE && TOOL === 'line'){
     o.push('<rect x="' + (X(0) - PITCH*0.5) + '" y="' + (Y(LINE[0]) - PITCH*0.5) + '" width="' + (cols*PITCH) +
-           '" height="' + PITCH + '" fill="#00F0FF" fill-opacity="0.10" stroke="#00F0FF" stroke-width="1.2" stroke-dasharray="6 4"/>');
+           '" height="' + PITCH + '" fill="' + C('hint') + '" fill-opacity="0.10" stroke="' + C('hint') + '" stroke-width="1.2" stroke-dasharray="6 4"/>');
     o.push('<rect x="' + (X(LINE[1]) - PITCH*0.5) + '" y="' + (Y(0) - PITCH*0.5) + '" width="' + PITCH +
-           '" height="' + (rows*PITCH) + '" fill="#00F0FF" fill-opacity="0.10" stroke="#00F0FF" stroke-width="1.2" stroke-dasharray="6 4"/>');
+           '" height="' + (rows*PITCH) + '" fill="' + C('hint') + '" fill-opacity="0.10" stroke="' + C('hint') + '" stroke-width="1.2" stroke-dasharray="6 4"/>');
   }
 
   if(REGION){
@@ -5841,10 +5974,10 @@ function render(){
     const rw = Math.abs(X(REGION.c1) - X(REGION.c0)) + PITCH;
     const rh = Y(REGION.r1) - Y(REGION.r0) + PITCH;
     o.push('<rect x="' + rx + '" y="' + ry + '" width="' + rw + '" height="' + rh +
-           '" rx="4" fill="#00FFA3" fill-opacity="0.07" stroke="#00FFA3" stroke-width="1.6" stroke-dasharray="7 4"/>');
+           '" rx="4" fill="' + C('accent') + '" fill-opacity="0.07" stroke="' + C('accent') + '" stroke-width="1.6" stroke-dasharray="7 4"/>');
     if((RDR || RDC) && regionFits(REGION, RDR, RDC))
       o.push('<rect x="' + (rx + RDC*PITCH) + '" y="' + (ry + RDR*PITCH) + '" width="' + rw +
-             '" height="' + rh + '" rx="4" fill="#00F0FF" fill-opacity="0.06" stroke="#00F0FF" ' +
+             '" height="' + rh + '" rx="4" fill="' + C('hint') + '" fill-opacity="0.06" stroke="' + C('hint') + '" ' +
              'stroke-width="1.4" stroke-dasharray="3 4"/>');
   }
 
@@ -5891,11 +6024,11 @@ function render(){
     };
     const pair = (p, q, n) => {
       const at = overlayAt(OV.T, p[0], p[1]);
-      mark(at[0], at[1], '#00F0FF', n);
+      mark(at[0], at[1], C('hint'), n);
       if(q){
-        mark(q[0], q[1], '#FF3DBE', n);
+        mark(q[0], q[1], C('pink'), n);
         o.push('<path d="M' + X(at[1]) + ' ' + Y(at[0]) + 'L' + X(q[1]) + ' ' + Y(q[0]) +
-               '" stroke="#FF3DBE" stroke-width="1.6" stroke-dasharray="5 4" fill="none" pointer-events="none"/>');
+               '" stroke="' + C('pink') + '" stroke-width="1.6" stroke-dasharray="5 4" fill="none" pointer-events="none"/>');
       }
     };
     if(ALIGN.p1) pair(ALIGN.p1, ALIGN.q1, '1');
@@ -5903,15 +6036,15 @@ function render(){
   }
 
   o.push('<style>' +
-    '.rule{fill:#AAA5B8;font:9px ui-monospace,monospace;text-anchor:middle}' +
-    '.lbl{fill:#fff;font:9px ui-monospace,monospace;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:4;stroke-linejoin:round}' +
-    '.pad{font:10px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:#0B0813;stroke-width:3.5}' +
-    '.pin{fill:#0B0813;font:8.5px ui-monospace,monospace;text-anchor:middle;font-weight:700}' +
-    '.leg{fill:#00F0FF;font:9.5px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:#0B0813;stroke-width:3.5}' +
-    '.pin-in{fill:#00F0FF}.pin-out{fill:#00FFA3}.pin-pwr{fill:#FFB300}' +
-    '.icref{fill:#fff;font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
-    '.icpart{fill:#8B849E;font:9px ui-monospace,monospace;text-anchor:middle}' +
-    '.pol{fill:#fff;font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:#0B0813;stroke-width:3}' +
+    '.rule{fill:var(--rule-ink);font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.lbl{fill:var(--lbl-ink);font:9px ui-monospace,monospace;text-anchor:middle;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:4;stroke-linejoin:round}' +
+    '.pad{font:10px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3.5}' +
+    '.pin{fill:var(--pin-ink);font:8.5px ui-monospace,monospace;text-anchor:middle;font-weight:700}' +
+    '.leg{fill:var(--pin-in);font:9.5px ui-monospace,monospace;font-weight:700;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3.5}' +
+    '.pin-in{fill:var(--pin-in)}.pin-out{fill:var(--pin-out)}.pin-pwr{fill:var(--pin-pwr)}' +
+    '.icref{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
+    '.icpart{fill:var(--icpart-ink);font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.pol{fill:var(--lbl-ink);font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3}' +
     '</style></svg>');
 
   stage.innerHTML = o.join('') + (FLIP ? renderSolderView(hl) : '');
@@ -5949,7 +6082,7 @@ function renderSolderView(hl){
 
   o.push('<svg id="board2" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
          '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
-  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="#100C1B" stroke="#241F36"/>');
+  o.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board2') + '" stroke="' + C('boardEdge') + '"/>');
   o.push('<text class="bk" x="' + (MARGIN - 24) + '" y="13">BACK - mirrored, copper facing you</text>');
 
   /* rulers keep the layout's own numbering, so a coordinate from the cut
@@ -5963,7 +6096,7 @@ function renderSolderView(hl){
      perfboard that copper is one pad per hole; on the permanent breadboard
      it is the rails and the tie columns. */
   const bBar = (x0, y0, w, h, net) => {
-    const col = net ? net.color : '#555';
+    const col = net ? net.color : C('nonet');
     const on  = net && net.id === hl;
     const quiet = hl !== null && hl !== undefined && !on;
     const rr = Math.min(w, h) / 2;
@@ -5973,12 +6106,12 @@ function renderSolderView(hl){
              '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
     if(on)             bar(col, 0.44, col, 1, 2.6);
     else if(NETCOLOUR) bar(col, quiet ? 0.16 : 0.26, col, quiet ? 0.55 : 0.9, 1.2);
-    else               bar('#B0703A', 0.30, '#C98B4B', 0.55, 1);
+    else               bar(C('copper'), C('backFill'), C('copperEdge'), C('backStroke'), 1);
   };
   if(isBread()){
     o.push('<rect x="' + (Math.min(mX(0), mX(cols - 1)) - PITCH * 0.5) + '" y="' + (Y(6) + PITCH * 0.36) +
            '" width="' + ((cols - 1) * PITCH + PITCH) + '" height="' + (PITCH * 0.28) +
-           '" fill="#07050D" stroke="#241F36" stroke-width="1"/>');
+           '" fill="' + C('hole') + '" stroke="' + C('boardEdge') + '" stroke-width="1"/>');
     for(const r of [0, 1, 12, 13])
       bBar(Math.min(mX(0), mX(cols - 1)) - PITCH * 0.44, Y(r) - 9.5, (cols - 1) * PITCH + PITCH * 0.88, 19, NET.netAt(r, 0));
     for(const band of [[2, 6], [7, 11]])
@@ -6001,10 +6134,10 @@ function renderSolderView(hl){
   for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++){
     if(cutSet.has(K(r,c))) continue;
     const net = NET.netAt(r, c);
-    const col = net ? net.color : '#555';
+    const col = net ? net.color : C('nonet');
     const on  = net && net.id === hl;
     if(on) o.push('<circle cx="' + mX(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
-    o.push('<circle cx="' + mX(c) + '" cy="' + Y(r) + '" r="5" fill="#07050D" stroke="' + (on ? col : '#C98B4B') +
+    o.push('<circle cx="' + mX(c) + '" cy="' + Y(r) + '" r="5" fill="' + C('hole') + '" stroke="' + (on ? col : C('holeRim')) +
            '" stroke-opacity="' + (on ? 1 : 0.75) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
   }
 
@@ -6015,7 +6148,7 @@ function renderSolderView(hl){
     const x0 = Math.min(xa, xb) - 9, x1 = Math.max(xa, xb) + 9;
     const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
-           '" rx="4" fill="none" stroke="#8B849E" stroke-width="1.2" stroke-dasharray="5 4"/>');
+           '" rx="4" fill="none" stroke="' + C('ghost') + '" stroke-width="1.2" stroke-dasharray="5 4"/>');
     const p1 = pinPos(ic, 1);
     o.push('<rect x="' + (mX(p1[1]) - 4) + '" y="' + (Y(p1[0]) - 4) +
            '" width="8" height="8" fill="none" stroke="#fff" stroke-width="1.4"/>');
@@ -6026,13 +6159,13 @@ function renderSolderView(hl){
     if(p.kind !== 'link') continue;
     o.push('<line x1="' + mX(p.pins[0][1]) + '" y1="' + Y(p.pins[0][0]) +
            '" x2="' + mX(p.pins[1][1]) + '" y2="' + Y(p.pins[1][0]) +
-           '" stroke="#8B849E" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>');
+           '" stroke="' + C('ghost') + '" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>');
   }
   for(const d of S.pads){
     if(d.at[0] >= rows || d.at[1] >= cols) continue;
     o.push('<circle cx="' + mX(d.at[1]) + '" cy="' + Y(d.at[0]) +
-           '" r="8" fill="none" stroke="#FFB300" stroke-width="1.6"/>');
-    o.push('<text class="pad" fill="#FFB300" x="' + (mX(d.at[1]) + 11) + '" y="' + (Y(d.at[0]) + 3.5) + '">' +
+           '" r="8" fill="none" stroke="' + C('padMark') + '" stroke-width="1.6"/>');
+    o.push('<text class="pad" fill="' + C('padMark') + '" x="' + (mX(d.at[1]) + 11) + '" y="' + (Y(d.at[0]) + 3.5) + '">' +
            esc(d.label) + '</text>');
   }
 
@@ -6043,10 +6176,10 @@ function renderSolderView(hl){
     const x = mX(c), y = Y(r), s = 7.5;
     const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
                   'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="#FF3DBE" fill-opacity="0.14"/>');
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="#050409" stroke="#FF3DBE" stroke-width="1.8"/>');
-    o.push('<path d="' + cross + '" stroke="#0B0813" stroke-width="6" stroke-linecap="round"/>');
-    o.push('<path d="' + cross + '" stroke="#FF6FD0" stroke-width="3.2" stroke-linecap="round"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="' + C('pink') + '" fill-opacity="0.14"/>');
+    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="' + C('markFill') + '" stroke="' + C('pink') + '" stroke-width="1.8"/>');
+    o.push('<path d="' + cross + '" stroke="' + C('edge') + '" stroke-width="6" stroke-linecap="round"/>');
+    o.push('<path d="' + cross + '" stroke="' + C('cut') + '" stroke-width="3.2" stroke-linecap="round"/>');
   }
 
   /* which corner is row 1, col 1 once the board is turned over - everyone
@@ -6059,7 +6192,7 @@ function renderSolderView(hl){
     o.push('<rect class="bhit" data-r="' + r + '" data-c="' + c + '" x="' + (mX(c) - PITCH/2) +
            '" y="' + (Y(r) - PITCH/2) + '" width="' + PITCH + '" height="' + PITCH + '" fill="transparent"/>');
 
-  o.push('<style>.bk{fill:#8B849E;font:9px ui-monospace,monospace}</style></svg>');
+  o.push('<style>.bk{fill:' + C('ghost') + ';font:9px ui-monospace,monospace}</style></svg>');
   return o.join('');
 }
 
@@ -6082,7 +6215,7 @@ function renderNets(hl){
 function renderReadout(){
   const hl = highlightedNet();
   if(!hoverHole && hl === null){
-    readout.innerHTML = '<div class="row" style="color:var(--dim)">hover the board with <b style="color:#00FFA3">V</b> to light up a net.<br>click to pin it.</div>';
+    readout.innerHTML = '<div class="row" style="color:var(--dim)">hover the board with <b style="color:var(--mint)">V</b> to light up a net.<br>click to pin it.</div>';
     return;
   }
   const o = [];
@@ -6125,7 +6258,7 @@ function renderReadout(){
   if(hoverHole)
     for(const line of explainHole(hoverHole[0], hoverHole[1]))
       o.push('<div class="why">' + esc(line) + '</div>');
-  if(pinnedNet !== null) o.push('<div class="row" style="color:#00FFA3">net ' + pinnedNet + ' pinned · esc to release</div>');
+  if(pinnedNet !== null) o.push('<div class="row" style="color:var(--mint)">net ' + pinnedNet + ' pinned · esc to release</div>');
   readout.innerHTML = o.join('');
 }
 
@@ -6136,7 +6269,7 @@ function renderNetBadge(){
   const r = checkNetlist(S.netlist);
   el.innerHTML = r.findings.length
     ? '<span style="color:#D926A9">netlist: ' + r.findings.length + '</span>'
-    : '<span style="color:#00FFA3">netlist ok</span>';
+    : '<span style="color:var(--mint)">netlist ok</span>';
 }
 
 function renderStatus(){
@@ -6155,7 +6288,7 @@ function renderDRC(){
 
   const hdr = document.getElementById('drchdr');
   if(!FINDINGS.length){
-    hdr.innerHTML = 'Checks - <span style="color:#00FFA3">clean</span>';
+    hdr.innerHTML = 'Checks - <span style="color:var(--mint)">clean</span>';
   }else{
     const bits = [];
     if(errs)  bits.push('<span style="color:#D926A9">' + errs + ' error' + (errs > 1 ? 's' : '') + '</span>');
@@ -8255,6 +8388,37 @@ function zoom(dir){ Z = Math.min(2.6, Math.max(0.4, +(Z + dir * 0.15).toFixed(2)
 tnet.onclick = () => { NETCOLOUR = !NETCOLOUR; tnet.textContent = NETCOLOUR ? 'net color' : 'copper'; render(); };
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
+/* ---- theme ----
+   Three states rather than two, and auto is the default: most people have
+   already told their machine which one they want, and a tool that ignores
+   that is a tool they have to correct every time they open it. Pressing the
+   button is a decision, so it is remembered; never having pressed it is not.
+   data-theme on <html> drives the CSS; render() re-draws the board, which
+   reads its colours from BOARD_INK rather than from the stylesheet. */
+const THEME_ORDER = ['auto', 'light', 'dark'];
+function applyTheme(){
+  const root = document.documentElement;
+  if(THEME === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', THEME);
+  ttheme.textContent = THEME;
+  ttheme.setAttribute('aria-label', 'theme: ' + THEME +
+    (THEME === 'auto' ? ' (following this machine, currently ' + themeNow() + ')' : ''));
+  render();
+}
+ttheme.onclick = () => {
+  THEME = THEME_ORDER[(THEME_ORDER.indexOf(THEME) + 1) % THEME_ORDER.length];
+  try{ localStorage.setItem(THEME_KEY, THEME); }catch(err){}
+  applyTheme();
+};
+/* a machine whose preference changes under us - night mode on a schedule,
+   somebody flipping the OS switch - only matters while we are following it */
+if(window.matchMedia){
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onPref = () => { if(THEME === 'auto') applyTheme(); };
+  if(mq.addEventListener) mq.addEventListener('change', onPref);
+  else if(mq.addListener) mq.addListener(onPref);
+}
+
 /* The board button walks strips -> perf -> breadboard -> strips. Leaving
    stripboard throws the cuts away - they have no strips to live on - so it
    asks first when there are any; entering the breadboard also reshapes the
@@ -9246,6 +9410,10 @@ thanksClose.onclick = () => {
   projname.value = S.name;
   rows.value = S.board.rows;
   cols.value = S.board.cols;
+  let t = null;
+  try{ t = localStorage.getItem(THEME_KEY); }catch(err){}
+  THEME = (t === 'light' || t === 'dark' || t === 'auto') ? t : 'auto';
+  applyTheme();
   setTool('inspect');
 })();
 </script>
