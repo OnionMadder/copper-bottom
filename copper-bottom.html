@@ -2347,10 +2347,11 @@ function runDRC(){
      that bites inside an enclosure. Say `mount:'vertical'` on the part once
      that is the intent and the warning goes quiet.
 
-     Note the body-clash check still measures a vertical part as though it were
-     lying flat, so it may over-warn about collisions and will never under-warn.
-     Erring that way is deliberate: the renderer draws these flat too, and a
-     check that disagreed with the drawing would be the worse lie. */
+     The body-clash check used to measure a vertical part as though it were
+     lying flat - deliberately over-warning, because the renderer drew it flat
+     too and a check that disagreed with the drawing would have been the worse
+     lie. Both halves were fixed together on Aug 27 2026: the renderer stands
+     it up, and bodies() gives it the disc it actually occupies. */
   for(const p of S.parts){
     if(p.pins.length !== 2) continue;
     if(p.mount === 'vertical') continue;
@@ -2365,7 +2366,7 @@ function runDRC(){
         holesMM(span) + ' of holes. Stand it up, or give it ' +
         Math.ceil(fp.len - span) + ' more hole' +
         (Math.ceil(fp.len - span) === 1 ? '' : 's') + '.',
-        a);
+        a, null, {type:'stand-up', id:p.id});
   }
 
   /* --- a chip on the wrong supply ---
@@ -3911,6 +3912,16 @@ function bodies(){
 
     const a = p.pins[0], b = p.pins[1];
     const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    /* stood on end, the board sees the body's CROSS-SECTION over one hole
+       instead of its length across two. Both axial packages here - the
+       resistor and both diode bodies - are cylinders, so that cross-section
+       is exactly a disc of the body's width; nothing is being estimated. It
+       cannot slide anywhere either, so it is pinned. */
+    if(p.mount === 'vertical' && fp.leads === 'axial'){
+      out.push({shape:'disc', dia:fp.wid, ref:p.ref, kind:p.kind, part:p,
+        cx:a[1], cy:a[0], ang:0, span:span, slack:0, pinned:true});
+      continue;
+    }
     const along = fp.shape === 'disc' ? fp.dia : fp.len;
     out.push(Object.assign({}, fp, {
       ref:p.ref, kind:p.kind, part:p,
@@ -5752,7 +5763,34 @@ function render(){
 
     const dev = devOf(p);
 
-    if(!allFly2){
+    /* ---- stood on end ----
+       An axial part whose holes are closer together than its body goes in
+       upright: one lead straight down, the other bent over the top and back
+       into the far hole. From above that is the body's END - a disc the width
+       of the body over ONE hole - and the lead already drawn from A to B is
+       the bent one. The model has carried mount === 'vertical' since the
+       lead-span check learned to stop warning about it; the drawing lay the
+       part flat anyway, so the picture disagreed with the advice.
+       The body stands over the FIRST hole. That is a decision, not a
+       discovery, and it is the one the whole feature hangs on: it makes the
+       diode's band end (pin 2, per the flat drawing) the raised one, which is
+       why the band reads as a rim here rather than being left off. */
+    const upFp = footprintOf(p);
+    const upright = !allFly2 && p.mount === 'vertical' && upFp && upFp.leads === 'axial';
+    if(upright){
+      const UR = PITCH * upFp.wid / 2, isD = p.kind === 'diode';
+      tint = isD ? C('tintDiode') : C('tintRes');
+      off = UR + 13; half = UR;
+      o.push('<g transform="translate(' + ax + ',' + ay + ')">' +
+        '<circle cx="0" cy="0" r="' + UR + '" fill="' + (isD ? '#1A1620' : '#C8A97E') +
+          '" stroke="' + (isD ? '#B9B4C7' : '#141020') + '" stroke-width="1.2"/>' +
+        (isD
+          ? '<circle cx="0" cy="0" r="' + (UR*0.64) + '" fill="none" stroke="#E8E4F0" stroke-width="' + (UR*0.46) + '"/>'
+          : '<circle cx="0" cy="0" r="' + (UR*0.52) + '" fill="none" stroke="#141020" stroke-opacity="0.4" stroke-width="1"/>') +
+        '</g>');
+    }
+
+    if(!allFly2 && !upright){
     if(dev && dev.draw === 'ldr'){
       /* face-on: a light window with the serpentine track across it. No band,
          no polarity - the whole point of filing this under `res`. */
@@ -6323,6 +6361,17 @@ function focusFinding(f){
 
 function applyFix(f){
   if(!f.fix) return;
+  if(f.fix.type === 'stand-up'){
+    /* Says the tight span is deliberate. It changes the DRAWING and the
+       collision footprint, not the wiring - the holes are the ones you
+       already chose - so there is nothing here that undo cannot put back. */
+    const part = S.parts.find(x => x.id === f.fix.id);
+    if(!part) return;
+    pushUndo();
+    part.mount = 'vertical';
+    commit();
+    return;
+  }
   if(f.fix.type === 'ic-cuts'){
     const ic = S.ics.find(x => x.id === f.fix.id);
     if(!ic) return;
@@ -6658,7 +6707,22 @@ function exportSVG(side, fit){
                 ')" fill="#fff" stroke="#000" stroke-width="0.3">';
       let half = 2;
       const dev = devOf(p);
-      if(!allFly2S){
+      /* the sheet has to agree with the board: an upright part prints as its
+         end, over its first hole. See the note in render(). */
+      const upFpS = footprintOf(p);
+      const uprightS = !allFly2S && p.mount === 'vertical' && upFpS && upFpS.leads === 'axial';
+      if(uprightS){
+        const UR = upFpS.wid * MM / 2;
+        half = UR;
+        o.push('<circle cx="' + ax + '" cy="' + ay + '" r="' + UR.toFixed(2) +
+               '" fill="#fff" stroke="#000" stroke-width="0.3"/>');
+        o.push(p.kind === 'diode'
+          ? '<circle cx="' + ax + '" cy="' + ay + '" r="' + (UR*0.62).toFixed(2) +
+            '" fill="none" stroke="#000" stroke-width="' + (UR*0.5).toFixed(2) + '"/>'
+          : '<circle cx="' + ax + '" cy="' + ay + '" r="' + (UR*0.45).toFixed(2) +
+            '" fill="none" stroke="#000" stroke-width="0.25"/>');
+      }
+      if(!allFly2S && !uprightS){
       if(dev && dev.draw === 'ldr'){
         half = 2.45;
         o.push(g + '<circle cx="0" cy="0" r="2.45"/>' +
@@ -6704,8 +6768,17 @@ function exportSVG(side, fit){
         late.push(T(ax + nx*2.4, ay + ny*2.4 + 0.7, '+', 2.6, 'text-anchor="middle" font-weight="bold"'));
       }
       }
-      /* ON the body, along it, sized to it, haloed - and never upside down */
       const label = p.ref + (p.value ? ' ' + p.value : '');
+      /* an upright body is too small to carry its own name, so the name sits
+         above it rather than on it */
+      if(uprightS){
+        /* hugging the body rather than floating a row above it - the halo is
+           what makes it legible where it crosses a strip, exactly as it does
+           for a flat part's name */
+        late.push(TL(ax, ay - half - 0.5, label, 1.5, 'text-anchor="middle" font-weight="bold"'));
+        continue;
+      }
+      /* ON the body, along it, sized to it, haloed - and never upside down */
       let rot = deg % 360;
       if(rot > 90) rot -= 180; else if(rot < -90) rot += 180;
       const fit = Math.max(1.2, Math.min(2.0, (2*half + 2.6) / (label.length * 0.62)));

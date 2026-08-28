@@ -2544,6 +2544,44 @@ ok(mb.board.rows === 14 && MIGRATE_NOTES.some(n => /reshaped/.test(n)),
 ok(mb.cuts.length === 0 && MIGRATE_NOTES.some(n => /pre-wired/.test(n)),
    'its cuts are dropped with the reason');
 
+/* ---- an axial part stood on end ----
+   The flag has been in the model since the lead-span check learned to respect
+   it; what these pin down is that the GEOMETRY moved with it, because until
+   now the drawing and the collision test both treated a vertical part as
+   though it were lying flat. */
+console.log('-- stood on end --');
+S = {version:2, name:'upright', board:{rows:6, cols:6}, cuts:[], ics:[], pads:[],
+     parts:[{id:'r1', kind:'res', ref:'R1', value:'10k', pins:[[1,1],[1,2]]}]};
+computeNets();
+const spanWarn = () => runDRC().filter(f => f.rule === 'lead-span');
+ok(spanWarn().length === 1, 'a 2.48-hole resistor across 1 hole will not lie flat');
+ok(!!spanWarn()[0].fix && spanWarn()[0].fix.type === 'stand-up',
+   'and the finding carries a fix that stands it up');
+ok(spanWarn()[0].fix.id === 'r1', 'the fix names the part it belongs to');
+
+const flatBody = bodies().find(b => b.ref === 'R1');
+ok(flatBody.shape === 'box' && flatBody.len === 2.48, 'lying flat it is a 2.48 box');
+
+S.parts[0].mount = 'vertical';
+computeNets();
+ok(spanWarn().length === 0, 'stood up, the lead span is no longer a complaint');
+const upBody = bodies().find(b => b.ref === 'R1');
+ok(upBody.shape === 'disc', 'and the body it occupies becomes a disc');
+ok(upBody.dia === 0.94, 'the width of the body, because the package is a cylinder');
+ok(upBody.cx === 1 && upBody.cy === 1, 'standing over the FIRST hole, not the midpoint');
+ok(upBody.pinned === true, 'a standing part cannot slide along its leads');
+
+/* the over-warning this used to cause: lying flat, R1 reaches into R2 */
+S.parts[0].mount = undefined;
+S.parts.push({id:'r2', kind:'res', ref:'R2', value:'1k', pins:[[1,3],[1,4]]});
+computeNets();
+const clashes = () => runDRC().filter(f => f.rule === 'body-clash').length;
+const flatClash = clashes();
+ok(flatClash === 1, 'two flat 2.48 bodies one hole apart do overlap');
+S.parts[0].mount = 'vertical';
+ok(clashes() < flatClash, 'standing R1 up clears the clash its flat body caused');
+ok(clashes() === 0, 'and leaves the pair clean');
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
