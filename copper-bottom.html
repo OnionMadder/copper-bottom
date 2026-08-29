@@ -158,6 +158,24 @@ body{
 .hdr > *{flex:0 0 auto}
 .hdr .sp{flex:1 1 auto; min-width:8px}
 .hdr .grp{display:flex; align-items:center; gap:6px}
+/* One header button for everything the layout can be turned into. It was six
+   buttons wide before, three of which were outputs, and the share image was
+   buried inside the build sheet where its author could not find it. */
+.drop{position:relative; display:inline-flex}
+.drop .caret{font-size:9px; opacity:.75; margin-left:3px}
+.dropmenu{
+  position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:196px;
+  display:flex; flex-direction:column; gap:2px; padding:5px;
+  background:var(--panel2); border:1px solid var(--line2); border-radius:8px;
+  box-shadow:0 10px 28px rgba(0,0,0,.45);
+}
+.dropmenu[hidden]{display:none}
+.dropmenu button{
+  width:100%; text-align:left; display:flex; align-items:baseline; gap:8px;
+  border-color:transparent; background:transparent;
+}
+.dropmenu button:hover, .dropmenu button:focus-visible{background:var(--panel); border-color:var(--soft)}
+.dropmenu .dk{margin-left:auto; color:var(--dim); font-size:11px}
 .hdr .grp + .grp{margin-left:4px; padding-left:14px; border-left:1px solid var(--line)}
 .hdr .danger:hover{border-color:var(--mag); color:var(--bad-ink); background:var(--bad-bg)}
 .brand{font:700 12px/1 var(--mono); letter-spacing:.24em; color:var(--ink)}
@@ -675,9 +693,16 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="btnRef" title="keep a schematic or layout photo beside the board, behind it, or both at once">reference</button>
     <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
     <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
-    <button id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough</button>
-    <button id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps">breadboard</button>
-    <button id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet</button>
+    <span class="drop" id="outDrop">
+      <button id="btnOut" aria-haspopup="true" aria-expanded="false" aria-controls="outMenu"
+              title="everything this layout can be turned into: the printable sheet, the share image, the breadboard version, the written steps">download <span class="caret" aria-hidden="true">&#9662;</span></button>
+      <div class="dropmenu" id="outMenu" role="menu" hidden>
+        <button role="menuitem" id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet<span class="dk">print / PDF</span></button>
+        <button role="menuitem" id="btnClassic2" title="the layout as the classic share image - title, tan strips, parts list - as a .png">layout image<span class="dk">.png</span></button>
+        <button role="menuitem" id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps">breadboard<span class="dk">re-placed</span></button>
+        <button role="menuitem" id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough<span class="dk">as steps</span></button>
+      </div>
+    </span>
   </span>
   <span class="grp">
     <button id="btnImport" title="a Copper Bottom .json, or a DIYLC .diy stripboard layout">import</button>
@@ -9968,6 +9993,49 @@ nlText.oninput     = () => {
   autosave();
 };
 btnSheet.onclick   = openSheet;
+
+/* ---- the take-away menu ----------------------------------------------
+   Keyboard first, because a menu that only opens to a mouse is a menu that
+   half this tool's audience cannot use: Enter or Space or Down opens it and
+   lands on the first item, Up opens it on the last, arrows walk, Escape
+   closes and puts focus back on the button, Tab out closes it. Clicking any
+   item closes it too - every one of them opens a panel or starts a download,
+   so leaving it hanging over the result would just be something else to
+   dismiss. */
+const outItems = () => [...outMenu.querySelectorAll('button')];
+function outOpen(focus){
+  outMenu.hidden = false;
+  btnOut.setAttribute('aria-expanded', 'true');
+  const it = outItems();
+  if(focus === 'last') it[it.length - 1].focus();
+  else if(focus) it[0].focus();
+}
+function outClose(back){
+  if(outMenu.hidden) return;
+  outMenu.hidden = true;
+  btnOut.setAttribute('aria-expanded', 'false');
+  if(back) btnOut.focus();
+}
+btnOut.onclick = (e) => { e.stopPropagation(); outMenu.hidden ? outOpen(false) : outClose(false); };
+btnOut.addEventListener('keydown', (e) => {
+  if(e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' '){ e.preventDefault(); outOpen(true); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); outOpen('last'); }
+});
+outMenu.addEventListener('keydown', (e) => {
+  const it = outItems(), i = it.indexOf(document.activeElement);
+  if(e.key === 'Escape'){ e.preventDefault(); outClose(true); }
+  else if(e.key === 'ArrowDown'){ e.preventDefault(); it[(i + 1) % it.length].focus(); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); it[(i - 1 + it.length) % it.length].focus(); }
+  else if(e.key === 'Home'){ e.preventDefault(); it[0].focus(); }
+  else if(e.key === 'End'){ e.preventDefault(); it[it.length - 1].focus(); }
+});
+outMenu.addEventListener('click', () => outClose(false));
+/* a click anywhere else, and focus leaving the menu entirely, both close it */
+document.addEventListener('click', (e) => { if(!outDrop.contains(e.target)) outClose(false); });
+outDrop.addEventListener('focusout', () => {
+  setTimeout(() => { if(!outDrop.contains(document.activeElement)) outClose(false); }, 0);
+});
+btnClassic2.onclick = () => downloadClassic();
 sheetClose.onclick = closeSheet;
 btnPrint.onclick   = () => window.print();
 /* the full-page maps ride the sheet by default; unticking saves the paper,
