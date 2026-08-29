@@ -163,8 +163,14 @@ body{
    buried inside the build sheet where its author could not find it. */
 .drop{position:relative; display:inline-flex}
 .drop .caret{font-size:9px; opacity:.75; margin-left:3px}
+/* FIXED, not absolute, and this is not a style choice. The header is
+   overflow-x:auto so a narrow window can swipe it, and 38px tall - which makes
+   it a clipping box. An absolutely positioned menu opens BELOW that box and is
+   clipped away entirely: the click works, the menu is there, and nothing is
+   drawn. Fixed escapes the header's overflow; outOpen() places it under the
+   button and nudges it back on screen if it would hang off the right edge. */
 .dropmenu{
-  position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:196px;
+  position:fixed; z-index:60; min-width:196px;
   display:flex; flex-direction:column; gap:2px; padding:5px;
   background:var(--panel2); border:1px solid var(--line2); border-radius:8px;
   box-shadow:0 10px 28px rgba(0,0,0,.45);
@@ -10005,6 +10011,12 @@ btnSheet.onclick   = openSheet;
 const outItems = () => [...outMenu.querySelectorAll('button')];
 function outOpen(focus){
   outMenu.hidden = false;
+  /* placed from the button every time it opens, because the header scrolls */
+  const b = btnOut.getBoundingClientRect();
+  outMenu.style.left = '0px'; outMenu.style.top = '0px';
+  const w = outMenu.offsetWidth;
+  outMenu.style.left = Math.max(6, Math.min(b.left, innerWidth - w - 6)) + 'px';
+  outMenu.style.top  = (b.bottom + 6) + 'px';
   btnOut.setAttribute('aria-expanded', 'true');
   const it = outItems();
   if(focus === 'last') it[it.length - 1].focus();
@@ -10032,6 +10044,9 @@ outMenu.addEventListener('keydown', (e) => {
 outMenu.addEventListener('click', () => outClose(false));
 /* a click anywhere else, and focus leaving the menu entirely, both close it */
 document.addEventListener('click', (e) => { if(!outDrop.contains(e.target)) outClose(false); });
+/* it is placed, not attached: anything that moves the button abandons it */
+addEventListener('resize', () => outClose(false));
+document.querySelector('.hdr').addEventListener('scroll', () => outClose(false));
 outDrop.addEventListener('focusout', () => {
   setTimeout(() => { if(!outDrop.contains(document.activeElement)) outClose(false); }, 0);
 });
