@@ -5771,7 +5771,7 @@ function render(){
   const rows = S.board.rows, cols = S.board.cols;
   /* Room for anything living off the board. The viewBox is EXTENDED rather
      than the origin moved: X()/Y() keep the values they have always had, so
-     the hit rects, the drag maths and boardPointFromEvent are all untouched -
+     the hit rects, the drag math and boardPointFromEvent are all untouched -
      getScreenCTM already accounts for a shifted viewBox. */
   const OBB = offBoardBodies();
   const obL = offBoardMargin('left', OBB) * PITCH, obR = offBoardMargin('right', OBB) * PITCH;
@@ -7608,7 +7608,7 @@ function classicSVG(){
      other. The Opto Duet has THREE on row 3 and three on row 4, and this image
      rendered them as one illegible smear - which mattered more than it sounds,
      because this is the picture that gets posted. Names on a side are stepped
-     apart, the group is re-centred on where it wanted to be so it spreads both
+     apart, the group is re-centered on where it wanted to be so it spreads both
      ways instead of sliding off the bottom, and the leader bends to follow so a
      name still points at its own hole. */
   const late = [];

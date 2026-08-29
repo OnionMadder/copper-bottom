@@ -40,6 +40,23 @@ blocks.forEach((src, i) => {
 });
 console.log('  PASS  all ' + blocks.length + ' <script> blocks parse');
 
+/* ---- US spelling, watched by a machine instead of by whoever reads the diff */
+const spelling = require('./spelling.js');
+const selfFail = spelling.selfTest();
+if(selfFail){
+  console.error('  FAIL  the spelling check is broken: ' + selfFail);
+  process.exit(1);
+}
+const brit = spelling.findBriticisms(html);
+if(brit.length){
+  console.error('  FAIL  British spelling in copper-bottom.html (this app is US English):');
+  for(const b of brit.slice(0, 25)) console.error('          line ' + b.line + ': ' + b.word);
+  if(brit.length > 25) console.error('          ... and ' + (brit.length - 25) + ' more');
+  process.exit(1);
+}
+console.log('  PASS  US spelling (' + spelling.BRITICISMS.length +
+            ' words watched; NETCOLOUR and aria-labelledby exempt by word boundary)');
+
 const m = /\/\*#region model[^*]*\*\/([\s\S]*?)\/\*#endregion model \*\//.exec(html);
 if(!m){ console.error('could not find the #region model markers in copper-bottom.html'); process.exit(2); }
 
