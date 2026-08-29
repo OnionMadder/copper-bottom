@@ -57,7 +57,7 @@
 
   /* The rest of the surface, named rather than repeated. These existed as
      literals scattered through the sheet until light mode needed them in one
-     place; a theme is only switchable if every colour has a name. */
+     place; a theme is only switchable if every color has a name. */
   --ink:#fff; --field:#171325; --field-on:#1c1630; --chipbg:#241F36;
   --thumb:#4B4170; --on-mint:#0B0813;
   --bad-ink:#F2C8E4; --bad-bg:#20132A; --warn-ink:#D8C8F0; --warn-line:#A46BE8;
@@ -88,7 +88,7 @@
    somebody who cannot see well had one theme, and it was the dark one.
 
    This is NOT a corporate-clean light theme. Same doctrine as the dark one -
-   real boundaries, saturated accents, no hairline grey on white. Every text
+   real boundaries, saturated accents, no hairline gray on white. Every text
    pair in here was measured against its own background and clears 7:1; the
    accents are darkened until they do, which is why mint is a deep green
    rather than a neon one. The tightest seats were the kbd chip (8.1:1) and
@@ -96,7 +96,7 @@
 
    Two rules for anyone adding to this. Define the dark value in :root and the
    light value in BOTH blocks below, or a toggled page and a system-preference
-   page will disagree. And never add a colour straight into a rule - it will
+   page will disagree. And never add a color straight into a rule - it will
    be invisible in one theme and nobody will notice until it ships. */
 :root[data-theme="light"]{
   --void:#EDE9F2; --panel:#FFFFFF; --panel2:#E4DEEE; --line:#AFA3C8; --line2:#877BA6;
@@ -583,7 +583,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    board drawings inside it are white-backed SVG too, so tinting the page
    alone would not have covered it.
 
-   So the whole document is dimmed with a filter rather than recoloured: one
+   So the whole document is dimmed with a filter rather than recolored: one
    rule, it catches the SVGs as well as the paper, and it changes nothing
    about what the sheet IS. Text stays #111 on the dimmed white, which
    measures about 12:1. The print block below resets it, so what comes out of
@@ -1923,17 +1923,17 @@ function computeNets(){
 
 /* ---- theme ---------------------------------------------------------------
    The DOM chrome themes itself with CSS custom properties. The BOARD cannot:
-   its colours are SVG presentation attributes, and var() inside a presentation
+   its colors are SVG presentation attributes, and var() inside a presentation
    attribute is a newer thing than this file is willing to lean on - it has to
    open by double-click at a bench, in whatever browser is on that machine. So
-   the board reads its colours from the table below, and render() runs again on
+   the board reads its colors from the table below, and render() runs again on
    a theme change the way it already does for everything else. Opacities live
    here too, which a CSS variable in an attribute could never have carried.
 
    Anything CLASSED in the board's own <style> block DOES use var(), because
    that is a real stylesheet and entirely safe.
 
-   Add a colour to one theme and you must add it to the other. A literal left
+   Add a color to one theme and you must add it to the other. A literal left
    in a drawing call is invisible in exactly one theme, which is the kind of
    bug nobody sees until somebody else is holding it. */
 const THEME_KEY = 'stripboard.theme';
@@ -1980,9 +1980,9 @@ const BOARD_INK = {
     tintCapBox:'#7C1A12', tintCapDisc:'#123A72', tintDiode:'#332A4E',
     tintSwitch:'#2E2840', tintEcap:'#332F4A',
     /* Re-derived against WHITE, not darkened by eye. Same objective as the
-       dark set - maximise the smallest DE2000 gap, measured both as the idle
+       dark set - maximize the smallest DE2000 gap, measured both as the idle
        wash and as the full-opacity edge - plus two constraints the dark board
-       never needed: every colour clears 3.4:1 against the paper, and none may
+       never needed: every color clears 3.4:1 against the paper, and none may
        come within DE 22 of bare copper, or a net would read as an unpowered
        strip. Worst pair 8.2 as a wash, 11.6 as an edge; nearest approach to
        copper 22.1. Hue-matching the dark set was tried and abandoned: holding
@@ -1994,7 +1994,7 @@ const BOARD_INK = {
 };
 const C = k => BOARD_INK[themeNow()][k];
 
-/* Twelve net colours, and the second six used to be lighter reruns of the
+/* Twelve net colors, and the second six used to be lighter reruns of the
    first six - four of the twelve sat in one green-cyan band and two were
    the same violet. #00FFA3 and #4DFF88 measured DE2000 5.0 apart at FULL
    opacity, which is a hair over the just-noticeable threshold, and they are
@@ -2002,11 +2002,11 @@ const C = k => BOARD_INK[themeNow()][k];
    violet lightened - #7B2CBF is too dark to read as a strip on a near-black
    board) and the tail was re-picked to fill the empty parts of the wheel:
    lime, sky, yellow, green, orchid, orange. Worst pair is now 8.5 apart,
-   median 27.6, measured on the colour as it actually composites over the
+   median 27.6, measured on the color as it actually composites over the
    board rather than on the hex.
 
    Twelve is the ceiling, not a promise: a board with more nets than this
-   wraps around and reuses colours. Hovering a net is what identifies it. */
+   wraps around and reuses colors. Hovering a net is what identifies it. */
 const netColor = i => { const p = C('nets'); return p[i % p.length]; };
 
 /* what is sitting in a given hole */
@@ -2587,7 +2587,7 @@ function runDRC(){
    ============================================================ */
 const BAND      = ['#1A1A1A','#7A4A22','#D32F2F','#E8712A','#F2D024','#3EA34A','#2E6FD9','#8E44AD','#9E9E9E','#F5F5F5'];
 const BAND_NAME = ['black','brown','red','orange','yellow','green','blue','violet','gray','white'];
-const multColour = m => m === -1 ? '#C9A227' : m === -2 ? '#C0C0C0' : BAND[m];
+const multColor = m => m === -1 ? '#C9A227' : m === -2 ? '#C0C0C0' : BAND[m];
 const multName   = m => m === -1 ? 'gold'    : m === -2 ? 'silver'  : BAND_NAME[m];
 
 /* Accepts the notations builders actually write: 10k, 4k7, 470R, 1M, 2k2, 100, 0R22 */
@@ -2621,7 +2621,7 @@ function bandDigits(value){
 }
 function resistorBands(value){
   const b = bandDigits(value);
-  return b ? [BAND[b.d1], BAND[b.d2], multColour(b.mult), '#C9A227'] : null;
+  return b ? [BAND[b.d1], BAND[b.d2], multColor(b.mult), '#C9A227'] : null;
 }
 function resistorBandNames(value){
   const b = bandDigits(value);
@@ -3023,7 +3023,7 @@ const WALK_NOTES = {
   trans: 'The clicks go in leg order, so watch the letters the panel puts on them.',
   pot:   'Three clicks: lug 1, wiper, lug 3. These are the holes its flying leads land in - the pot itself lives on the panel, not the board.',
   spst:  'Two lugs, on/off. These are the holes its wires land in - the switch itself is on the panel.',
-  spdt:  'Three lugs, and the centre one is the common. These are the holes its wires land in - the switch is on the panel.',
+  spdt:  'Three lugs, and the center one is the common. These are the holes its wires land in - the switch is on the panel.',
   res:   null, cap: null, trim: null, reg: null,
 };
 
@@ -5624,7 +5624,7 @@ function trimBoard(){
 
 /* ============================================================
    PARTS THAT LIVE OFF THE BOARD
-   A panel pot with every leg flown is three labelled terminals on the copper
+   A panel pot with every leg flown is three labeled terminals on the copper
    and nothing else - which loses the one fact that matters about it: those
    three holes are ONE COMPONENT, and its lugs are 1, W and 3 in that order.
    Faking it with three pads had the same problem, and that is why the `pot`
@@ -5723,7 +5723,7 @@ function highlightedNet(){
 
 function render(){
   computeNets();
-  /* the footer's board button and the cut tool's greyed state follow every
+  /* the footer's board button and the cut tool's grayed state follow every
      route into a new board - load, import, undo, the toggle itself */
   if(typeof syncBoardKind === 'function') syncBoardKind();
   /* the fly tool wears a count of off-board leads - one hookup wire each,
@@ -5790,12 +5790,12 @@ function render(){
       o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + w + '" height="' + h +
              '" rx="' + rr + '" fill="' + f +
              '" fill-opacity="' + fo + '" stroke="' + s + '" stroke-opacity="' + so + '" stroke-width="' + sw + '"/>');
-    /* The EDGE carries the colour, not the wash. Half this palette is red,
+    /* The EDGE carries the color, not the wash. Half this palette is red,
        magenta or violet, and those are low-luminance hues: at 11% over a
        near-black board the violet reached 1.06:1, which is nothing. A thin
-       stroke at near-full opacity draws the actual colour instead, so a dark
+       stroke at near-full opacity draws the actual color instead, so a dark
        hue reads as well as a bright one. The lit net is then told apart by
-       the WEIGHT of that edge rather than by being the only coloured thing. */
+       the WEIGHT of that edge rather than by being the only colored thing. */
     /* and when one net IS lit, the others step back. Raising the idle state
        is what makes the board readable at rest; without this it would also
        be what stops the lit net meaning anything. Stepped back they still
@@ -6195,7 +6195,7 @@ function render(){
                 esc(b.ref + (b.part.value ? ' ' + b.part.value : '')) + '</text>');
     /* No lug names here on purpose: the flying terminals already carry them
        at the holes, which is the end you are soldering. Saying it twice made
-       the wires look like they were labelled at both ends. */
+       the wires look like they were labeled at both ends. */
   }
 
   o.push(labels.join(''));
@@ -6913,7 +6913,7 @@ function exportSVG(side, fit){
      labels readable over each other, and measured across the six saved
      layouts there were 17 such overlaps in 667 labels - all on the component
      side, mostly around 3-pin parts where a device name sits under one body
-     and a neighbour's name sits over the next.
+     and a neighbor's name sits over the next.
 
      Each label is placed against the ones already down. One that would land
      on another tries a short list of MIRRORS of its own position - the other
@@ -7648,7 +7648,7 @@ function classicSVG(){
                   'font-family="Verdana, sans-serif" fill="#444" text-anchor="middle">' + esc(ll[i]) + '</text>'));
       continue;
     }
-    /* trimpots, pots, switches: a plain labelled round body on its lugs */
+    /* trimpots, pots, switches: a plain labeled round body on its lugs */
     pts.forEach((q, i) => lead(i));
     o.push('<circle cx="' + cx + '" cy="' + cy + '" r="12" fill="#fff" stroke="#666" stroke-width="1.5"/>');
     label(cx, cy, p.ref, 0, '#333');
@@ -8003,7 +8003,7 @@ const HINTS = {
   ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
   spst   :'two clicks: the two lugs. an on/off switch, usually flown off-board with F.',
-  spdt   :'three clicks: throw, common, throw. the centre lug is the common. usually flown off-board.',
+  spdt   :'three clicks: throw, common, throw. the center lug is the common. usually flown off-board.',
   fly    :'click a part leg to lift it off the board on a flying wire. click it again to set it back down.',
   erase  :'click anything - body or leg - to remove it. a chip takes its own cuts with it. to move ONE leg instead, use select and drag the leg handle.',
 };
@@ -8197,7 +8197,7 @@ function renderCtx(){
   }else if(TOOL === 'spst' || TOOL === 'spdt'){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
     if(TOOL === 'spdt')
-      o.push('<div class="hint">three lugs in click order: <b style="color:#00F0FF">A \u00b7 C \u00b7 B</b> - the centre, C, is the common. usually flown off-board with F.</div>');
+      o.push('<div class="hint">three lugs in click order: <b style="color:#00F0FF">A \u00b7 C \u00b7 B</b> - the center, C, is the common. usually flown off-board with F.</div>');
     else
       o.push('<div class="hint">two lugs: on / off. usually flown off-board with F.</div>');
   }else if(legsOf(TOOL) >= 3 && PART_LIB[TOOL]){
@@ -8943,7 +8943,7 @@ tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : '
    that is a tool they have to correct every time they open it. Pressing the
    button is a decision, so it is remembered; never having pressed it is not.
    data-theme on <html> drives the CSS; render() re-draws the board, which
-   reads its colours from BOARD_INK rather than from the stylesheet. */
+   reads its colors from BOARD_INK rather than from the stylesheet. */
 const THEME_ORDER = ['auto', 'light', 'dark'];
 function applyTheme(){
   const root = document.documentElement;
