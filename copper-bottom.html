@@ -1598,6 +1598,17 @@ const DEV_LIB = {
        Its pins fall in this kind's own leg order, which is the whole reason it
        fits: 1=P1, 2=PCT, 3=P2, 4=S1, 5=SCT, 6=S2. A dot on the bobbin flange
        marks pin 1. */
+    /* Named in the reference layout the Simple Ring Modulator was traced from
+       ("Any suitable audio transformer: e.g. Triad TY-141P (10CT:10CT)").
+       Same six-pin bobbin as the TY-145P and the same pin scheme, confirmed
+       from its own datasheet rather than assumed from the family:
+       "DCR: Primary (1-3) 820 Ohm Nominal / Secondary (4-6) 1070 Ohm Nominal",
+       Z = 10K to 10K, 1:1, 100mW, 200Hz to 15kHz, dot above pin 1.
+       catalog.triadmagnetics.com/Asset/TY-141P.pdf */
+    'Triad TY-141P': {value:'10kCT:10kCT',
+      source:'https://catalog.triadmagnetics.com/Asset/TY-141P.pdf',
+      pinout:{P1:1, PCT:2, P2:3, S1:4, SCT:5, S2:6},
+      about:'Triad TY-141P, 10kCT to 10kCT at 1:1, 100mW, 200Hz to 15kHz. The higher-impedance sister of the TY-145P in the same six-pin bobbin: pins 1-2-3 primary, 4-5-6 secondary, center tap the middle pin of each, dot above pin 1'},
     'Triad TY-145P': {value:'600CT:600CT',
       source:'https://catalog.triadmagnetics.com/Asset/TY-145P.pdf',
       pinout:{P1:1, PCT:2, P2:3, S1:4, SCT:5, S2:6},
