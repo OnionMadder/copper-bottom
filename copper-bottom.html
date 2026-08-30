@@ -1588,10 +1588,32 @@ const DEV_LIB = {
       about:'a push-pull driver transformer. The tapped winding feeds two devices in opposite phase from one supply'},
   },
   xfmrct: {
+    /* The first named transformer in the library, and the pin order is here
+       only because the manufacturer's current datasheet was read for it:
+       Triad Magnetics TY-145P, publish date 23 Feb 2026, which states
+       "DCR: Primary (1-3) 44 Ohm Nominal / Secondary (4-6) 58 Ohm Nominal"
+       and draws the schematic with the tap as the middle pin of each winding.
+       catalog.triadmagnetics.com/Asset/TY-145P.pdf
+
+       Its pins fall in this kind's own leg order, which is the whole reason it
+       fits: 1=P1, 2=PCT, 3=P2, 4=S1, 5=SCT, 6=S2. A dot on the bobbin flange
+       marks pin 1. */
+    'Triad TY-145P': {value:'600CT:600CT',
+      source:'https://catalog.triadmagnetics.com/Asset/TY-145P.pdf',
+      pinout:{P1:1, PCT:2, P2:3, S1:4, SCT:5, S2:6},
+      about:'Triad TY-145P, 600CT to 600CT at 1:1, 100mW, 200Hz to 15kHz. Pins 1-2-3 are the primary and 4-5-6 the secondary, with the center tap the middle pin of each; a dot on the bobbin flange marks pin 1. Place it in that order and the legs land on the right pins'},
     '600CT:600CT': {value:'600CT:600CT',
       about:'both windings tapped. This is the ring modulator transformer - the diode ring hangs between the two taps, and without them the circuit cannot balance'},
     '10kCT:10kCT': {value:'10kCT:10kCT',
       about:'a higher-impedance version of the same thing, for a ring modulator running at line level'},
+    /* NOT here on purpose: the Triad TY-250P. Its datasheet was read
+       (catalog.triadmagnetics.com/Asset/TY-250P.pdf, 31 May 2019) and it does
+       not fit any topology this file has. It is EIGHT pins with a SPLIT
+       secondary rather than a tapped one: "DCR: Primary (2-4) ... Secondary
+       (5-8, w/6-7 tied)", and the turns ratio depends on how you join them -
+       1:1 with 6 and 7 tied, 2:1 with 5 tied to 6 and 7 to 8. Representing it
+       needs an 8-leg kind with a split winding, which is a real feature and
+       not a library entry. Left out rather than approximated. */
   },
   cap: {
     'film':         {pkg:null,    draw:'box',

@@ -2768,6 +2768,25 @@ ok(has(runDRC(), 'part-short'), 'P1 and P2 on one strip is caught on a five-pin 
 S.parts[0].pins = [[0,1],[1,1],[2,1],[0,4],[4,1]];
 computeNets();
 ok(!has(runDRC(), 'part-short'), 'P1 tied to S1 is still just wiring');
+/* ---- named parts carry a real pin order, and it has to agree with the
+   click order or the guide sends somebody's legs to the wrong pins ---- */
+for(const kind in DEV_LIB){
+  const fam = DEV_LIB[kind];
+  for(const name in fam){
+    const e = fam[name];
+    if(!e.pinout) continue;                       // an electrical type, not a named part
+    ok(!!e.source, name + ' cites where its pinout came from');
+    const legs = LEG_LIB[kind] && LEG_LIB[kind][Object.keys(LEG_LIB[kind])[0]];
+    ok(!!legs, name + ' belongs to a kind with named legs');
+    ok(Object.keys(e.pinout).length === legs.length,
+       name + ' gives a pin for every leg (' + legs.length + ')');
+    ok(legs.every(l => Number.isInteger(e.pinout[l])),
+       name + ' names each leg, not each pin number');
+    const seq = legs.map(l => e.pinout[l]);
+    ok(JSON.stringify(seq) === JSON.stringify([...seq].sort((a,b) => a-b)),
+       name + " pin order rises with the click order, so placing it in order lands on the right pins");
+  }
+}
 /* it reaches the documents a builder actually uses */
 S = {version:2, name:'bom', board:{rows:6, cols:6}, cuts:[], ics:[], pads:[],
      parts:[{id:'t2', kind:'xfmr', ref:'T1', value:'1:1', device:'audio transformer',
