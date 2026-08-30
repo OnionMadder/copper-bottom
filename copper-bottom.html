@@ -753,14 +753,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="ecap"><kbd>E</kbd><span class="lbl">electrolytic</span></button>
       <button class="tool" data-tool="diode"><kbd>D</kbd><span class="lbl">diode</span></button>
       <button class="tool" data-tool="trans"><kbd>Q</kbd><span class="lbl">transistor</span></button>
-      <button class="tool" data-tool="trim"><kbd>W</kbd><span class="lbl">trimpot</span></button>
-      <button class="tool" data-tool="pot"><kbd>O</kbd><span class="lbl">potentiometer</span></button>
+      <button class="tool" data-tool="pot"><kbd>O</kbd><span class="lbl">pot / trimpot</span></button>
       <button class="tool" data-tool="spst"><kbd>T</kbd><span class="lbl">SPST switch</span></button>
       <button class="tool" data-tool="spdt"><kbd>Y</kbd><span class="lbl">SPDT switch</span></button>
       <button class="tool" data-tool="reg"><kbd>G</kbd><span class="lbl">regulator</span></button>
       <button class="tool" data-tool="xfmr"><kbd>H</kbd><span class="lbl">transformer</span></button>
-      <button class="tool" data-tool="xfmr5"><kbd>L</kbd><span class="lbl">transformer 5-pin</span></button>
-      <button class="tool" data-tool="xfmrct"><kbd>I</kbd><span class="lbl">transformer CT</span></button>
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
       <div class="sect">Edit</div>
@@ -1038,6 +1035,24 @@ const PART_LIB = {
   xfmrct:{legs:6, name:'transformer, center-tapped', prefix:'T'},
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
+
+/* One palette button, several kinds behind it.
+   The KINDS stay separate in the model on purpose. A four-pin and a six-pin
+   transformer are genuinely different parts - different leg counts, which
+   legsOf() fixes per kind - and every board already saved keeps opening. What
+   changes is only the rail, because three transformers in a row is a rail
+   nobody scans. Trimpot and panel pot are the same three legs, so the Edit
+   panel's KIND dropdown could already swap one for the other after placing;
+   this just stops them taking two buttons before placing. */
+const TOOL_FAMILY = {
+  xfmr: ['xfmr', 'xfmr5', 'xfmrct'],
+  pot:  ['pot', 'trim'],
+};
+function familyOf(kind){
+  for(const head in TOOL_FAMILY)
+    if(TOOL_FAMILY[head].indexOf(kind) >= 0) return head;
+  return null;
+}
 const isXfmr  = p => p && (p.kind === 'xfmr' || p.kind === 'xfmr5' || p.kind === 'xfmrct');
 
 /* A transformer is a BOX sitting over its pins, the way a chip is - not a body
@@ -8285,7 +8300,9 @@ function setTool(t){
   if(t !== 'line') LINE = null;
   if(t !== 'select') SEL = null;
   FOOT = false;
-  document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  /* a family button stays lit for whichever of its kinds is selected */
+  document.querySelectorAll('.tool').forEach(b => b.classList.toggle('on',
+    b.dataset.tool === t || (TOOL_FAMILY[b.dataset.tool] || []).indexOf(t) >= 0));
   hint.textContent = HINTS[t] || '';
   renderCtx();
   render();
@@ -8456,6 +8473,11 @@ function renderCtx(){
     else
       o.push('<div class="hint">two lugs: on / off. usually flown off-board with F.</div>');
   }else if(legsOf(TOOL) >= 3 && PART_LIB[TOOL]){
+    const fam = familyOf(TOOL);
+    if(fam)
+      o.push('<label>TYPE</label><select id="ctxFam">' + TOOL_FAMILY[fam].map(k =>
+        '<option value="' + k + '"' + (k === TOOL ? ' selected' : '') + '>' +
+        esc(PART_LIB[k].name) + '</option>').join('') + '</select>');
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
     if(LEG_LIB[TOOL] && Object.keys(LEG_LIB[TOOL]).length > 1)
       o.push('<label>DEVICE</label><select id="ctxDev">' + opts(Object.keys(LEG_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
@@ -8506,6 +8528,11 @@ function renderCtx(){
     renderCtx();
   });
   on('ctxPins','oninput',  e => { IC_PINS = Math.max(2, Math.min(64, Math.round(+e.target.value) || 8)); });
+  on('ctxFam', 'onchange', e => {
+    const k = e.target.value;
+    FAMILY_PICK[familyOf(k)] = k;
+    setTool(k);                    // renders the panel again with the new legs
+  });
   on('ctxDev', 'onchange', e => {
     DEVICE[TOOL] = e.target.value;
     const dv = DEV_LIB[TOOL] && DEV_LIB[TOOL][DEVICE[TOOL]];
@@ -9065,7 +9092,11 @@ window.addEventListener('pointerup', () => {
   if(moved) commit();
 });
 
-document.querySelectorAll('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+/* the family remembers which member you were using, so reaching for
+   'transformer' after placing a six-pin one gives you a six-pin one */
+const FAMILY_PICK = {};
+document.querySelectorAll('.tool').forEach(b => b.onclick = () =>
+  setTool(FAMILY_PICK[b.dataset.tool] || b.dataset.tool));
 
 netlist.addEventListener('mouseover', e => {
   const el = e.target.closest('.net'); if(!el) return;
