@@ -2717,6 +2717,41 @@ ok(ob[0].side === 'top', 'a part one row down mid-board goes off the TOP, not a 
 S.parts = [{id:'v4', kind:'pot', ref:'POT4', pins:[[1,17],[1,18],[1,19]], fly:[0,1,2]}];
 computeNets();
 ok(offBoardBodies()[0].side === 'right', 'a corner tie resolves to the earlier edge, every time');
+/* ---- audio transformers ---- */
+/* Strips run along rows here, so two legs in the same ROW share copper. */
+console.log('-- transformers --');
+ok(legsOf('xfmr') === 4 && legsOf('xfmrct') === 6, 'four legs plain, six center-tapped');
+ok(LEG_LIB.xfmrct['center-tapped'].join(',') === 'P1,PCT,P2,S1,SCT,S2', 'the CT legs read P1 PCT P2 S1 SCT S2');
+
+const XF = (pins) => ({version:2, name:'xfmr', board:{rows:8, cols:8}, cuts:[], ics:[], pads:[],
+  parts:[{id:'t1', kind:'xfmrct', ref:'T1', value:'1:1', device:'center-tapped', pins:pins}]});
+
+/* one strip per leg - nothing shorted, windings isolated */
+S = XF([[0,0],[1,0],[2,0],[3,0],[4,0],[5,0]]); computeNets();
+ok(!has(runDRC(), 'part-short'), 'six legs on six strips is not shorted');
+
+/* both ends of the PRIMARY on one strip is a genuinely shorted winding */
+S = XF([[0,0],[1,0],[0,3],[3,0],[4,0],[5,0]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'P1 and P2 on one strip is caught');
+
+/* primary tied to secondary is WIRING, not a short. A diode ring modulator
+   does exactly this, and erroring on it would be confidently wrong about a
+   circuit that works. */
+S = XF([[0,0],[1,0],[2,0],[0,4],[4,0],[5,0]]); computeNets();
+ok(!has(runDRC(), 'part-short'), 'P1 tied to S1 across the windings is allowed');
+
+/* ...and a real short is still caught when a cross-winding tie sits on it */
+S = XF([[0,0],[1,0],[0,2],[0,4],[4,0],[5,0]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'a shorted primary is still caught with S1 on the same net');
+
+/* it reaches the documents a builder actually uses */
+S = {version:2, name:'bom', board:{rows:6, cols:6}, cuts:[], ics:[], pads:[],
+     parts:[{id:'t2', kind:'xfmr', ref:'T1', value:'1:1', device:'audio transformer',
+             pins:[[0,0],[1,0],[2,0],[3,0]]}]};
+computeNets();
+ok(bom().some(r => r.refs.indexOf('T1') >= 0), 'it reaches the parts list');
+ok(buildList().some(it => it.ref === 'T1' && it.holes.split('  ').length === 4), 'the build list names all four holes');
+ok(JSON.stringify(walkthrough()).indexOf('T1') >= 0, 'and the walkthrough places it');
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
