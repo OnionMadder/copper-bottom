@@ -2768,6 +2768,71 @@ ok(has(runDRC(), 'part-short'), 'P1 and P2 on one strip is caught on a five-pin 
 S.parts[0].pins = [[0,1],[1,1],[2,1],[0,4],[4,1]];
 computeNets();
 ok(!has(runDRC(), 'part-short'), 'P1 tied to S1 is still just wiring');
+/* ---- seven legs: a tapped primary against a SPLIT secondary ----
+   A tap and a split are not the same thing and the difference is the point.
+   Two halves of a tapped winding are joined inside the part forever; two
+   split windings are joined outside it, by the builder, and which way they
+   are joined is what sets the ratio. So the connections that would be a dead
+   short on a tapped secondary are the two connections this part is sold to
+   make, and every check below is about telling those apart. */
+ok(legsOf('xfmrsp') === 7, 'seven legs: three on the primary, four on the split secondary');
+ok(LEG_LIB.xfmrsp['split secondary'].join(',') === 'P1,PCT,P2,SA1,SB1,SA2,SB2',
+   'the legs walk down the pin row, not one winding at a time');
+
+/* the family test, not a list of kinds: this is what stopped a fourth
+   transformer from silently losing the winding rule and the box drawing */
+ok(['xfmr','xfmr5','xfmrct','xfmrsp'].every(k => isXfmr({kind:k})),
+   'every transformer kind answers to isXfmr');
+ok(!isXfmr({kind:'trim'}) && !isXfmr({kind:'pot'}) && !isXfmr({kind:'res'}) && !isXfmr(null),
+   'and nothing else does');
+
+const SP = (pins) => ({version:2, name:'sp', board:{rows:8, cols:8}, cuts:[], ics:[], pads:[],
+  parts:[{id:'t7', kind:'xfmrsp', ref:'T1', value:'1:1 / 2:1', device:'split secondary', pins:pins}]});
+
+/* one strip per leg */
+S = SP([[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0]]); computeNets();
+ok(!has(runDRC(), 'part-short'), 'seven legs on seven strips is not shorted');
+
+/* SERIES: the finish of A meets the start of B. On the TY-250P this is pin 7
+   tied to pin 6, the connection its datasheet calls 1:1. */
+S = SP([[0,0],[1,0],[2,0],[3,0],[4,0],[4,3],[6,0]]); computeNets();
+ok(!has(runDRC(), 'part-short'), 'SA2 tied to SB1 is the series connection, not a short');
+
+/* PARALLEL: start to start and finish to finish, which is the 2:1 tap-off. */
+S = SP([[0,0],[1,0],[2,0],[3,0],[3,3],[5,0],[5,3]]); computeNets();
+ok(!has(runDRC(), 'part-short'), 'SA1+SB1 and SA2+SB2 is the parallel connection, not a short');
+
+/* but both ends of ONE secondary winding really is shorted out */
+S = SP([[0,0],[1,0],[2,0],[3,0],[4,0],[3,3],[6,0]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'both ends of winding A on one strip is caught');
+S = SP([[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[4,3]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'and both ends of winding B');
+
+/* the primary is unchanged by any of this */
+S = SP([[0,0],[1,0],[0,3],[3,0],[4,0],[5,0],[6,0]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'P1 and P2 on one strip is still caught');
+
+/* counted per winding, so a real short hiding under a legal tie still shows:
+   A is shorted end to end and B's start merely came along */
+S = SP([[0,0],[1,0],[2,0],[3,0],[3,5],[3,3],[6,0]]); computeNets();
+ok(has(runDRC(), 'part-short'), 'a shorted winding is caught with the other winding tied onto it');
+
+/* the box splits three legs against four, by name, so the core does not skew */
+S = SP([[0,1],[1,1],[2,1],[0,4],[1,4],[2,4],[3,4]]); computeNets();
+const b7 = xfmrBox(S.parts[0]);
+ok(b7.coreC === 2.5, 'the core sits midway between a three-leg and a four-leg winding');
+ok(b7.coreVertical === true, 'and runs vertically, because the windings are side by side');
+
+/* the TY-250P's secondary halves INTERLEAVE - 5 to 7 and 6 to 8, not 5-6 and
+   7-8. Reading the pairing off the pin numbers instead of off the datasheet's
+   winding diagram would put a builder's series link straight across one
+   winding, so it is pinned here rather than left to the pinout table. */
+const ty250 = DEV_LIB.xfmrsp['Triad TY-250P'].pinout;
+ok(ty250.SA1 === 5 && ty250.SA2 === 7, 'TY-250P winding A runs pin 5 to pin 7');
+ok(ty250.SB1 === 6 && ty250.SB2 === 8, 'TY-250P winding B runs pin 6 to pin 8');
+ok(ty250.P1 === 2 && ty250.PCT === 3 && ty250.P2 === 4,
+   'and its primary is 2-3-4, leaving pin 1 on no winding at all');
+
 /* ---- named parts carry a real pin order, and it has to agree with the
    click order or the guide sends somebody's legs to the wrong pins ---- */
 for(const kind in DEV_LIB){

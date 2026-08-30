@@ -1042,6 +1042,16 @@ const PART_LIB = {
   xfmr:  {legs:4, name:'transformer',  prefix:'T'},
   xfmr5: {legs:5, name:'transformer, one center tap', prefix:'T'},
   xfmrct:{legs:6, name:'transformer, center-tapped', prefix:'T'},
+  /* A SPLIT secondary is not a tapped one, and the difference is the whole
+     reason this kind exists. A tap is one winding with a wire brought out of
+     the middle: the two halves are in series and always will be. A split
+     secondary is TWO windings that touch nowhere inside the part, so how you
+     join them outside decides the ratio - end of one to start of the other
+     puts them in series, start to start and end to end puts them in parallel
+     at a quarter of the impedance. Tying them together is therefore ordinary
+     wiring, and a check that called it a short would be wrong about the two
+     connections the part is sold to make. */
+  xfmrsp:{legs:7, name:'transformer, split secondary', prefix:'T'},
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
 
@@ -1054,7 +1064,7 @@ const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
    panel's KIND dropdown could already swap one for the other after placing;
    this just stops them taking two buttons before placing. */
 const TOOL_FAMILY = {
-  xfmr: ['xfmr', 'xfmr5', 'xfmrct'],
+  xfmr: ['xfmr', 'xfmr5', 'xfmrct', 'xfmrsp'],
   pot:  ['pot', 'trim'],
 };
 function familyOf(kind){
@@ -1062,7 +1072,23 @@ function familyOf(kind){
     if(TOOL_FAMILY[head].indexOf(kind) >= 0) return head;
   return null;
 }
-const isXfmr  = p => p && (p.kind === 'xfmr' || p.kind === 'xfmr5' || p.kind === 'xfmrct');
+/* Asked of the FAMILY, not of a list of kinds. The old form named all three
+   by hand, which is one more place a fourth transformer had to be remembered
+   into, and forgetting it would have silently taken away the winding rule,
+   the box drawing and the VALUE field all at once. */
+const isXfmr  = p => !!p && familyOf(p.kind) === 'xfmr';
+
+/* Which winding each leg belongs to, position by position, in LEG_LIB's own
+   order. The part-short rule needs this and cannot read it off the leg name:
+   a split secondary's four legs all begin with S and they are TWO windings.
+   Written out rather than sliced off the name, so that adding a leg cannot
+   quietly file it under the wrong winding. */
+const XFMR_WINDING = {
+  xfmr:  ['P','P','S','S'],
+  xfmr5: ['P','P','P','S','S'],
+  xfmrct:['P','P','P','S','S','S'],
+  xfmrsp:['P','P','P','A','B','A','B'],
+};
 
 /* A transformer is a BOX sitting over its pins, the way a chip is - not a body
    strung along a line the way a resistor is. It is drawn from the pin field's
@@ -1126,6 +1152,14 @@ const LEG_LIB = {
      property of the copper. */
   xfmr5: {'one center tap':['P1','PCT','P2','S1','S2']},
   xfmrct:{'center-tapped':['P1','PCT','P2','S1','SCT','S2']},
+  /* A and B are the two secondary windings; 1 is the start of each, 2 the
+     finish. The click order walks STRAIGHT DOWN the pin row - start of A,
+     start of B, finish of A, finish of B - rather than taking one winding at
+     a time, because on a real split-secondary bobbin the two starts sit next
+     to each other and the two finishes below them. Placing in click order
+     therefore lands on rising pin numbers, which is the promise every named
+     part in DEV_LIB has to keep. */
+  xfmrsp:{'split secondary':['P1','PCT','P2','SA1','SB1','SA2','SB2']},
   trans:{
     '2N5088':['E','B','C'], '2N5089':['E','B','C'],
     '2N3904':['E','B','C'], '2N3906':['E','B','C'],
@@ -1627,14 +1661,32 @@ const DEV_LIB = {
       about:'both windings tapped. This is the ring modulator transformer - the diode ring hangs between the two taps, and without them the circuit cannot balance'},
     '10kCT:10kCT': {value:'10kCT:10kCT',
       about:'a higher-impedance version of the same thing, for a ring modulator running at line level'},
-    /* NOT here on purpose: the Triad TY-250P. Its datasheet was read
-       (catalog.triadmagnetics.com/Asset/TY-250P.pdf, 31 May 2019) and it does
-       not fit any topology this file has. It is EIGHT pins with a SPLIT
-       secondary rather than a tapped one: "DCR: Primary (2-4) ... Secondary
-       (5-8, w/6-7 tied)", and the turns ratio depends on how you join them -
-       1:1 with 6 and 7 tied, 2:1 with 5 tied to 6 and 7 to 8. Representing it
-       needs an 8-leg kind with a split winding, which is a real feature and
-       not a library entry. Left out rather than approximated. */
+    /* The TY-250P used to be listed here as NOT representable. It is, now:
+       see the xfmrsp kind below, which was built for it. */
+  },
+  xfmrsp: {
+    'split secondary': {value:'1:1 / 2:1',
+      about:'a tapped primary against two SEPARATE secondary windings. Join the finish of one to the start of the other and they are in series, which is the full ratio with a center tap where they meet; join start to start and finish to finish and they are in parallel, half the turns and a quarter of the impedance'},
+    /* Read off the manufacturer's own datasheet rather than inferred from the
+       family, the same standard the two six-pin Triads were held to:
+       Triad Magnetics TY-250P, publish date 31 May 2019,
+       catalog.triadmagnetics.com/Asset/TY-250P.pdf
+
+       Its winding diagram is the thing worth having seen. The DCR line alone
+       ("Primary (2-4) ... Secondary (5-8, w/6-7 tied)") reads as though the
+       secondary halves were 5-6 and 7-8. They are not. The schematic draws
+       winding A from pin 5 to pin 7 and winding B from pin 6 to pin 8, with
+       the dots on 5 and 6, which is exactly why 6 tied to 7 gives series and
+       5-to-6 with 7-to-8 gives parallel. Guessing the pairing off the pin
+       numbers would have put a builder's series link across one winding.
+
+       Pin 1 is fitted (the outline says 0.025 square, 8 places) and reaches no
+       winding at all - it is on the package and not on the schematic - so this
+       kind has seven legs, not eight, and pin 1 is a hole to leave alone. */
+    'Triad TY-250P': {value:'1kCT:1kCT/250',
+      source:'https://catalog.triadmagnetics.com/Asset/TY-250P.pdf',
+      pinout:{P1:2, PCT:3, P2:4, SA1:5, SB1:6, SA2:7, SB2:8},
+      about:'Triad TY-250P, 1000CT primary against a split 1000CT / 250 secondary, 20mW, 20Hz to 20kHz. Primary is pins 2-3-4 with the tap on 3, and pin 1 carries no winding. The secondary is two windings, 5 to 7 and 6 to 8: tie 6 and 7 for 1:1 with a center tap, or tie 5 to 6 and 7 to 8 for 2:1. Pins sit 0.2in apart down each side and 0.52in across, so the legs land on the grid and the two sides want five columns with a small bend'},
   },
   cap: {
     'film':         {pkg:null,    draw:'box',
@@ -2551,6 +2603,14 @@ function runDRC(){
   for(const p of S.parts){
     if(p.kind === 'link') continue;
     const names = legLabels(p);
+    /* leg name -> which winding it is part of, for the transformer rule
+       below. Falls back to the first letter for anything not in the table,
+       which is what the three older kinds always used. */
+    const winding = {};
+    if(isXfmr(p)){
+      const w = XFMR_WINDING[p.kind] || [];
+      (names || []).forEach((nm, i) => { winding[nm] = w[i] || String(nm).charAt(0); });
+    }
     const byNet = new Map();
     p.pins.forEach((at, i) => {
       if(legBent(p, i)) return;
@@ -2572,10 +2632,19 @@ function runDRC(){
          circuit that works. Only two legs of the SAME winding on one net is a
          shorted winding. Counted per winding rather than by how many sides are
          present, so P1+P2+S1 is still caught: the primary really is shorted,
-         the S1 just came along. */
+         the S1 just came along.
+
+         A split secondary is why the winding cannot be the first letter of the
+         leg name. SA and SB are two windings and joining them is how you pick
+         the ratio, so SA2 + SB1 on one net is the series connection and
+         SA1 + SB1 is the parallel one. Both would have read as a shorted
+         secondary under a rule that only looked at the S. */
       if(isXfmr(p)){
         const perWinding = {};
-        for(const l of legs) perWinding[l[0]] = (perWinding[l[0]] || 0) + 1;
+        for(const l of legs){
+          const w = winding[l] || String(l).charAt(0);
+          perWinding[w] = (perWinding[w] || 0) + 1;
+        }
         let shorted = false;
         for(const k in perWinding) if(perWinding[k] >= 2) shorted = true;
         if(!shorted) continue;
@@ -2886,7 +2955,7 @@ function holeShort(r, c){
 
 /* Solder the flat things first or you will not be able to reach them later. */
 const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8,
-                     xfmr:9, xfmr5:9, xfmrct:9, trim:10, pot:11, spst:12, spdt:13};
+                     xfmr:9, xfmr5:9, xfmrct:9, xfmrsp:9, trim:10, pot:11, spst:12, spdt:13};
 
 function buildList(){
   const items = [];
@@ -3225,6 +3294,7 @@ const WALK_NOTES = {
   xfmr:  'Four clicks: primary in, primary out, then secondary in, secondary out. The two windings do not touch - that is what the part is for.',
   xfmr5: 'Five clicks: P1, the center tap, P2 - that is the tapped winding, the one with three pins - then S1 and S2. If the tap on your part is on the other side, place that winding first.',
   xfmrct:'Six clicks, primary first: P1, the primary center tap, P2, then S1, the secondary center tap, S2. A diode ring modulator needs both taps.',
+  xfmrsp:'Seven clicks: P1, the primary center tap, P2, then the two secondaries walking down the pin row - start of A, start of B, finish of A, finish of B. A and B do not touch inside the part. Series them for the full ratio, parallel them for half the turns.',
   res:   null, cap: null, trim: null, reg: null,
 };
 
@@ -3302,7 +3372,7 @@ function walkthrough(){
       hand.map(k => { const q = k.split(',').map(Number); return at(q); })
         .concat(['A cut breaks one strip into two separate nets at that hole.']));
 
-  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O', spst:'T', spdt:'Y', xfmr:'H', xfmr5:'L', xfmrct:'I'};
+  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O', spst:'T', spdt:'Y', xfmr:'H', xfmr5:'L', xfmrct:'I', xfmrsp:'K'};
   for(const it of buildList()){
     if(it.kind === 'ic') continue;
     const part = S.parts.find(x => x.id === (it.key || '').replace('part:', '')) ||
@@ -4182,6 +4252,12 @@ const FOOTPRINT = {
   xfmr:  {shape:'box',  len:2.20, wid:1.80, leads:'radial'},
   xfmr5: {shape:'box',  len:2.20, wid:1.80, leads:'radial'},
   xfmrct:{shape:'box',  len:2.20, wid:1.80, leads:'radial'},
+  /* Kept at the family's small end even though a seven-pin part is never
+     really this size - a TY-250P alone is 0.8 by 0.7 inches. The drawing does
+     not depend on this number (xfmrBox works off the pin field, which is
+     true to whatever you placed); only the body-clash check does, and that
+     check would rather miss a clash than invent one. */
+  xfmrsp:{shape:'box',  len:2.20, wid:1.80, leads:'radial'},
   spst:  {shape:'disc', dia:1.55, leads:'radial'},              // off-board toggle: leads only
   spdt:  {shape:'disc', dia:1.85, leads:'radial'},
 };
@@ -4679,7 +4755,7 @@ function bbAttempt(cols, rails){
 
   /* --- every part, in build-list order, links excluded: a link defined a
          stripboard net, and the nets themselves travel instead --- */
-  const partRank = {trans:1, reg:2, xfmr:3, xfmr5:3, xfmrct:3, trim:4, diode:5, res:6, cap:7, ecap:8, spst:9, spdt:10, pot:11};
+  const partRank = {trans:1, reg:2, xfmr:3, xfmr5:3, xfmrct:3, xfmrsp:3, trim:4, diode:5, res:6, cap:7, ecap:8, spst:9, spdt:10, pot:11};
   const parts = S.parts.filter(p => p.kind !== 'link')
     .sort((a, b) => (partRank[a.kind] || 99) - (partRank[b.kind] || 99) ||
                     a.ref.localeCompare(b.ref, undefined, {numeric:true}));
@@ -8294,14 +8370,15 @@ function breadboardSVG(plan){
    ============================================================ */
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
-const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k', xfmr:'1:1', xfmr5:'1:1', xfmrct:'1:1'};
+const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k', xfmr:'1:1', xfmr5:'1:1', xfmrct:'1:1', xfmrsp:'1:1 / 2:1'};
 const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed', cap:'film',
-                xfmr:'600:600 line', xfmr5:'600CT:600', xfmrct:'600CT:600CT'};
+                xfmr:'600:600 line', xfmr5:'600CT:600', xfmrct:'600CT:600CT',
+                xfmrsp:'split secondary'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
                 e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly',
-                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct', l:'xfmr5'};
+                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct', l:'xfmr5', k:'xfmrsp'};
 /* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
@@ -8321,6 +8398,10 @@ const TOOL_ICON = {
   xfmr   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/></svg>',
   xfmr5  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/><path d="M1.5 10h2.5" stroke-width="1.6"/></svg>',
   xfmrct :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/><path d="M1.5 10h2.5M16 10h2.5" stroke-width="1.6"/></svg>',
+  /* the split one has to be told apart from the tapped one at 20px, so the
+     difference is a GAP in the right-hand coil rather than another tap line:
+     two windings with nothing between them is what the part is */
+  xfmrsp :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 4.5a1.5 1.5 0 0 1 0 2.2a1.5 1.5 0 0 1 0 2.2"/><path d="M16 11.1a1.5 1.5 0 0 1 0 2.2a1.5 1.5 0 0 1 0 2.2"/><path d="M1.5 10h2.5" stroke-width="1.6"/></svg>',
   reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
   ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
   pad    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="12" r="4"/><circle cx="8" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M10.9 9.1 16 4M13 4h3v3" stroke-linecap="round"/></svg>',
@@ -8348,6 +8429,7 @@ const HINTS = {
   xfmr   :'four clicks: P1, P2, then S1, S2. the two windings are isolated from each other.',
   xfmr5  :'five clicks: P1, center tap, P2 - the tapped winding first - then S1, S2.',
   xfmrct :'six clicks: P1, primary center tap, P2, then S1, secondary center tap, S2.',
+  xfmrsp :'seven clicks: P1, primary center tap, P2, then down the secondary row - start of A, start of B, finish of A, finish of B.',
   ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
   spst   :'two clicks: the two lugs. an on/off switch, usually flown off-board with F.',
