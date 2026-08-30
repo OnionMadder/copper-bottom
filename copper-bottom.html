@@ -1558,6 +1558,42 @@ const DEV_LIB = {
     'LED 3mm':   {value:'red',    pkg:'LED3',  draw:'led',
                   about:'a 3mm LED - the small one. Same deal as the 5mm: short leg and the flat on the rim mark the cathode'},
   },
+  /* ---- transformers ----------------------------------------------------
+     These are ELECTRICAL types - turns ratio, impedance, what the part is for.
+     Not pinouts. A CD40106's pin 1 is pin 1 everywhere on earth, which is what
+     lets IC_LIB name every pin; audio transformers have no such convention.
+     Pin order varies between manufacturers and most of the DIY-market parts
+     are unbranded, so naming a physical pin order here would be exactly the
+     confident wrong answer this file exists to avoid. Which hole each lead
+     goes in is the topology you place - 4, 5 or 6 legs - and the markings on
+     your own part.
+
+     A named part number gets added the way a module does: with its source
+     seen first. */
+  xfmr: {
+    '600:600 line': {value:'600:600',
+      about:'the workhorse 1:1 line transformer. Isolates one stage from another and breaks a ground loop without changing level'},
+    '1:1 isolation': {value:'1:1',
+      about:'a general isolation transformer. Same idea as the 600:600 but sold by ratio rather than impedance'},
+    '10k:10k': {value:'10k:10k',
+      about:'a higher-impedance 1:1, for passing a signal between stages that cannot share a ground'},
+    '1k : 8 ohm output': {value:'1k:8R',
+      about:'the little output transformer out of a transistor radio. Steps a high-impedance stage down to drive a small speaker directly'},
+    '8 ohm : 1k step-up': {value:'8R:1k',
+      about:'the same part used backwards, as a step-up - a cheap way to lift a very low-impedance source like a pickup or a dynamic mic'},
+  },
+  xfmr5: {
+    '600CT:600': {value:'600CT:600',
+      about:'center tap on one winding only. The tap is the reference point when one side needs a ground and the other does not'},
+    '10k CT : 2k driver': {value:'10kCT:2k',
+      about:'a push-pull driver transformer. The tapped winding feeds two devices in opposite phase from one supply'},
+  },
+  xfmrct: {
+    '600CT:600CT': {value:'600CT:600CT',
+      about:'both windings tapped. This is the ring modulator transformer - the diode ring hangs between the two taps, and without them the circuit cannot balance'},
+    '10kCT:10kCT': {value:'10kCT:10kCT',
+      about:'a higher-impedance version of the same thing, for a ring modulator running at line level'},
+  },
   cap: {
     'film':         {pkg:null,    draw:'box',
                      about:'a small film or ceramic square - the default body'},
@@ -8218,7 +8254,7 @@ let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
 const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k', xfmr:'1:1', xfmr5:'1:1', xfmrct:'1:1'};
 const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed', cap:'film',
-                xfmr:'audio transformer', xfmr5:'one center tap', xfmrct:'center-tapped'};
+                xfmr:'600:600 line', xfmr5:'600CT:600', xfmrct:'600CT:600CT'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
@@ -8397,7 +8433,11 @@ function renderCtx(){
     const pd = SEL && SEL.type === 'pad'  ? S.pads.find(x => x.id === SEL.id)  : null;
     if(p){
       o.push('<label>REF</label><input id="edRef" value="' + esc(p.ref) + '">');
-      if(LEG_LIB[p.kind])
+      /* A part can have both: LEG_LIB fixes what the legs are CALLED, DEV_LIB
+         says what you bought. For a transformer those are orthogonal - the leg
+         names come from its topology and the type from the shop - so the two
+         are offered independently rather than one shadowing the other. */
+      if(LEG_LIB[p.kind] && Object.keys(LEG_LIB[p.kind]).length > 1)
         o.push('<label>DEVICE</label><select id="edDev">' + opts(Object.keys(LEG_LIB[p.kind]), p.device) + '</select>');
       else if(DEV_LIB[p.kind])
         o.push('<label>TYPE</label><select id="edDev">' + opts(Object.keys(DEV_LIB[p.kind]), p.device || Object.keys(DEV_LIB[p.kind])[0]) + '</select>');
@@ -8481,6 +8521,12 @@ function renderCtx(){
     o.push('<label>NEXT REF</label><input id="ctxRef" value="' + esc(nextRef(TOOL)) + '" readonly>');
     if(LEG_LIB[TOOL] && Object.keys(LEG_LIB[TOOL]).length > 1)
       o.push('<label>DEVICE</label><select id="ctxDev">' + opts(Object.keys(LEG_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
+    else if(DEV_LIB[TOOL])
+      o.push('<label>TYPE</label><select id="ctxDev">' + opts(Object.keys(DEV_LIB[TOOL]), DEVICE[TOOL]) + '</select>');
+    if(DEV_LIB[TOOL] && DEV_LIB[TOOL][DEVICE[TOOL]] && DEV_LIB[TOOL][DEVICE[TOOL]].about)
+      o.push('<div class="hint">' + esc(DEV_LIB[TOOL][DEVICE[TOOL]].about) + '.</div>');
+    if(isXfmr({kind:TOOL}))
+      o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES[TOOL]) + '">');
     if(TOOL === 'trim' || TOOL === 'pot') o.push('<label>VALUE</label><input id="ctxVal" value="' + esc(VALUES[TOOL]) + '">');
     const ll = LEG_LIB[TOOL] && (LEG_LIB[TOOL][DEVICE[TOOL]] || LEG_LIB[TOOL][Object.keys(LEG_LIB[TOOL])[0]]);
     if(ll) o.push('<div class="hint">legs in click order: <b style="color:#00F0FF">' + ll.join(' · ') + '</b></div>');
