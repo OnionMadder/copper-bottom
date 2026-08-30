@@ -742,7 +742,6 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <div class="sect">Inspect</div>
       <button class="tool" data-tool="inspect"><kbd>V</kbd><span class="lbl">inspect net</span></button>
       <button class="tool" data-tool="select"><kbd>S</kbd><span class="lbl">select / move</span></button>
-      <button class="tool" data-tool="area"><kbd>A</kbd><span class="lbl">region</span></button>
       <button class="tool" data-tool="line"><kbd>B</kbd><span class="lbl">rows &amp; cols</span></button>
       <div class="sect">Board</div>
       <button class="tool" data-tool="cut"><kbd>X</kbd><span class="lbl">cut track</span></button>
@@ -8290,7 +8289,7 @@ const TOOL_ICON = {
 
 const HINTS = {
   inspect:'hover a hole to light its whole net. click to pin, esc to release.',
-  select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. arrows nudge · , and . turn it · del removes.',
+  select :'click a part to pick it up. drag it to move, or drag a green leg handle to reshape it. drag EMPTY board to pick a block, then duplicate, move or turn the whole thing. arrows nudge · , and . turn it · del removes.',
   area   :'click two opposite corners to box off a block. only whole parts inside it count. , and . turn it.',
   line   :'click any hole to pick its row and column, then add or remove one.',
   cut    :'click a hole to cut the track there, or again to undo it. under a chip, click one of its own cuts to leave that strip whole - and move the whole line with the buttons on the left.',
@@ -8332,7 +8331,9 @@ function setTool(t){
   TOOL = t;
   pending = [];
   focusHole = null;
-  if(t !== 'area') REGION = null;
+  /* the block belongs to select now too, so moving between the two does not
+     throw it away */
+  if(t !== 'area' && t !== 'select') REGION = null;
   if(t !== 'line') LINE = null;
   if(t !== 'select') SEL = null;
   FOOT = false;
@@ -8406,7 +8407,7 @@ function renderCtx(){
       o.push('<div class="hint">inserting stretches anything spanning the line. deleting takes ' +
              'whatever sits on it - undo brings it back.</div>');
     }
-  }else if(TOOL === 'area'){
+  }else if(TOOL === 'area' || (TOOL === 'select' && REGION)){
     if(!REGION){
       o.push('<div class="hint">click two opposite corners.<br>' +
              (pending.length ? 'now the far corner…' : '') + '</div>');
@@ -9090,7 +9091,27 @@ stage.addEventListener('click', e => {
 stage.addEventListener('pointerdown', e => {
   if(TOOL !== 'select') return;
   const t = e.target.closest ? e.target.closest('[data-part],[data-ic],[data-pad]') : null;
-  if(!t){ if(SEL){ SEL = null; renderCtx(); render(); } return; }
+  if(!t){
+    /* Empty board, so this gesture was going spare: drag it and you are
+       picking a BLOCK. Region used to be its own tool behind its own palette
+       button, which put the one operation nothing else can do - duplicating a
+       block - behind choosing a mode first. No other editor works that way,
+       and the button read as unnecessary because you never got far enough in
+       to use it. Dragging a PART still moves that part; only empty board
+       starts a box. */
+    const from = holeFromEvent(e);
+    if(from){
+      e.preventDefault();
+      SEL = null;
+      REGION = null;
+      drag = {marquee:true, from:from, moved:false};
+      renderCtx(); render();
+      return;
+    }
+    if(SEL){ SEL = null; renderCtx(); render(); }
+    return;
+  }
+  REGION = null;            /* picking a part puts the block away */
   e.preventDefault();
   const wasIc = SEL && SEL.type === 'ic' ? SEL.id : null;
   SEL = t.dataset.part ? {type:'part', id:t.dataset.part}
@@ -9112,6 +9133,13 @@ window.addEventListener('pointermove', e => {
   const q = holeFromEvent(e);
   if(!q) return;
   const dr = q[0] - drag.from[0], dc = q[1] - drag.from[1];
+  if(drag.marquee){
+    /* deliberately no pushUndo: framing a block changes nothing on the board */
+    if(dr || dc) drag.moved = true;
+    REGION = normRegion(drag.from, q);
+    render();
+    return;
+  }
   if(!drag.moved){
     if(dr === 0 && dc === 0) return;
     drag.moved = true;
@@ -9134,7 +9162,23 @@ window.addEventListener('pointermove', e => {
 window.addEventListener('pointerup', () => {
   if(!drag) return;
   const moved = drag.moved;
+  const wasMarquee = drag.marquee;
   drag = null;
+  if(wasMarquee){
+    /* a click that never moved is still "put it away", which is what clicking
+       empty board has always done */
+    if(!moved){ REGION = null; }
+    else{
+      /* the same default the two-click method used: stack the copy directly
+         under the block, which is what you want for another voice of one
+         circuit */
+      RDR = REGION.r1 - REGION.r0 + 1;
+      RDC = 0;
+      if(!regionFits(REGION, RDR, RDC)) RDR = 0;
+    }
+    renderCtx(); render();
+    return;
+  }
   if(moved) commit();
 });
 
@@ -9199,7 +9243,7 @@ document.addEventListener('keydown', e => {
   }
   if(k === ',' || k === '.'){
     const turns = k === '.' ? 1 : 3;
-    if(TOOL === 'area' && REGION){ e.preventDefault(); turnRegion(turns); return; }
+    if((TOOL === 'area' || TOOL === 'select') && REGION){ e.preventDefault(); turnRegion(turns); return; }
     if(SEL){ e.preventDefault(); turnPart(turns); return; }
     return;
   }
