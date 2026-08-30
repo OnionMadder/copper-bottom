@@ -638,7 +638,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   .hdr,.main,.foot,.sheetbar,.thanks{display:none !important}
   .sheet{position:static; background:#fff}
   .sheet[hidden]{display:none}
-  .sheetdoc{overflow:visible; padding:0; color:#000; filter:none !important}
+  /* the paper margin, now that @page has none. Same 12mm/14mm the page box
+     used to carry, so the printed sheet is dimensionally unchanged. */
+  .sheetdoc{overflow:visible; padding:12mm 14mm; color:#000; filter:none !important}
   .sheetdoc svg{border:none}
   .sheetdoc h2{page-break-after:avoid}
   .sheetdoc .svgwrap{page-break-inside:avoid}
@@ -653,7 +655,15 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    printed 12mm instead of the intended 14. Note the browser only honors this
    while the print dialog's margins are on "Default" - a sticky "None" from an
    earlier print beats any CSS. */
-@page{ margin:12mm 14mm; }
+/* ZERO, and the margin moves inside the document instead - see .sheetdoc in
+   the print block. The browser draws its own furniture (the date, the tab
+   title, the URL, the page number) in the PAGE margin, so a page with no
+   margin has nowhere to put them and they do not print. Reported from a
+   downloaded sheet that came out headed "8/29/26, 7:34 PM" and "Opto Duet -
+   build sheet", which is the tab title leaking onto the bench document.
+   The tab title is deliberate - it is what names the saved PDF - so the fix
+   has to be here rather than there. */
+@page{ margin:0; }
 
 /* ---- netlist overlay ---- */
 .nlnote{color:var(--soft); font-size:11.5px}
