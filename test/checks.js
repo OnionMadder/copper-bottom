@@ -2744,6 +2744,30 @@ ok(!has(runDRC(), 'part-short'), 'P1 tied to S1 across the windings is allowed')
 S = XF([[0,0],[1,0],[0,2],[0,4],[4,0],[5,0]]); computeNets();
 ok(has(runDRC(), 'part-short'), 'a shorted primary is still caught with S1 on the same net');
 
+/* ---- five legs: one winding tapped, one not ---- */
+ok(legsOf('xfmr5') === 5, 'five legs');
+ok(LEG_LIB.xfmr5['one center tap'].join(',') === 'P1,PCT,P2,S1,S2',
+   'the tapped winding is the one with three pins');
+
+/* The windings must be split by LEG NAME, not by halving the pin count.
+   With five pins a halve puts P2 in the secondary, which drags the core off
+   centre - so this asserts where the core actually lands. */
+S = {version:2, name:'x5', board:{rows:8, cols:8}, cuts:[], ics:[], pads:[],
+     parts:[{id:'t5', kind:'xfmr5', ref:'T1', value:'1:1', device:'one center tap',
+             pins:[[0,1],[1,1],[2,1],[0,4],[1,4]]}]};
+computeNets();
+const b5 = xfmrBox(S.parts[0]);
+ok(b5.coreC === 2.5, 'the core sits midway between the windings, not skewed by a bad split');
+ok(b5.coreVertical === true, 'and runs vertically, because the windings are side by side');
+ok(b5.r0 === 0 && b5.r1 === 2 && b5.c0 === 1 && b5.c1 === 4, 'the body covers the whole pin field');
+
+/* the winding rule applies the same way with an odd pin count */
+S.parts[0].pins = [[0,1],[1,1],[0,4],[3,1],[4,1]];
+computeNets();
+ok(has(runDRC(), 'part-short'), 'P1 and P2 on one strip is caught on a five-pin part');
+S.parts[0].pins = [[0,1],[1,1],[2,1],[0,4],[4,1]];
+computeNets();
+ok(!has(runDRC(), 'part-short'), 'P1 tied to S1 is still just wiring');
 /* it reaches the documents a builder actually uses */
 S = {version:2, name:'bom', board:{rows:6, cols:6}, cuts:[], ics:[], pads:[],
      parts:[{id:'t2', kind:'xfmr', ref:'T1', value:'1:1', device:'audio transformer',

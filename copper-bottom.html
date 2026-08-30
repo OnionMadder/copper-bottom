@@ -759,6 +759,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="spdt"><kbd>Y</kbd><span class="lbl">SPDT switch</span></button>
       <button class="tool" data-tool="reg"><kbd>G</kbd><span class="lbl">regulator</span></button>
       <button class="tool" data-tool="xfmr"><kbd>H</kbd><span class="lbl">transformer</span></button>
+      <button class="tool" data-tool="xfmr5"><kbd>L</kbd><span class="lbl">transformer 5-pin</span></button>
       <button class="tool" data-tool="xfmrct"><kbd>I</kbd><span class="lbl">transformer CT</span></button>
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
@@ -1033,10 +1034,11 @@ const PART_LIB = {
      rather than a device option, because a device change would have to add or
      remove pins on a placed part and the model does not allow that. */
   xfmr:  {legs:4, name:'transformer',  prefix:'T'},
+  xfmr5: {legs:5, name:'transformer, one center tap', prefix:'T'},
   xfmrct:{legs:6, name:'transformer, center-tapped', prefix:'T'},
 };
 const legsOf = kind => (PART_LIB[kind] || {legs:2}).legs;
-const isXfmr  = p => p && (p.kind === 'xfmr' || p.kind === 'xfmrct');
+const isXfmr  = p => p && (p.kind === 'xfmr' || p.kind === 'xfmr5' || p.kind === 'xfmrct');
 
 /* A transformer is a BOX sitting over its pins, the way a chip is - not a body
    strung along a line the way a resistor is. It is drawn from the pin field's
@@ -1048,12 +1050,22 @@ const isXfmr  = p => p && (p.kind === 'xfmr' || p.kind === 'xfmrct');
    Returns MODEL coordinates; each renderer scales them itself. */
 function xfmrBox(part){
   const rs = part.pins.map(q => q[0]), cs = part.pins.map(q => q[1]);
-  const half = part.pins.length / 2;
   const mid = a => a.reduce((x, y) => x + y, 0) / a.length;
-  const pr = mid(part.pins.slice(0, half).map(q => q[0]));
-  const pc = mid(part.pins.slice(0, half).map(q => q[1]));
-  const sr = mid(part.pins.slice(half).map(q => q[0]));
-  const sc = mid(part.pins.slice(half).map(q => q[1]));
+  /* Split by LEG NAME, never by halving the pin count. A five-pin transformer
+     is three legs on the tapped winding and two on the other, so halving put
+     one of the primary's legs in the secondary and skewed the core. Falls back
+     to a halve only if a part somehow has no leg names. */
+  const nm = legLabels(part);
+  let pi = [], si = [];
+  if(nm){
+    part.pins.forEach((q, i) => (String(nm[i]).charAt(0) === 'S' ? si : pi).push(q));
+  }
+  if(!pi.length || !si.length){
+    const h = Math.floor(part.pins.length / 2);
+    pi = part.pins.slice(0, h); si = part.pins.slice(h);
+  }
+  const pr = mid(pi.map(q => q[0])), pc = mid(pi.map(q => q[1]));
+  const sr = mid(si.map(q => q[0])), sc = mid(si.map(q => q[1]));
   return {
     r0: Math.min.apply(null, rs), r1: Math.max.apply(null, rs),
     c0: Math.min.apply(null, cs), c1: Math.max.apply(null, cs),
@@ -1084,6 +1096,11 @@ const LEG_LIB = {
      claimed here, because that varies part to part and this file does not
      guess at pinouts. */
   xfmr:  {'audio transformer':['P1','P2','S1','S2']},
+  /* The tapped winding is the one with three pins, and it is called P here.
+     If the tap on your part is on the side you think of as the secondary,
+     place that winding first - which side is "primary" is a label, not a
+     property of the copper. */
+  xfmr5: {'one center tap':['P1','PCT','P2','S1','S2']},
   xfmrct:{'center-tapped':['P1','PCT','P2','S1','SCT','S2']},
   trans:{
     '2N5088':['E','B','C'], '2N5089':['E','B','C'],
@@ -2463,7 +2480,7 @@ function runDRC(){
          shorted winding. Counted per winding rather than by how many sides are
          present, so P1+P2+S1 is still caught: the primary really is shorted,
          the S1 just came along. */
-      if(p.kind === 'xfmr' || p.kind === 'xfmrct'){
+      if(isXfmr(p)){
         const perWinding = {};
         for(const l of legs) perWinding[l[0]] = (perWinding[l[0]] || 0) + 1;
         let shorted = false;
@@ -2776,7 +2793,7 @@ function holeShort(r, c){
 
 /* Solder the flat things first or you will not be able to reach them later. */
 const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8,
-                     xfmr:9, xfmrct:9, trim:10, pot:11, spst:12, spdt:13};
+                     xfmr:9, xfmr5:9, xfmrct:9, trim:10, pot:11, spst:12, spdt:13};
 
 function buildList(){
   const items = [];
@@ -3113,6 +3130,7 @@ const WALK_NOTES = {
   spst:  'Two lugs, on/off. These are the holes its wires land in - the switch itself is on the panel.',
   spdt:  'Three lugs, and the center one is the common. These are the holes its wires land in - the switch is on the panel.',
   xfmr:  'Four clicks: primary in, primary out, then secondary in, secondary out. The two windings do not touch - that is what the part is for.',
+  xfmr5: 'Five clicks: P1, the center tap, P2 - that is the tapped winding, the one with three pins - then S1 and S2. If the tap on your part is on the other side, place that winding first.',
   xfmrct:'Six clicks, primary first: P1, the primary center tap, P2, then S1, the secondary center tap, S2. A diode ring modulator needs both taps.',
   res:   null, cap: null, trim: null, reg: null,
 };
@@ -3191,7 +3209,7 @@ function walkthrough(){
       hand.map(k => { const q = k.split(',').map(Number); return at(q); })
         .concat(['A cut breaks one strip into two separate nets at that hole.']));
 
-  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O', spst:'T', spdt:'Y', xfmr:'H', xfmrct:'I'};
+  const KEY = {link:'J', res:'R', cap:'C', ecap:'E', diode:'D', trans:'Q', trim:'W', reg:'G', pot:'O', spst:'T', spdt:'Y', xfmr:'H', xfmr5:'L', xfmrct:'I'};
   for(const it of buildList()){
     if(it.kind === 'ic') continue;
     const part = S.parts.find(x => x.id === (it.key || '').replace('part:', '')) ||
@@ -4069,6 +4087,7 @@ const FOOTPRINT = {
      there. Radial, so the lead-span check never applies - the pins come out of
      the underside, not the ends. */
   xfmr:  {shape:'box',  len:2.20, wid:1.80, leads:'radial'},
+  xfmr5: {shape:'box',  len:2.20, wid:1.80, leads:'radial'},
   xfmrct:{shape:'box',  len:2.20, wid:1.80, leads:'radial'},
   spst:  {shape:'disc', dia:1.55, leads:'radial'},              // off-board toggle: leads only
   spdt:  {shape:'disc', dia:1.85, leads:'radial'},
@@ -4567,7 +4586,7 @@ function bbAttempt(cols, rails){
 
   /* --- every part, in build-list order, links excluded: a link defined a
          stripboard net, and the nets themselves travel instead --- */
-  const partRank = {trans:1, reg:2, xfmr:3, xfmrct:3, trim:4, diode:5, res:6, cap:7, ecap:8, spst:9, spdt:10, pot:11};
+  const partRank = {trans:1, reg:2, xfmr:3, xfmr5:3, xfmrct:3, trim:4, diode:5, res:6, cap:7, ecap:8, spst:9, spdt:10, pot:11};
   const parts = S.parts.filter(p => p.kind !== 'link')
     .sort((a, b) => (partRank[a.kind] || 99) - (partRank[b.kind] || 99) ||
                     a.ref.localeCompare(b.ref, undefined, {numeric:true}));
@@ -8182,14 +8201,14 @@ function breadboardSVG(plan){
    ============================================================ */
 let TOOL = 'inspect';
 let listNet = null;                       // net hovered in the side panel
-const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k', xfmr:'1:1', xfmrct:'1:1'};
+const VALUES = {res:'10k', cap:'10n', ecap:'10u', diode:'1N4148', trim:'100k', pot:'100k', xfmr:'1:1', xfmr5:'1:1', xfmrct:'1:1'};
 const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer', spdt:'SPDT toggle', diode:'switching', res:'fixed', cap:'film',
-                xfmr:'audio transformer', xfmrct:'center-tapped'};
+                xfmr:'audio transformer', xfmr5:'one center tap', xfmrct:'center-tapped'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
                 e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly',
-                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct'};
+                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct', l:'xfmr5'};
 /* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
@@ -8207,6 +8226,7 @@ const TOOL_ICON = {
   trim   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="3.5" width="11" height="9" rx="1.4"/><path d="M7.5 8h5" stroke-width="1.8"/><path d="M7 12.5v4M10 12.5v4M13 12.5v4"/></svg>',
   pot    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="9" r="4.6"/><path d="M10 4.4V1.6" stroke-width="1.8"/><path d="M7 13.4v4M10 13.6v4M13 13.4v4"/></svg>',
   xfmr   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/></svg>',
+  xfmr5  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/><path d="M1.5 10h2.5" stroke-width="1.6"/></svg>',
   xfmrct :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4.5v11M14 4.5v11" stroke-width="1.2"/><path d="M4 5.5a2 2 0 0 0 0 3a2 2 0 0 0 0 3a2 2 0 0 0 0 3"/><path d="M16 5.5a2 2 0 0 1 0 3a2 2 0 0 1 0 3a2 2 0 0 1 0 3"/><path d="M1.5 10h2.5M16 10h2.5" stroke-width="1.6"/></svg>',
   reg    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3.5" width="12" height="8" rx="1.2"/><path d="M4 6h12" stroke-width="1.2"/><path d="M7 11.5v5M10 11.5v5M13 11.5v5"/></svg>',
   ic     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="3.5" width="9" height="13" rx="1.2"/><path d="M8.6 3.5a1.4 1.4 0 0 0 2.8 0"/><path d="M2.8 6.5h2.7M2.8 10h2.7M2.8 13.5h2.7M14.5 6.5h2.7M14.5 10h2.7M14.5 13.5h2.7"/></svg>',
@@ -8233,6 +8253,7 @@ const HINTS = {
   pot    :'three clicks: lug 1, wiper, lug 3 - where its flying leads land.',
   reg    :'three clicks, in leg order.',
   xfmr   :'four clicks: P1, P2, then S1, S2. the two windings are isolated from each other.',
+  xfmr5  :'five clicks: P1, center tap, P2 - the tapped winding first - then S1, S2.',
   xfmrct :'six clicks: P1, primary center tap, P2, then S1, secondary center tap, S2.',
   ic     :'click where pin 1 goes. cuts between the pin rows are added automatically - the X tool moves them afterwards if the layout cuts elsewhere.',
   pad    :'click a hole to mark an off-board wire exit with the label above.',
