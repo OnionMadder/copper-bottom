@@ -1534,6 +1534,34 @@ ok(!/^Nd+:/m.test(written) || true, 'bare N-numbers only where nothing better ex
 function lines0(){ return written.split(String.fromCharCode(10)).filter(l => l && l.indexOf('#') !== 0); }
 ok(lines0()[0].indexOf('+12V') === 0, 'supplies come first, the way a circuit is read');
 
+/* The parts list has the same dual life the netlist has: read off the board,
+   handed to somebody else. The invariant that matters is the round trip - if a
+   list written from a board does not satisfy that board's own check, one of the
+   two is lying. */
+console.log('-- parts out: the board lists itself --');
+S = demoProject(); computeNets();
+let plist = partsListFromBoard();
+ok(plist.length > 0, 'a board writes out a parts list');
+let pback = checkBom(plist);
+ok(pback.clean, 'and it round-trips through the parts check clean');
+ok(pback.unread.length === 0, 'with no line the parser could not read');
+ok(pback.problems === 0, 'and no part short, over or missing');
+
+console.log('-- parts out: what it refuses to say --');
+ok(!/^[^#]*x .*link/m.test(plist), 'wire links are not listed as a part to buy');
+ok(plist.indexOf('wire is not a part you buy') > 0, 'but the wire is still counted, in a comment');
+let refLines = plist.split(String.fromCharCode(10)).filter(l => l && l.indexOf('#') !== 0);
+ok(refLines.every(l => l.indexOf('#') > 0), 'every listed line carries its refs behind a comment');
+ok(refLines.every(l => /^\d+ x /.test(l)), 'and opens with a quantity the parser reads');
+
+console.log('-- parts out: an empty board writes nothing to trip over --');
+S = {name:'x', board:{rows:5, cols:5}, cuts:[], parts:[], ics:[], pads:[]};
+computeNets();
+ok(typeof partsListFromBoard() === 'string', 'an empty board still returns a string');
+ok(partsListFromBoard().indexOf('nothing with a value') > 0, 'and says so rather than printing a bare header');
+
+S = demoProject(); computeNets();
+
 console.log('-- netlist out: an empty board writes nothing to trip over --');
 S = {name:'x', board:{rows:5, cols:5}, cuts:[], parts:[], ics:[], pads:[]};
 computeNets();

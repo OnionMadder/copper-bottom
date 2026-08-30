@@ -851,9 +851,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 <div class="sheet" id="parts" hidden>
   <div class="sheetbar">
     <b>PARTS</b>
-    <span class="nlnote">optional - paste the list the build came with</span>
+    <span class="nlnote">optional - paste the list the build came with, or write one from the board</span>
     <span class="sp"></span>
     <span id="partsVerdict"></span>
+    <button id="partsFromBoard" title="write out the parts the board already has">from my board</button>
+    <button id="partsCopy" title="copy the parts list to the clipboard">copy</button>
     <button id="partsClose">close</button>
   </div>
   <div class="nlbody">
@@ -3396,6 +3398,59 @@ function checkBom(text){
   const problems = rows.filter(r => r.status !== 'match');
   return {rows:rows, unread:unread, problems:problems.length,
           declared:wanted.size, clean:problems.length === 0 && wanted.size > 0};
+}
+
+/* The parts list written OUT, the way netlistFromBoard writes the netlist out.
+   Not a second opinion: a list read off the board and handed back to the parts
+   check can only agree with itself. Its use is the shopping trip, the build
+   page and the forum post - the places a parts list actually gets pasted, and
+   the ones that otherwise get typed by hand off a board the tool already knows.
+
+   Refs ride behind a '#'. parseBomLine strips comments, so "2 x 1k  # R1, R3"
+   reads back as exactly two 1k and never as a part called R3. */
+function partsListFromBoard(){
+  const rows    = bom();
+  const listed  = rows.filter(r => r.kind !== 'link' && r.what);
+  const links   = rows.filter(r => r.kind === 'link');
+  const unnamed = rows.filter(r => r.kind !== 'link' && !r.what);
+
+  const out = [
+    '# ' + (S.name || 'untitled') + ' - the parts on the board',
+    '# ' + S.parts.length + ' part' + (S.parts.length === 1 ? '' : 's') + ', ' +
+      S.ics.length + ' chip' + (S.ics.length === 1 ? '' : 's'),
+    '#',
+    '# What the board HAS. Checking the board against this can only agree with',
+    '# itself - its use is the shopping trip and the build page.',
+    '',
+  ];
+
+  if(listed.length){
+    const body = listed.map(r => ({
+      left: r.qty + ' x ' + r.what + (r.note ? '  ' + r.note : ''),
+      refs: r.refs.join(', '),
+    }));
+    const pad = Math.min(34, Math.max(...body.map(b => b.left.length)) + 2);
+    for(const b of body) out.push(b.left.padEnd(pad) + '# ' + b.refs);
+  }else{
+    out.push('# nothing with a value is placed yet, so there is nothing to list.');
+  }
+
+  /* Wire is not a part you buy, which is why the check skips links too - but
+     somebody still has to have wire, so say how much rather than nothing. */
+  if(links.length){
+    const n = links.reduce((t, r) => t + r.qty, 0);
+    out.push('', '# ' + n + ' wire link' + (n === 1 ? '' : 's') +
+                 ', not listed - wire is not a part you buy.');
+  }
+
+  /* A part with no value is not given one here. Naming it and saying why beats
+     both inventing a value and dropping it silently. */
+  if(unnamed.length){
+    const refs = unnamed.reduce((a, r) => a.concat(r.refs), []).join(', ');
+    out.push('', '# no value set, so not listed: ' + refs + '.');
+  }
+
+  return out.join('\n');
 }
 
 /* Off-board wiring: the step that turns a working board into a working pedal,
@@ -9906,6 +9961,33 @@ function renderParts(){
 function openParts(){ partsText.value = S.bom || ''; renderParts(); parts.hidden = false; }
 function closeParts(){ parts.hidden = true; }
 btnParts.onclick   = openParts;
+
+/* The same offer the netlist pane makes: fill the empty pane from the board so
+   the job is editing rather than recalling a syntax. Here it is also the way a
+   parts list gets OUT - into a build page or a post - which is the use that
+   actually earns it. Replaces what is there, so it asks first. */
+partsFromBoard.onclick = () => {
+  const current = partsText.value.trim();
+  const fresh = partsListFromBoard();
+  if(current && current !== fresh.trim() &&
+     !confirm('Replace what is in the pane with the parts read off the board?')) return;
+  partsText.value = fresh;
+  S.bom = fresh;
+  renderParts();
+  autosave();
+};
+
+partsCopy.onclick = () => {
+  const text = partsText.value;
+  const done = () => flash('parts list copied');
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(text).then(done, () => fallback());
+  else fallback();
+  function fallback(){
+    partsText.select();
+    try{ document.execCommand('copy'); done(); }catch(err){ flash('copy failed - select and copy by hand'); }
+  }
+};
 partsClose.onclick = closeParts;
 partsText.oninput  = () => {
   const v = partsText.value;
