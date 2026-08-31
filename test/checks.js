@@ -737,6 +737,39 @@ ok(!runDRC().some(f => f.rule === 'pin-short'), 'cutting between them clears it'
 S = demoProject(); computeNets();
 
 
+console.log('-- non-polarized electrolytics --');
+S = demoProject(); computeNets();
+/* An NP or bipolar can is an electrolytic with no plus leg. The flag existed
+   and the DIYLC importer already honoured it, but nothing could set it and
+   three places went on claiming a polarity that was not there. */
+const npCap = S.parts.find(q => q.ref === 'C3');
+const polCap = S.parts.find(q => q.ref === 'C4');
+ok(npCap.kind === 'ecap' && polCap.kind === 'ecap', 'C3 and C4 are electrolytics');
+ok(npCap.polarized !== false, 'and an ecap with no flag set counts as polarised');
+ok(npCap.value === polCap.value, 'both are the same value, which matters below');
+
+const noteFor = (ref) => bom().find(r => r.refs.indexOf(ref) >= 0).note;
+const npWalk = () => breadboardText();
+
+ok(npWalk().indexOf('C3 (10u): + leg into') >= 0, 'the walkthrough names C3 plus leg while it is polarised');
+ok(noteFor('C3') !== 'NP / bipolar', 'and the parts list does not call it NP');
+ok(bom().filter(r => r.refs.indexOf('C3') >= 0 || r.refs.indexOf('C4') >= 0).length === 1,
+   'two identical polarised cans share one BOM line');
+
+npCap.polarized = false; computeNets();
+
+ok(noteFor('C3') === 'NP / bipolar', 'flagged NP, the parts list asks for an NP part');
+ok(bom().filter(r => r.refs.indexOf('C3') >= 0 || r.refs.indexOf('C4') >= 0).length === 2,
+   'and it splits off its own BOM line - an NP can is a different drawer trip');
+ok(npWalk().indexOf('C3 (10u): C9 to B2') >= 0, 'the walkthrough stops naming legs C3 does not have');
+ok(npWalk().indexOf('either way round') >= 0, 'and says it goes in either way round');
+ok(npWalk().indexOf('C4 (10u): + leg into') >= 0, 'while C4, still polarised, keeps its legs named');
+
+npCap.polarized = true; computeNets();
+ok(noteFor('C3') !== 'NP / bipolar' && npWalk().indexOf('C3 (10u): + leg into') >= 0,
+   'unticking it puts everything back');
+S = demoProject(); computeNets();
+
 console.log('-- netlist: parsing --');
 S = demoProject(); computeNets();
 let nlP = parseNetlist('GND: IC1.7 C1.B @GND\n\n# a comment\nV1: IC1.1  C1.A   @V1_IN\n');

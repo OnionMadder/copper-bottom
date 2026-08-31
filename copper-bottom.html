@@ -3225,6 +3225,7 @@ function bom(){
     const isDef = fam && q.device === Object.keys(fam)[0];
     const note = q.kind === 'diode'
       ? (isDef || !q.device ? diodePkg(q) : q.device)
+      : (q.kind === 'ecap' && q.polarized === false) ? 'NP / bipolar'
       : (q.device && !isDef ? q.device : '');
     const r = add(q.kind, lib.name || q.kind, q.value || q.device || '', note);
     r.qty++; r.refs.push(q.ref);
@@ -5097,10 +5098,14 @@ function breadboardText(planArg){
     group(name);
     for(const row of rows){
       const p = row.part, h = holesOf(row).filter(Boolean);
-      if(p.kind === 'ecap')
+      if(p.kind === 'ecap' && p.polarized !== false)
         step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') +
              ': + leg into ' + bbTo(row.targets[0]) + ', - leg into ' + bbTo(row.targets[1]) + '.',
           [once('ecap', 'The stripe on the can marks the MINUS leg. Backwards, an electrolytic eventually vents.'),
+           flyNote(p, row.targets), bentNote(p)]);
+      else if(p.kind === 'ecap')
+        step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') + ': ' + h.join(' to ') + '.',
+          [once('npcap', 'An NP or bipolar can has no plus leg and no stripe. It goes in either way round, which is the whole reason to use one where the signal swings both ways.'),
            flyNote(p, row.targets), bentNote(p)]);
       else
         step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') + ': ' + h.join(' to ') + '.',
@@ -6529,15 +6534,24 @@ function render(){
 
     }else{
       /* electrolytic seen from above: dark can with a silver stripe down the
-         NEGATIVE side, which is how the real part is actually marked */
+         NEGATIVE side, which is how the real part is actually marked.
+
+         An NP or bipolar can has neither, and neither does this drawing of
+         one. Marking a plus leg on a part that has no plus leg is worse than
+         marking nothing, because somebody will believe it and solder to it -
+         and the missing stripe is exactly how you tell the two apart in the
+         drawer, so the picture and the part agree. */
       tint = C('tintEcap'); off = ER + 12; half = ER;
+      const npCan = p.polarized === false;
       o.push(g +
         '<circle cx="0" cy="0" r="' + ER + '" fill="#17151F" stroke="#B9B4C7" stroke-width="1.3"/>' +
-        '<path d="M' + (ER*0.47) + ' ' + (-ER*0.883) + 'A' + ER + ' ' + ER + ' 0 0 1 ' +
-        (ER*0.47) + ' ' + (ER*0.883) + 'Z" fill="#C9C4D6"/>' +
+        (npCan ? '' :
+          '<path d="M' + (ER*0.47) + ' ' + (-ER*0.883) + 'A' + ER + ' ' + ER + ' 0 0 1 ' +
+          (ER*0.47) + ' ' + (ER*0.883) + 'Z" fill="#C9C4D6"/>') +
         '<circle cx="0" cy="0" r="' + (ER*0.44) + '" fill="none" stroke="#4A4458" stroke-width="1"/>' +
         '</g>');
-      labels.push('<text class="pol" x="' + (ax + nx*13) + '" y="' + (ay + ny*13 + 4) + '">+</text>');
+      if(!npCan)
+        labels.push('<text class="pol" x="' + (ax + nx*13) + '" y="' + (ay + ny*13 + 4) + '">+</text>');
     }
     }
 
@@ -8365,8 +8379,10 @@ function breadboardSVG(plan){
                '<line x1="0.5" y1="-1" x2="0.5" y2="1" stroke-width="0.3"/></g>');
       else if(p.kind === 'ecap'){
         o.push(g + '<circle cx="0" cy="0" r="2.1"/></g>');
-        const px = x1 + (mx - x1) * 0.45, py = y1 + (my - y1) * 0.45;
-        late.push(TL(px, py + 0.7, '+', 2.4, 'text-anchor="middle" font-weight="bold" fill="#000"'));
+        if(p.polarized !== false){
+          const px = x1 + (mx - x1) * 0.45, py = y1 + (my - y1) * 0.45;
+          late.push(TL(px, py + 0.7, '+', 2.4, 'text-anchor="middle" font-weight="bold" fill="#000"'));
+        }
       }
       else if(p.kind === 'diode')
         o.push(g + '<rect x="-1.65" y="-0.8" width="3.3" height="1.6" rx="0.2"/>' +
@@ -8665,6 +8681,14 @@ function renderCtx(){
         o.push('<label class="chk"><input type="checkbox" id="edVert"' + (p.mount === 'vertical' ? ' checked' : '') + '> stands on end (vertical)</label>');
         o.push('<div class="hint">an axial part stood upright takes two adjacent holes. tick it when you meant to - it says the tight lead span is deliberate, and quiets the lead-span warning.</div>');
       }
+      /* Only the electrolytic. A diode is polarised by what it IS, so it does
+         not get the option. */
+      if(p.kind === 'ecap'){
+        o.push('<label>POLARITY</label>');
+        o.push('<label class="chk"><input type="checkbox" id="edNP"' +
+               (p.polarized === false ? ' checked' : '') + '> non-polarized (NP / bipolar)</label>');
+        o.push('<div class="hint">a bipolar can has no plus leg and no stripe, so it goes in either way round - which is what you want wherever the signal swings both ways, like a coupling cap between two stages. tick it and the board stops drawing a +, the walkthrough stops naming legs, and the parts list asks for an NP part, because it is a different drawer trip.</div>');
+      }
     }else if(pd){
       o.push('<label>PAD LABEL</label><input id="edPadLabel" value="' + esc(pd.label) + '">');
       o.push('<label>GOES TO</label><input id="edPadTo" value="' + esc(pd.to || '') +
@@ -8877,6 +8901,10 @@ function renderCtx(){
   on('edDev',  'onchange', e => edit(() => { const t = selObj(); if(t) t.device = e.target.value; }));
   on('edKind', 'onchange', e => edit(() => { const t = selObj(); if(t) t.kind = e.target.value; }));
   on('edVert', 'onchange', e => edit(() => { const t = selObj(); if(!t) return; if(e.target.checked) t.mount = 'vertical'; else delete t.mount; }));
+  /* stored as an explicit false rather than a deleted key: every other reader
+     tests polarized === false, and a missing key has always meant "not set",
+     which for an ecap means polarised. */
+  on('edNP',   'onchange', e => edit(() => { const t = selObj(); if(!t) return; t.polarized = !e.target.checked; }));
   const setLegList = (t, key, list) => { if(list.length) t[key] = list; else delete t[key]; };
   const toggleLeg = (t, key, otherKey, i) => {
     const set = new Set(Array.isArray(t[key]) ? t[key] : []);
