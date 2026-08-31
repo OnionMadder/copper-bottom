@@ -6394,7 +6394,10 @@ function render(){
     if(bentB) o.push(bentStub(bx, by, mx, my)); else if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
 
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
-    let tint = C('tintDefault'), off = 18, half = 12, midLabel = false;
+    /* where the BODY actually is. Almost always the midpoint of the two
+       holes, but a part stood on end is drawn over its FIRST hole, and its
+       name has to follow the body rather than the geometry. */
+    let tint = C('tintDefault'), bcx = mx, bcy = my;
 
     const dev = devOf(p);
 
@@ -6415,7 +6418,7 @@ function render(){
     if(upright){
       const UR = PITCH * upFp.wid / 2, isD = p.kind === 'diode';
       tint = isD ? C('tintDiode') : C('tintRes');
-      off = UR + 13; half = UR;
+      bcx = ax; bcy = ay;                     // stood on end: body over the first hole
       o.push('<g transform="translate(' + ax + ',' + ay + ')">' +
         '<circle cx="0" cy="0" r="' + UR + '" fill="' + (isD ? '#1A1620' : '#C8A97E') +
           '" stroke="' + (isD ? '#B9B4C7' : '#141020') + '" stroke-width="1.2"/>' +
@@ -6430,7 +6433,7 @@ function render(){
       /* face-on: a light window with the serpentine track across it. No band,
          no polarity - the whole point of filing this under `res`. */
       const LR = PITCH * footprintOf(p).dia / 2;
-      tint = C('tintLed'); off = LR + 12; half = LR;
+      tint = C('tintLed');
       o.push(g +
         '<circle cx="0" cy="0" r="' + LR + '" fill="#CFC7A6" stroke="#5A5340" stroke-width="1.3"/>' +
         '<path d="M' + (-LR*0.62) + ' ' + (-LR*0.5) + 'q' + (LR*0.31) + ' ' + (LR*0.5) + ' 0 ' + (LR) +
@@ -6448,7 +6451,7 @@ function render(){
       const LR = PITCH * footprintOf(p).dia / 2;
       const LD = LR * 0.72;
       const col = ledTint(p.value);
-      tint = col[1]; off = LR + 12; half = LR;
+      tint = col[1];
       const fx = LD*0.94, fy = LD*0.34;
       o.push(g +
         '<circle cx="0" cy="0" r="' + LR + '" fill="none" stroke="' + col[0] +
@@ -6465,7 +6468,7 @@ function render(){
         '</g>');
 
     }else if(p.kind === 'res'){
-      tint = C('tintRes'); off = RH/2 + 13; half = RW/2;
+      tint = C('tintRes');
       o.push(g +
         '<rect x="' + (-RW/2) + '" y="' + (-RH/2) + '" width="' + RW + '" height="' + RH +
         '" rx="' + (RH*0.42) + '" fill="#C8A97E" stroke="#141020" stroke-width="1.1"/>' +
@@ -6482,7 +6485,7 @@ function render(){
            the full 5mm face and a 10n blob outweighed the chip beside it
            (her words: huge and not a disc at all). */
         const CR2 = PITCH * cfp.dia / 2, CRY = CR2 * 0.72;
-        tint = C('tintCer'); off = CRY + 12; half = CR2;
+        tint = C('tintCer');
         o.push(g +
           '<ellipse cx="0" cy="0" rx="' + CR2 + '" ry="' + CRY +
           '" fill="#E3C79A" stroke="#8A6B3A" stroke-width="0.9"/>' +
@@ -6492,7 +6495,7 @@ function render(){
       }else{
         const CW2 = PITCH * cfp.len, CH2 = PITCH * cfp.wid;
         const boxy = p.device === 'box film';
-        tint = boxy ? C('tintCapBox') : C('tintCapDisc'); off = CH2/2 + 12; half = CW2/2;
+        tint = boxy ? C('tintCapBox') : C('tintCapDisc');
         o.push(g +
           '<rect x="' + (-CW2/2) + '" y="' + (-CH2/2) + '" width="' + CW2 + '" height="' + CH2 +
           '" rx="' + (CH2*0.24) + '" fill="' + (boxy ? '#B03A2E' : '#3B6FC4') + '" stroke="' + (boxy ? '#3D120D' : '#0C1526') + '" stroke-width="1.1"/>' +
@@ -6505,7 +6508,7 @@ function render(){
       /* cathode band at the B end, matching how the real part is printed */
       const dfp = footprintOf(p);
       const DW = PITCH * dfp.len, DH = PITCH * dfp.wid;
-      tint = C('tintDiode'); off = DH/2 + 12; half = DW/2;
+      tint = C('tintDiode');
       const bx0 = DW*0.22, bw = DW*0.17;
       /* a zener wears the same body; the tails on its band are the only thing
          that tells you it is one, so they are drawn rather than implied */
@@ -6524,7 +6527,7 @@ function render(){
     }else if(p.kind === 'spst'){
       /* a panel toggle on two lugs. Off-board when flown. */
       const SW = PITCH * 0.62;
-      tint = C('tintSwitch'); off = SW + 12; half = SW;
+      tint = C('tintSwitch');
       o.push(g +
         '<rect x="' + (-SW) + '" y="' + (-SW*0.72) + '" width="' + (2*SW) + '" height="' + (SW*1.44) +
         '" rx="' + (SW*0.28) + '" fill="#2A2636" stroke="#0B0A12" stroke-width="1.1"/>' +
@@ -6541,13 +6544,7 @@ function render(){
          marking nothing, because somebody will believe it and solder to it -
          and the missing stripe is exactly how you tell the two apart in the
          drawer, so the picture and the part agree. */
-      tint = C('tintEcap'); off = ER + 12; half = ER;
-      /* The name sits ON the can, centered, the way a resistor wears its own.
-         A can is the widest body on the board, so pushing its name clear of it
-         threw the word further from its part than anything else on the sheet
-         and left it floating between two cans with nothing saying which it
-         belonged to. The halo carries it over the dark body. */
-      midLabel = true;
+      tint = C('tintEcap');
       const npCan = p.polarized === false;
       o.push(g +
         '<circle cx="0" cy="0" r="' + ER + '" fill="#17151F" stroke="#B9B4C7" stroke-width="1.3"/>' +
@@ -6562,17 +6559,22 @@ function render(){
     }
 
     const label = p.ref + (p.value ? ' ' + p.value : '');
-    const leadLen = Math.hypot(bx - ax, by - ay);
-    let tx, ty;
-    if(midLabel){
-      tx = mx; ty = my;
-    }else if(leadLen > 2*half + PITCH*1.25){
-      const d = half + 13;
-      tx = mx + Math.cos(ang)*d; ty = my + Math.sin(ang)*d;
-    }else{
-      const side = ((p.pins[0][0] + p.pins[0][1]) % 2) ? 1 : -1;
-      tx = mx + nx*off*side; ty = my + ny*off*side;
-    }
+    /* ONE rule: a part's name sits on its own body, centered, turned to match
+       it. Nothing about the neighbours comes into it.
+
+       What this replaces was two rules and a coin toss. A part with room got
+       its name pushed past one END along its axis; a tight one got it pushed
+       out to one SIDE - and which side was decided by whether the sum of the
+       first pin's row and column happened to be odd. That is not a rule a
+       reader can learn. On a dense board it scattered names in four
+       directions, and the one thing a label has to do is say which part it
+       belongs to.
+
+       Centered, the halo does the work over the body art. That costs seeing a
+       resistor's color bands under its own name, which is a real trade and
+       worth knowing - but a band you cannot attribute to a part is worth less
+       than a name you can. */
+    const tx = bcx, ty = bcy;
     /* The name lies ALONG its part. A board this dense is a field of small
        horizontal words with no way to tell which one belongs to the upright
        resistor beside it; turn the word to match the part and the pairing
