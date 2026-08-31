@@ -6394,7 +6394,7 @@ function render(){
     if(bentB) o.push(bentStub(bx, by, mx, my)); else if(flyB) o.push(flyTerm(bx, by, mx, my)); else lead2(bx, by);
 
     const g = '<g transform="translate(' + mx + ',' + my + ') rotate(' + deg + ')">';
-    let tint = C('tintDefault'), off = 18, half = 12;
+    let tint = C('tintDefault'), off = 18, half = 12, midLabel = false;
 
     const dev = devOf(p);
 
@@ -6542,6 +6542,12 @@ function render(){
          and the missing stripe is exactly how you tell the two apart in the
          drawer, so the picture and the part agree. */
       tint = C('tintEcap'); off = ER + 12; half = ER;
+      /* The name sits ON the can, centered, the way a resistor wears its own.
+         A can is the widest body on the board, so pushing its name clear of it
+         threw the word further from its part than anything else on the sheet
+         and left it floating between two cans with nothing saying which it
+         belonged to. The halo carries it over the dark body. */
+      midLabel = true;
       const npCan = p.polarized === false;
       o.push(g +
         '<circle cx="0" cy="0" r="' + ER + '" fill="#17151F" stroke="#B9B4C7" stroke-width="1.3"/>' +
@@ -6558,7 +6564,9 @@ function render(){
     const label = p.ref + (p.value ? ' ' + p.value : '');
     const leadLen = Math.hypot(bx - ax, by - ay);
     let tx, ty;
-    if(leadLen > 2*half + PITCH*1.25){
+    if(midLabel){
+      tx = mx; ty = my;
+    }else if(leadLen > 2*half + PITCH*1.25){
       const d = half + 13;
       tx = mx + Math.cos(ang)*d; ty = my + Math.sin(ang)*d;
     }else{
@@ -7971,7 +7979,12 @@ function classicSVG(){
   const listed = [];
   for(const p of S.parts){
     if(p.kind === 'link') continue;
-    listed.push([p.ref, p.value || p.device || '']);
+    /* NP rides in the parts list because the picture cannot show it: the
+       classic drawing gives an electrolytic a plain circle with no polarity
+       marking at all, so a bipolar can and a polarised one look identical on
+       it. Somebody building from this sheet would fit the wrong part. */
+    listed.push([p.ref, (p.value || p.device || '') +
+                        (p.kind === 'ecap' && p.polarized === false ? ' NP' : '')]);
   }
   for(const ic of S.ics) listed.push([ic.ref, icShown(ic)]);
   const colOf = ref => /^R/i.test(ref) ? 0 : /^C/i.test(ref) ? 1 : 2;
