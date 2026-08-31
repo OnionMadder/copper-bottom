@@ -6325,8 +6325,25 @@ function render(){
     const nx = Math.sin(ang), ny = -Math.cos(ang);
 
     if(p.kind === 'link'){
+      /* Both ends get a soldered blob. A link is the only part with no body,
+         so with nothing on its ends the wire reads as a line lying OVER the
+         board rather than one landing IN two holes - which is the single
+         thing about a link that matters, because the holes it lands in ARE
+         the connection. The classic export has drawn these since it was
+         written; this is the screen catching up with the picture it prints.
+
+         Sized just inside the 5px hole so the hole's rim still shows as a
+         ring around the joint, and haloed like the wire so it survives
+         crossing a part body. Halo circles go down FIRST, before the wire:
+         drawn after, the dark ring would cut a notch through the wire it is
+         supposed to be protecting. */
+      const ends = [[ax, ay], [bx, by]];
+      for(const q of ends)
+        o.push('<circle cx="' + q[0] + '" cy="' + q[1] + '" r="5.8" fill="' + C('halo') + '"/>');
       o.push(wire(ax, ay, bx, by, C('halo'), 6.6));
       o.push(wire(ax, ay, bx, by, C('link'), 3.4));
+      for(const q of ends)
+        o.push('<circle cx="' + q[0] + '" cy="' + q[1] + '" r="4.2" fill="' + C('link') + '"/>');
       continue;
     }
     const flyA = legFlying(p, 0), flyB = legFlying(p, 1);
@@ -6805,6 +6822,13 @@ function renderSolderView(hl){
     o.push('<line x1="' + mX(p.pins[0][1]) + '" y1="' + Y(p.pins[0][0]) +
            '" x2="' + mX(p.pins[1][1]) + '" y2="' + Y(p.pins[1][0]) +
            '" stroke="' + C('ghost') + '" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>');
+    /* The ends matter more here than on the front, not less: this is the view
+       you have in front of you with a track cutter in your hand, and the two
+       holes a link lands in are the two you must not cut between. Kept to the
+       ghost weight rather than the front's solid blob, because everything on
+       this side of the board is a far-side thing seen through it. */
+    for(const q of p.pins)
+      o.push('<circle cx="' + mX(q[1]) + '" cy="' + Y(q[0]) + '" r="3" fill="' + C('ghost') + '"/>');
   }
   for(const d of S.pads){
     if(d.at[0] >= rows || d.at[1] >= cols) continue;
@@ -7394,6 +7418,11 @@ function exportSVG(side, fit){
       if(p.kind === 'link'){
         o.push('<line x1="' + ax + '" y1="' + ay + '" x2="' + bx + '" y2="' + by +
                '" stroke="#000" stroke-width="0.75" stroke-linecap="round"/>');
+        /* Filled, where a part's terminal is an open ring: a link end is
+           nothing BUT a solder joint, so there is no body to distinguish it
+           from and the dot is the whole part. */
+        o.push('<circle cx="' + ax + '" cy="' + ay + '" r="0.7" fill="#000"/>');
+        o.push('<circle cx="' + bx + '" cy="' + by + '" r="0.7" fill="#000"/>');
         continue;
       }
       const flyA = legFlying(p, 0), flyB = legFlying(p, 1), allFly2S = flyA && flyB;
