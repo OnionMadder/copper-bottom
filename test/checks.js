@@ -748,6 +748,23 @@ ok(parseNetlist(': IC1.7').errors[0].msg.indexOf('no name') >= 0, 'an unnamed ne
 ok(parseNetlist('EMPTY:').errors[0].msg.indexOf('lists nothing') >= 0, 'an empty net is reported');
 ok(parseNetlist('').nets.length === 0 && parseNetlist('').errors.length === 0, 'blank text is simply no opinion');
 
+/* A pad label may contain a space, and the netlist has to be able to name it.
+   Splitting members on whitespace used to turn @V1 LUG into @V1 plus a bare
+   LUG - two errors, and no way to write the reference at all. */
+const spacedPads = ['V1 LUG', 'V1', 'GND'];
+let nlSp = parseNetlist('A: @V1 LUG R1.A', spacedPads);
+ok(nlSp.nets[0].members.length === 2, 'a spaced pad label is one member, not two');
+ok(nlSp.nets[0].members[0] === '@V1 LUG', 'and it keeps its space');
+ok(nlSp.nets[0].members[1] === 'R1.A', 'the token after it is untouched');
+ok(parseNetlist('A: @V1 R1.A', spacedPads).nets[0].members[0] === '@V1',
+   'a short label that is a prefix of a longer one still resolves to itself');
+ok(parseNetlist('A: @V1 LUG @GND', spacedPads).nets[0].members.length === 2,
+   'longest-first, so the spaced label wins over the prefix');
+ok(parseNetlist('A: IC1.7 C1.B @GND', spacedPads).nets[0].members.length === 3,
+   'a board with no spaced label in play splits exactly as before');
+ok(parseNetlist('A: IC1.7  C1.B   @GND').nets[0].members.length === 3,
+   'and so does one called with no labels at all');
+
 console.log('-- netlist: resolving members --');
 ok(resolveMember('IC1.7').ok, 'an IC pin resolves');
 ok(String(resolveMember('IC1.1').at) === '3,7', 'to the right hole');

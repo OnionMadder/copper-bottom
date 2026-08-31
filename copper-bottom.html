@@ -4052,9 +4052,44 @@ function rotateRegion(reg, turns){
    A bare REF.LEG is a part leg or an IC pin; @LABEL is a pad. # starts a
    comment. Legs are A/B for two-lead parts, the leg letters for three-leg
    ones (E/B/C), and pin numbers for ICs. */
-function parseNetlist(text){
+function parseNetlist(text, padLabels){
   const nets = [], errors = [];
   const lines = String(text || '').split(/\r?\n/);
+  /* A pad may be labeled "V1 LUG", and the netlist has to be able to name it.
+     Splitting members on whitespace turned @V1 LUG into @V1 plus a bare LUG -
+     two errors per line, twenty-four of them on a real board, and no way to
+     write the reference at all. A perfectly legal board could not be checked
+     against its own netlist, and the only way out was renaming the pads.
+
+     Only labels that actually CONTAIN whitespace get this treatment, longest
+     first so "V1 LUG" wins over a "V1" that also exists, and the match has to
+     end at a word boundary. Every other token splits exactly as before, so a
+     board with no spaced labels parses byte for byte identically - which is
+     what keeps this a fix rather than a new syntax everybody has to learn.
+
+     Labels are passed in rather than read off S, so the parser stays callable
+     on its own; it falls back to the live board when nothing is handed to it. */
+  const labels = (padLabels || (typeof S !== 'undefined' && S && S.pads ? S.pads.map(d => d.label) : []))
+    .filter(l => l && /\s/.test(l))
+    .sort((a, b) => b.length - a.length);
+  const splitMembers = (str) => {
+    const out = [];
+    let i = 0;
+    while(i < str.length){
+      if(/\s/.test(str[i])){ i++; continue; }
+      if(str[i] === '@' && labels.length){
+        const rest = str.slice(i + 1);
+        const hit = labels.find(l => rest.slice(0, l.length).toUpperCase() === l.toUpperCase() &&
+                                     (rest.length === l.length || /\s/.test(rest[l.length])));
+        if(hit){ out.push('@' + rest.slice(0, hit.length)); i += 1 + hit.length; continue; }
+      }
+      let j = i;
+      while(j < str.length && !/\s/.test(str[j])) j++;
+      out.push(str.slice(i, j));
+      i = j;
+    }
+    return out;
+  };
   lines.forEach((raw, i) => {
     const line = raw.replace(/#.*$/, '').trim();
     if(!line) return;
@@ -4062,7 +4097,7 @@ function parseNetlist(text){
     if(at < 0){ errors.push({line:i + 1, msg:'no colon - expected "name: member member"', raw:raw.trim()}); return; }
     const name = line.slice(0, at).trim();
     if(!name){ errors.push({line:i + 1, msg:'net has no name', raw:raw.trim()}); return; }
-    const members = line.slice(at + 1).trim().split(/\s+/).filter(Boolean);
+    const members = splitMembers(line.slice(at + 1).trim());
     if(!members.length){ errors.push({line:i + 1, msg:'net "' + name + '" lists nothing', raw:raw.trim()}); return; }
     nets.push({name:name, line:i + 1, members:members});
   });
