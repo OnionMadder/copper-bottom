@@ -992,6 +992,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span id="stat"></span>
   <span id="netbadge"></span>
   <span id="saved"></span>
+  <span id="ver" title="the version of this file - it is stamped on everything it prints"></span>
 </div>
 
 <script>
@@ -1000,6 +1001,12 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 /* ============================================================
    MODEL
    ============================================================ */
+/* The version this file IS. Every artefact it prints carries it, so a build
+   sheet or a walkthrough found on a bench a year from now says what made it.
+   It lives in the model region because two of the stamps that use it do.
+   Bump it when cutting a release, and nowhere else. */
+const APP_VERSION = 'v1.1.0';
+
 const K = (r,c) => r + ',' + c;
 
 let S = { version:2, name:'untitled', board:{rows:13, cols:20}, cuts:[], parts:[], ics:[], pads:[] };
@@ -3404,7 +3411,7 @@ function walkthrough(){
     L.push('');
   }
   L.push('---');
-  L.push('Made with Copper Bottom - messopedals.com/diy/copper-bottom');
+  L.push('Made with Copper Bottom ' + APP_VERSION + ' - messopedals.com/diy/copper-bottom');
   L.push('');
   return L.join('\n');
 }
@@ -5147,7 +5154,7 @@ function breadboardText(planArg){
   step('Power on.');
 
   L.push('---');
-  L.push('Translated by Copper Bottom - messopedals.com/diy/copper-bottom');
+  L.push('Translated by Copper Bottom ' + APP_VERSION + ' - messopedals.com/diy/copper-bottom');
   L.push('');
   return L.join('\n');
 }
@@ -7298,7 +7305,8 @@ function exportSVG(side, fit){
        a narrow board cannot run its name into it */
     o.push('<text x="' + EDGE + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
            'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
-           '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
+           '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom  ' +
+           APP_VERSION + '</tspan></text>');
     o.push('</g>');
   }
 
@@ -7840,7 +7848,8 @@ function renderSheet(){
 
   sheetdoc.innerHTML =
     '<div class="brandrow"><span class="bwordmark">COPPER<span>BOTTOM</span></span>' +
-    '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom</span></div>' +
+    '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom  ' +
+      APP_VERSION + '</span></div>' +
     '<h1>' + esc(S.name || 'untitled') + '</h1>' +
     '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch' +
       (isPerf() ? ' · perfboard' : isBread() ? ' · permanent breadboard' : '') + ' · ' +
@@ -8323,7 +8332,8 @@ function breadboardSVG(plan){
   o.push(T(ML, 9.6, subLine, 2.2));
   o.push('<text x="' + ML + '" y="13" font-size="2.4" font-family="monospace" font-weight="bold" ' +
          'letter-spacing="0.45">COPPER<tspan fill="#0B8F5D">BOTTOM</tspan>' +
-         '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom</tspan></text>');
+         '<tspan font-weight="normal" fill="#777" letter-spacing="0">  messopedals.com/diy/copper-bottom  ' +
+         APP_VERSION + '</tspan></text>');
   o.push('</g>');
 
   /* the board itself */
@@ -10766,6 +10776,10 @@ function askTheme(){
   box.addEventListener('keydown', e => { if(e.key === 'Escape') pick('dark'); });
   document.getElementById('askDark').focus();
 }
+
+/* the file says which file it is - somebody running an old download can read
+   it off the footer instead of guessing */
+{ const vel = document.getElementById('ver'); if(vel) vel.textContent = APP_VERSION; }
 
 /* ---- boot ---- */
 (function boot(){
