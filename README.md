@@ -83,11 +83,59 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | overlay mode - trace somebody else’s layout behind the grid | done |
 | a movable cut line, and strips you can leave whole | done |
 | edit and checks in one column, prose set in a prose font | done |
+| perfboard, and a permanent breadboard - three board kinds | done |
+| DIYLC `.diy` import, calibrated against DIYLC's own netlists | done |
+| module library - daughterboards wired by named pads | done |
+| custom pin-count DIPs, for reverb bricks and odd modules | done |
+| flying leads and bent legs - a part that lives off the board | done |
+| off-board switches, panel pots, trimpots | done |
+| axial parts stood on end, on the board and on the sheet | done |
+| light and dark, following whatever the machine already asks for | done |
+| share links - a whole layout in the URL, nothing uploaded | done |
+| breadboard translation - the layout moved onto a solderless board | done |
+| parts list *out* - written from the board, not just checked against it | done |
+| transformers - audio, five-pin, and split-secondary | done |
+| non-polarized electrolytics | done |
+| a spelling check in the test suite | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
 
+Every artefact the app prints - build sheet, walkthrough, breadboard translation -
+carries the version that made it, and so does the app's own footer. A copy found on
+a bench a year from now says what it is.
+
 See `ROADMAP.md` for what's next.
+
+## Three kinds of board
+
+**Stripboard** is the default and the one the app is named for: copper strips you cut.
+
+**Perfboard** is one pad per hole and nothing joined, so every connection is a link.
+That is one honest difference deep - the checks, the sheet and the netlist all work
+the same, they just have no strips to reason about.
+
+**A permanent breadboard** is the third: the board sold pre-wired in the breadboard
+pattern, with power rails down the edges and tie columns across the middle. It exists
+because moving a working breadboard build onto something permanent is the most common
+reason to open this app at all, and on that board the layout barely has to change.
+
+The board kind is a footer button, and it changes what the DRC believes. A strip
+that would be shorted on stripboard is simply two unconnected pads on perfboard, and
+the checks say so rather than crying wolf.
+
+## Import, and sharing
+
+**`.diy` files load.** DIYLC has a large public corpus of stripboard layouts, and
+this reads them - parts, cuts, links, pads and board size. It was calibrated against
+DIYLC's own netlists across 175 files with zero false joins, which is the number
+worth trusting: not "it opens the file" but "it agrees with the tool that wrote it
+about what is connected to what."
+
+**Share links carry a whole layout in the URL.** Nothing is uploaded, no account, no
+server - the board is compressed into the link itself. Paste it to somebody and they
+open your layout in their own copy. It is the one feature here that needs the
+internet, and only at the moment you paste.
 
 ## Keys
 
