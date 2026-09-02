@@ -577,7 +577,6 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .sheetdoc h2{font-size:13px; letter-spacing:.18em; margin:26px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px}
 .sheetdoc h2 .n{color:#777; font-weight:400; letter-spacing:0}
 .sheetdoc p{margin:4px 0 10px; color:#444; max-width:150mm}
-.sheetdoc p.sub{color:#111}
 .sheetdoc .svgwrap{margin:6px 0 4px; overflow-x:auto}
 .sheetdoc svg{display:block; border:1px solid #ddd}
 .sheetdoc table{border-collapse:collapse; margin:2px 0 6px; font-size:11.5px}
@@ -7821,11 +7820,8 @@ function renderSheet(){
   const done = builtSet();
   const cuts = cutList(), items = buildList(), wires = wireList();
   const parts = bom(), totalParts = parts.reduce((n, r) => n + r.qty, 0);
-  const total = cuts.length + items.length;
-  let ticked = 0;
   const box = (key) => {
     const on = done.has(key);
-    if(on) ticked++;
     return '<label class="tick"><input type="checkbox" data-key="' + esc(key) + '"' +
            (on ? ' checked' : '') + '><span></span></label>';
   };
@@ -7851,10 +7847,6 @@ function renderSheet(){
     '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom  ' +
       APP_VERSION + '</span></div>' +
     '<h1>' + esc(S.name || 'untitled') + '</h1>' +
-    '<p class="sub">printed ' + new Date().toLocaleDateString() + ' \u00b7 ' + S.board.rows + ' rows &times; ' + S.board.cols + ' cols · 0.1in pitch' +
-      (isPerf() ? ' · perfboard' : isBread() ? ' · permanent breadboard' : '') + ' · ' +
-      items.length + ' parts · ' + (noCuts() ? '' : cuts.length + ' cuts · ') + '<b id="prog">' + ticked + ' / ' + total +
-      '</b> done</p>' +
     '<h2>Component side</h2>' +
     '<div class="svgwrap">' + exportSVG('component') + '</div>' +
     '<h2>Solder side - mirrored</h2>' +
@@ -10687,8 +10679,6 @@ sheetdoc.addEventListener('change', e => {
   const set = builtSet();
   if(cb.checked) set.add(cb.dataset.key); else set.delete(cb.dataset.key);
   saveBuilt(set);
-  const prog = document.getElementById('prog');
-  if(prog) prog.textContent = set.size + ' / ' + (cutList().length + buildList().length);
 });
 
 btnImport.onclick = () => file.click();
