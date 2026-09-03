@@ -7279,6 +7279,13 @@ function exportSVG(side, fit){
      it just starts further in, which is why the gutters are measured here,
      before the sheet is sized and the origin is fixed. */
   const PAD_FS = 2.1;                 // label size, unchanged
+  /* Vertical step between two labels sharing a gutter. Derived from PAD_FS,
+     never typed: a text line box is about 1.2x its point size, so the old
+     hardcoded 2.35 was barely more than one line of 2.1pt type and two labels
+     on adjacent rows printed through each other - V1_LUG over V1_EN on the
+     Cicada's build sheet. Anything under PAD_FS * 1.2 overlaps by
+     construction, which is why this is a multiplier and not a number. */
+  const PAD_STEP = PAD_FS * 1.4;
   const PAD_RULE = 5.4;               // left gutter clears the row ruler
   const PAD_GAP = 3.2;                // right gutter has nothing to clear
   const padPlan = S.pads.map(d => {
@@ -7320,7 +7327,7 @@ function exportSVG(side, fit){
     let prev = -1e9;
     for(const p of g){
       let ty = y(p.d.at[0]) + 0.7;
-      if(ty - prev < 2.35){ ty = prev + 2.35; p.nudged = true; }
+      if(ty - prev < PAD_STEP){ ty = prev + PAD_STEP; p.nudged = true; }
       prev = ty;
       p.tx = side === 'left' ? OX - PAD_RULE : OX + (cols-1)*MM + PAD_GAP;
       p.ty = ty;
