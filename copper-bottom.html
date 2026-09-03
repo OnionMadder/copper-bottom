@@ -6112,15 +6112,79 @@ function render(){
   const OBB = offBoardBodies();
   const obL = offBoardMargin('left', OBB) * PITCH, obR = offBoardMargin('right', OBB) * PITCH;
   const obT = offBoardMargin('top', OBB) * PITCH,  obB = offBoardMargin('bottom', OBB) * PITCH;
-  const W = MARGIN * 2 + (cols - 1) * PITCH + obL + obR;
-  const H = MARGIN * 2 + (rows - 1) * PITCH + obT + obB;
+
+  /* ---- pad labels live OFF the board, same as the printed sheet ----
+     A pad is a wire leaving the board, so its name is for whoever is holding
+     the wire. It used to sit 13px from its own ring, which put it straight
+     through whatever part was next door - on a board with four pots per chip
+     the wiper labels landed on top of the resistors. Each label now runs to
+     the NEAREST edge and waits in a gutter with a thin leader back to its
+     hole, which is what renderSheet has done since the sheet was written.
+
+     The viewBox is EXTENDED, never re-origined: X()/Y() keep the values they
+     have always had, so hit rects, drag math and boardPointFromEvent are all
+     untouched. Same reasoning as the off-board bodies above. */
+  const PAD_CH = 6.0;                      // 10px ui-monospace, about 0.6em a character
+  const PAD_LH = 13;                       // one label's line box
+  const padPlan = S.pads.map(d => {
+    const dc = d.at[1], dr = d.at[0];
+    /* ties keep the earlier entry, so a corner pad goes sideways rather than
+       up - a side gutter costs width the board usually already has */
+    const near = [['left', dc], ['right', cols - 1 - dc], ['top', dr], ['bottom', rows - 1 - dr]];
+    let best = near[0];
+    for(const cand of near) if(cand[1] < best[1]) best = cand;
+    return {d, dc, dr, side: best[0], w: d.label.length * PAD_CH};
+  });
+  const padGut = side => {
+    const on = padPlan.filter(q => q.side === side);
+    if(!on.length) return 0;
+    return (side === 'left' || side === 'right')
+      ? Math.max.apply(null, on.map(q => q.w)) + 14
+      : PAD_LH + 6;
+  };
+  const pgL = padGut('left'), pgR = padGut('right');
+  const pgT = padGut('top'),  pgB = padGut('bottom');
+  const gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
+
+  const W = MARGIN * 2 + (cols - 1) * PITCH + gutL + gutR;
+  const H = MARGIN * 2 + (rows - 1) * PITCH + gutT + gutB;
+  const boxR = MARGIN * 2 + (cols - 1) * PITCH;
+  const boxB = MARGIN * 2 + (rows - 1) * PITCH;
+
+  /* where each label actually lands. Labels on a side share an edge so the
+     gutter reads as a column, and a run of pads on the same row is stepped
+     along rather than stacked on itself. */
+  for(const side of ['left', 'right']){
+    const g = padPlan.filter(q => q.side === side).sort((a, b) => a.dr - b.dr);
+    let prev = -1e9;
+    for(const q of g){
+      let ty = Y(q.d.at[0]) + 3.5;
+      if(ty - prev < PAD_LH){ ty = prev + PAD_LH; }
+      prev = ty;
+      q.tx = side === 'left' ? -obL - 8 : boxR + obR + 8;
+      q.ty = ty;
+      q.anchor = side === 'left' ? 'end' : 'start';
+    }
+  }
+  for(const side of ['top', 'bottom']){
+    const g = padPlan.filter(q => q.side === side).sort((a, b) => a.dc - b.dc);
+    let prev = -1e9;
+    for(const q of g){
+      let tx = X(q.d.at[1]);
+      if(tx - prev < q.w + 6){ tx = prev + q.w + 6; }
+      prev = tx;
+      q.tx = tx;
+      q.ty = side === 'top' ? -obT - 6 : boxB + obB + PAD_LH;
+      q.anchor = 'middle';
+    }
+  }
   const hl = highlightedNet();
   const cutSet = new Set(S.cuts);
   const o = [];
 
-  o.push('<svg id="board" viewBox="' + (-obL) + ' ' + (-obT) + ' ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
+  o.push('<svg id="board" viewBox="' + (-gutL) + ' ' + (-gutT) + ' ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
          '" height="' + Math.round(H * Z) + '" xmlns="http://www.w3.org/2000/svg">');
-  o.push('<rect x="' + (-obL) + '" y="' + (-obT) + '" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board') + '" stroke="' + C('boardEdge') + '"/>');
+  o.push('<rect x="' + (-gutL) + '" y="' + (-gutT) + '" width="' + W + '" height="' + H + '" rx="6" fill="' + C('board') + '" stroke="' + C('boardEdge') + '"/>');
 
   /* --- the overlay picture, first thing after the board itself so that
      every hole, strip, cut and part is drawn ON it. It carries no pointer
@@ -6677,9 +6741,18 @@ function render(){
            '" stroke-width="1" stroke-opacity="0.4" stroke-dasharray="3 3"/>');
     o.push('<circle cx="' + x + '" cy="' + y + '" r="9.5" fill="none" stroke="' + col + '" stroke-width="2"/>');
     o.push('<circle cx="' + x + '" cy="' + y + '" r="2.6" fill="' + col + '"/>');
-    const left = d.at[1] > cols / 2;
-    o.push('<text class="pad" text-anchor="' + (left ? 'end' : 'start') + '" x="' + (x + (left ? -13 : 13)) +
-           '" y="' + (y - 10) + '" fill="' + col + '">' + esc(d.label) + '</text>');
+    /* the label waits in the gutter; a thin leader says which hole it means.
+       The leader is drawn at low opacity so a board thick with pads does not
+       turn into a cat's cradle - it is a pointer, not a wire. */
+    const pl = padPlan.find(q => q.d.id === d.id);
+    if(pl){
+      const lx = pl.anchor === 'end' ? pl.tx + 3 : pl.anchor === 'start' ? pl.tx - 3 : pl.tx;
+      const ly = pl.anchor === 'middle' ? pl.ty + (pl.side === 'top' ? 3 : -10) : pl.ty - 3.5;
+      o.push('<line x1="' + x + '" y1="' + y + '" x2="' + lx + '" y2="' + ly + '" stroke="' + col +
+             '" stroke-width="1" stroke-opacity="0.45"/>');
+      o.push('<text class="pad" text-anchor="' + pl.anchor + '" x="' + pl.tx +
+             '" y="' + pl.ty + '" fill="' + col + '">' + esc(d.label) + '</text>');
+    }
   }
 
   /* --- cuts, drawn last so nothing can cover them.
