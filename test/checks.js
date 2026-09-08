@@ -1121,6 +1121,44 @@ ok((IC_LIB.NE555.ties || []).some(g => g.indexOf(2) >= 0 && g.indexOf(6) >= 0),
 ok(!IC_LIB.CD40106.ties,
    'the CD40106 declares none — an inverter has no business tying its own pins');
 
+/* Sept 8 2026: the dual timers and the 4060, added after a bench report that
+   the library had no NE556 (so a dual-timer build fell back to a bare DIP-14
+   whose pin 14 the checks could not know was power) and no CD4060. Pin orders
+   read off TI's NE556 (Rev. I), TLC556 (SLFS047D) and CD4060B (SCHS049C)
+   tables, not recalled - the rule at the top of CLAUDE.md. */
+console.log('-- IC library: NE556 / TLC556 / CD4060 --');
+for(const t of ['NE556', 'TLC556']){
+  const d = IC_LIB[t];
+  ok(d && d.pins === 14 && d.roles[7] === 'gnd' && d.roles[14] === 'vdd',
+     t + ': DIP-14, ground on 7, supply on 14');
+  ok([2,3,4,6,8,10,11,12].every(n => d.roles[n] === 'in') && [1,5,9,13].every(n => d.roles[n] === 'out'),
+     t + ': trigger/threshold/control/reset are inputs, output and discharge are outputs, both timers');
+  ok(d.ties.some(g => g.length === 2 && g.indexOf(2) >= 0 && g.indexOf(6) >= 0) &&
+     d.ties.some(g => g.length === 2 && g.indexOf(8) >= 0 && g.indexOf(12) >= 0),
+     t + ': each timer declares its own trigger-threshold tie, and no tie crosses the two timers');
+  ok(!d.ties.some(g => g.some(n => n <= 6) && g.some(n => n >= 8)),
+     t + ': no tie joins timer 1 to timer 2');
+  ok(d.pinInfo[1].n === '1DIS' && d.pinInfo[6].n === '1TRIG' && d.pinInfo[8].n === '2TRIG' && d.pinInfo[13].n === '2DIS',
+     t + ': pin names mirror around the rails the way the package does');
+}
+ok(IC_LIB.TLC556.roles === IC_LIB.NE556.roles || JSON.stringify(IC_LIB.TLC556.roles) === JSON.stringify(IC_LIB.NE556.roles),
+   'the TLC556 and NE556 carry one pin order - TI says they are pin-identical');
+ok(IC_LIB.TLC556.volts.min === 2 && IC_LIB.NE556.volts.min === 4.5,
+   'but the CMOS one runs from 2V and the bipolar one needs 4.5V');
+{
+  const d = IC_LIB.CD4060;
+  ok(d && d.pins === 16 && d.roles[8] === 'gnd' && d.roles[16] === 'vdd', 'CD4060: DIP-16, VSS 8, VDD 16');
+  const q = n => d.pinInfo[n].n;
+  ok(q(1) === 'Q12' && q(2) === 'Q13' && q(3) === 'Q14' && q(4) === 'Q6' && q(5) === 'Q5' &&
+     q(6) === 'Q7' && q(7) === 'Q4' && q(13) === 'Q9' && q(14) === 'Q8' && q(15) === 'Q10',
+     'CD4060: the ten Q outputs sit where the TI functional diagram puts them - no Q11, no Q1-Q3');
+  ok(d.roles[11] === 'in' && d.roles[12] === 'in' && d.roles[9] === 'out' && d.roles[10] === 'out',
+     'CD4060: clock in and reset are inputs, the two oscillator taps are outputs');
+  ok([1,2,3,4,5,6,7,13,14,15].every(n => d.roles[n] === 'out'), 'CD4060: every Q pin is an output');
+  ok(!Object.keys(d.pinInfo).some(k => /Q11|Q1$|Q2$|Q3$/.test(d.pinInfo[k].n)),
+     'CD4060: nothing claims a pin for Q1, Q2, Q3 or Q11');
+}
+
 S = demoProject(); computeNets();
 
 console.log('-- IC library: every entry is structurally sound --');

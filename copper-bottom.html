@@ -356,6 +356,13 @@ button[disabled]:hover{border-color:var(--line2); background:var(--field)}
 .stage{flex:1; min-width:0; min-height:0; overflow:auto; padding:22px; background:var(--void);
   display:flex; flex-wrap:wrap; gap:26px; align-items:flex-start; align-content:flex-start}
 .stage.aligning{cursor:crosshair}
+/* The stage is a flex row (so the back view can sit beside the front), and a
+   flex item SHRINKS to fit by default - which quietly ate the zoom: the svg's
+   width attribute grew with Z, the row squeezed it straight back to the pane,
+   and only the height changed, so 100% and 145% looked identical. Sept 8
+   2026. The board keeps the size it asks for and the pane scrolls, which is
+   what zoom means. */
+.stage > svg{flex:none}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
 .bhit{fill:transparent; cursor:pointer}
@@ -990,6 +997,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <div class="sp"></div>
   <span id="stat"></span>
   <span id="netbadge"></span>
+  <span id="pinbadge" title="a pinned net stays lit whatever tool you switch to. esc lets it go"></span>
   <span id="saved"></span>
   <span id="ver" title="the version of this file - it is stamped on everything it prints"></span>
 </div>
@@ -1004,7 +1012,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1422,6 +1430,44 @@ const PINS_CD4040 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD4060B, read off TI SCHS049C (functional diagram, fig. 12 RC circuit):
+   Q4-Q10 and Q12-Q14 come out - there is no Q11 and no Q1-Q3 on pins - the
+   oscillator is three pins, and RESET is active high and also stops the
+   oscillator. Fig. 12: Rx from pin 10 to a node, Rs from that node to pin 11,
+   Cx from that node to pin 9; T = 2.2 RxCx, Rs 2 to 10 times Rx. */
+const q4060 = n => ({n:'Q' + n, d:'the clock divided by ' + Math.pow(2, n)});
+const PINS_CD4060 = {
+  1:q4060(12), 2:q4060(13), 3:q4060(14), 4:q4060(6), 5:q4060(5), 6:q4060(7), 7:q4060(4),
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  9:{n:'ΦO', d:'clock out, the oscillator after two inverters; the timing cap Cx hangs off this pin'},
+  10:{n:'ΦO/', d:'the inverted clock, one inverter in; the timing resistor Rx runs from here to the RC node'},
+  11:{n:'ΦI', d:'clock in - feed a square wave here, or close the RC loop through Rs and it clocks itself'},
+  12:{n:'RESET', d:'clears every output AND stops the oscillator while high; tie it to ground when unused'},
+  13:q4060(9), 14:q4060(8), 15:q4060(10),
+  16:{n:'VDD', d:'the positive supply'},
+};
+
+/* NE556 and TLC556, read off TI's NE556 (Rev. I) and TLC556 (SLFS047D) pin
+   tables: two 555s in one DIP-14, timer 1 on pins 1-6, timer 2 on 8-13,
+   mirrored around the rails. Same pin order on both parts. */
+const t556 = (t, name, d) => ({n:t + name, d:d + ' (timer ' + t + ')'});
+const PINS_NE556 = {
+  1: t556(1, 'DIS',   'dumps the timing capacitor to ground; it can only pull down, never up'),
+  2: t556(1, 'THR',   'ends the pulse - fires when this pin rises above two thirds of the supply'),
+  3: t556(1, 'CTRL',  'sets the comparator threshold; normally left open, or 10n to ground if the supply is noisy'),
+  4: t556(1, 'RESET', 'holds the timer off while it is low, so tie it to the supply when unused'),
+  5: t556(1, 'OUT',   'the output, swinging nearly rail to rail; it can drive a small load directly'),
+  6: t556(1, 'TRIG',  'starts the pulse - fires when this pin falls below a third of the supply'),
+  7: {n:'GND',  d:'the negative supply, shared by both timers'},
+  8: t556(2, 'TRIG',  'starts the pulse - fires when this pin falls below a third of the supply'),
+  9: t556(2, 'OUT',   'the output, swinging nearly rail to rail; it can drive a small load directly'),
+  10:t556(2, 'RESET', 'holds the timer off while it is low, so tie it to the supply when unused'),
+  11:t556(2, 'CTRL',  'sets the comparator threshold; normally left open, or 10n to ground if the supply is noisy'),
+  12:t556(2, 'THR',   'ends the pulse - fires when this pin rises above two thirds of the supply'),
+  13:t556(2, 'DIS',   'dumps the timing capacitor to ground; it can only pull down, never up'),
+  14:{n:'V+',   d:'the positive supply, shared by both timers'},
+};
+
 const ff = (n, half) => ({n:n + half, d:null});
 const PINS_CD4013 = {
   1:{n:'Q1', d:'output of the first flip-flop'},
@@ -1746,6 +1792,12 @@ const IC_LIB = {
   CD4040 :{pins:16, about:"twelve flip-flops in a chain. Feed an audio-rate square wave in and every output is another octave down", name:'12-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4040,
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
+  CD4060 :{pins:16, about:"a 4040 with its own oscillator built in. Two resistors and a cap on pins 9, 10 and 11 and it clocks itself, then every Q output is another octave down - the divider people actually reach for", name:'14-stage counter with oscillator', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4060,
+    /* pins 9 and 10 are the oscillator's inverter outputs, 11 its input -
+       TI fig. 12: Rx 10 -> node, Rs node -> 11, Cx node -> 9. Q11 and
+       Q1-Q3 do not come out; there is no pin for them. */
+    roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
+           9:'out',10:'out',11:'in',12:'in',13:'out',14:'out',15:'out',16:'vdd'}},
   CD4046 :{pins:16, about:"a VCO with a phase comparator attached. Most synth builds use only the VCO half and ignore the rest", name:'phase-locked loop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4046,
     /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
     roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
@@ -1769,6 +1821,23 @@ const IC_LIB = {
          'timing cap between the two. Tying 2 to 6 makes it run continuously.',
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
     ties:[[2,6],[6,7],[2,6,7]], volts:{min:4.5, max:16}, pinInfo:PINS_NE555},
+  /* Two 555s in one package. Timer 1 is pins 1-6, timer 2 is 8-13, and the
+     ties are the 555's per timer: trigger to threshold (astable), threshold
+     to discharge (monostable). Pin order verified against TI's NE556 and
+     TLC556 tables Sept 8 2026 - the two parts are pin-identical; the TLC is
+     CMOS and runs down to 2V. */
+  NE556  :{pins:14, decoupleNote:'two 555s throw two current spikes into the rail, and this is the cap that keeps them out of everything else', about:"two 555s in one chip - an Atari Punk Console on a single DIP, or a one-shot feeding an oscillator", name:'dual timer', cmos:false,
+    note:'Timer 1 lives on pins 1-6 and timer 2 on pins 8-13, each with its own trigger, threshold, ' +
+         'discharge, output, reset and control. Tie trigger to threshold on a timer and it runs continuously.',
+    roles:{1:'out',2:'in',3:'in',4:'in',5:'out',6:'in',7:'gnd',
+           8:'in',9:'out',10:'in',11:'in',12:'in',13:'out',14:'vdd'},
+    ties:[[2,6],[1,2],[1,2,6],[8,12],[12,13],[8,12,13]], volts:{min:4.5, max:16}, pinInfo:PINS_NE556},
+  TLC556 :{pins:14, decoupleNote:'two timers throw two current spikes into the rail, and this is the cap that keeps them out of everything else', about:"the CMOS twin of the NE556 - same pins, runs from 2V, draws almost nothing", name:'dual CMOS timer', cmos:true,
+    note:'Timer 1 lives on pins 1-6 and timer 2 on pins 8-13, each with its own trigger, threshold, ' +
+         'discharge, output, reset and control. Same pin order as the NE556.',
+    roles:{1:'out',2:'in',3:'in',4:'in',5:'out',6:'in',7:'gnd',
+           8:'in',9:'out',10:'in',11:'in',12:'in',13:'out',14:'vdd'},
+    ties:[[2,6],[1,2],[1,2,6],[8,12],[12,13],[8,12,13]], volts:{min:2, max:15}, pinInfo:PINS_NE556},
 
   /* ---- op-amps ---- */
   TL071  :{pins:8,  name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
@@ -6907,6 +6976,13 @@ function render(){
   if(typeof startup !== 'undefined')
     startup.hidden = !!(S.parts.length || S.ics.length || S.pads.length || S.cuts.length);
   document.getElementById('zlvl').textContent = Math.round(Z * 100) + '%';
+  /* The pin used to be announced only in the inspect readout, which is gone
+     the moment you pick another tool - so a net stayed lit with nothing on
+     screen saying why, and the hint had moved on to "two clicks: lead A,
+     lead B". This one stays in the footer until esc. Sept 8 2026. */
+  const pb = document.getElementById('pinbadge');
+  if(pb) pb.innerHTML = pinnedNet === null ? ''
+    : '<span style="color:var(--mint)">net ' + esc(String(pinnedNet)) + ' pinned · esc</span>';
   renderNets(hl);
   renderDRC();
   renderReadout();
@@ -9433,8 +9509,20 @@ function flash(msg){
 }
 
 /* ---- event wiring ---- */
+/* No re-render between a press and its release. render() rebuilds the whole
+   stage, and a browser only fires click when pointerdown and pointerup land
+   on the SAME element - so a hover render in the middle of a press (crossing
+   a hole edge on a slightly sloppy click, or a second fast click before the
+   pointer settled) replaced the rect under the button and the click arrived
+   on the stage instead, where nothing listened. From the bench it read as
+   "the board eats clicks" and got blamed on whatever else was on screen, a
+   pinned net included. Sept 8 2026. */
+let pressed = false;
+stage.addEventListener('pointerdown', () => { pressed = true; }, true);
+window.addEventListener('pointerup', () => { pressed = false; }, true);
+window.addEventListener('pointercancel', () => { pressed = false; }, true);
 stage.addEventListener('pointermove', e => {
-  if(drag) return;
+  if(drag || pressed) return;
   let next = null;
   /* the back view's hit rects carry model coordinates, so a pointer there
      needs no mirror math - and must not go through the front board's CTM */
@@ -9488,8 +9576,10 @@ stage.addEventListener('click', e => {
     }
   }
   /* a click that landed on part artwork still means its hole - fall back to
-     coordinates, so paint never swallows a placement or a cut */
-  if(t.closest && t.closest('#board')){
+     coordinates, so paint never swallows a placement or a cut. The target can
+     also be the stage itself when the board was rebuilt mid-press (see the
+     press guard above), so the only thing excluded is the back view. */
+  if(!(t.closest && t.closest('#board2'))){
     const q = holeFromEvent(e);
     if(q && q[0] >= 0 && q[1] >= 0 && q[0] < S.board.rows && q[1] < S.board.cols)
       onHole(q[0], q[1]);
