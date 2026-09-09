@@ -1158,6 +1158,22 @@ ok(IC_LIB.TLC556.volts.min === 2 && IC_LIB.NE556.volts.min === 4.5,
   ok(!Object.keys(d.pinInfo).some(k => /Q11|Q1$|Q2$|Q3$/.test(d.pinInfo[k].n)),
      'CD4060: nothing claims a pin for Q1, Q2, Q3 or Q11');
 }
+{
+  /* Settled Sept 8 2026 from TI SCHS030D: pin 1 is the clock, pin 2 is
+     reset - the disagreement that kept the chip out was resolved by reading
+     the terminal assignment rather than by remembering it. Her Grub Divider
+     layout was drawn that way round all along. */
+  const d = IC_LIB.CD4024;
+  ok(d && d.pins === 14 && d.roles[7] === 'gnd' && d.roles[14] === 'vdd', 'CD4024: DIP-14, VSS 7, VDD 14');
+  ok(d.roles[1] === 'in' && d.pinInfo[1].n === 'CLK' && d.roles[2] === 'in' && d.pinInfo[2].n === 'RESET',
+     'CD4024: pin 1 is the clock and pin 2 is reset - settled from the datasheet, not recalled');
+  const q = n => d.pinInfo[n].n;
+  ok(q(3) === 'Q7' && q(4) === 'Q6' && q(5) === 'Q5' && q(6) === 'Q4' && q(9) === 'Q3' && q(11) === 'Q2' && q(12) === 'Q1',
+     'CD4024: Q7 down to Q4 on pins 3-6, Q3/Q2/Q1 on 9/11/12');
+  ok([8,10,13].every(n => d.roles[n] === 'nc'),
+     'CD4024: pins 8, 10 and 13 are no-connects and carry the nc role, so the orphan rule leaves them alone');
+  ok([3,4,5,6,9,11,12].every(n => d.roles[n] === 'out'), 'CD4024: every Q pin is an output');
+}
 
 S = demoProject(); computeNets();
 

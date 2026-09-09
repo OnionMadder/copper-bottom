@@ -1012,7 +1012,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.2';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1447,6 +1447,23 @@ const PINS_CD4060 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD4024B, settled from TI SCHS030D's terminal assignment (top view):
+   pin 1 is the CLOCK (phi, "input pulses"), pin 2 is RESET. Q7..Q4 run down
+   pins 3-6, Q3/Q2/Q1 sit on 9/11/12, and 8, 10 and 13 are no connection -
+   so they carry the nc role and the orphan rule leaves them alone. Counts
+   on the falling edge; RESET high clears every stage. Sept 8 2026, after
+   the chip sat out for want of exactly this reading. */
+const q4024 = n => ({n:'Q' + n, d:'the clock divided by ' + Math.pow(2, n)});
+const NC_PIN = {n:'NC', d:'no connection inside the chip - leave it empty, it is not a fault'};
+const PINS_CD4024 = {
+  1:{n:'CLK', d:'counts on each falling edge'},
+  2:{n:'RESET', d:'clears every output while high; tie it to ground when unused'},
+  3:q4024(7), 4:q4024(6), 5:q4024(5), 6:q4024(4),
+  7:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  8:NC_PIN, 9:q4024(3), 10:NC_PIN, 11:q4024(2), 12:q4024(1), 13:NC_PIN,
+  14:{n:'VDD', d:'the positive supply'},
+};
+
 /* NE556 and TLC556, read off TI's NE556 (Rev. I) and TLC556 (SLFS047D) pin
    tables: two 555s in one DIP-14, timer 1 on pins 1-6, timer 2 on 8-13,
    mirrored around the rails. Same pin order on both parts. */
@@ -1789,6 +1806,11 @@ const IC_LIB = {
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
   CD4017 :{pins:16, about:"counts 0 to 9 with one output high at a time. The basis of nearly every simple step sequencer", name:'decade counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4017,
     roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
+  CD4024 :{pins:14, about:"seven flip-flops in a chain. Feed it a square wave and Q1 to Q7 are one to seven octaves down, on the pins the datasheet puts them - 8, 10 and 13 are empty", name:'7-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4024,
+    /* 8, 10, 13 are NC on the package, so they get the nc role and the orphan
+       rule leaves them alone rather than flagging three correct empties */
+    roles:{1:'in',2:'in',3:'out',4:'out',5:'out',6:'out',7:'gnd',
+           8:'nc',9:'out',10:'nc',11:'out',12:'out',13:'nc',14:'vdd'}},
   CD4040 :{pins:16, about:"twelve flip-flops in a chain. Feed an audio-rate square wave in and every output is another octave down", name:'12-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4040,
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'in',11:'in',12:'out',13:'out',14:'out',15:'out',16:'vdd'}},
