@@ -1,6 +1,9 @@
 /* Render a saved layout to the classic share SVG, headless.
  *
- *   node test/export-classic.js <layout.json> <out.svg>
+ *   node test/export-classic.js <layout.json> <out.svg> [--no-offboard]
+ *
+ * A layout whose pads name panel parts gets them drawn beside the board;
+ * --no-offboard leaves the apron off for a bare-board picture.
  *
  * Same trick as check-layout.js: the model is lifted verbatim out of the app.
  * classicSVG() lives outside the #region model markers, so it is lifted by
@@ -12,9 +15,11 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
-const target = process.argv[2], outPath = process.argv[3];
+const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const noOffboard = process.argv.includes('--no-offboard');
+const target = args[0], outPath = args[1];
 if (!target || !outPath) {
-  console.error('usage: node test/export-classic.js <layout.json> <out.svg>');
+  console.error('usage: node test/export-classic.js <layout.json> <out.svg> [--no-offboard]');
   process.exit(2);
 }
 
@@ -24,7 +29,7 @@ const model = /\/\*#region model[^*]*\*\/([\s\S]*?)\/\*#endregion model \*\//.ex
 if (!model) { console.error('could not find the #region model markers'); process.exit(2); }
 
 /* lift classicSVG() by brace balance from its own declaration */
-const start = html.indexOf('function classicSVG(){');
+const start = html.indexOf('function classicSVG(opts){');
 if (start < 0) { console.error('could not find classicSVG()'); process.exit(2); }
 let depth = 0, end = -1;
 for (let i = html.indexOf('{', start); i < html.length; i++) {
@@ -49,7 +54,7 @@ const ctx = vm.createContext({ console, layout, out: {} });
 vm.runInContext(model[1] + '\n' + helpers + '\n' + exporter + `
 S = migrate(layout);
 computeNets();
-out.svg = classicSVG();
+out.svg = classicSVG({offboard:${!noOffboard}});
 out.name = S.name;
 `, ctx, { filename: 'model+classicSVG' });
 

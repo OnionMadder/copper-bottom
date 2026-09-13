@@ -363,6 +363,10 @@ button[disabled]:hover{border-color:var(--line2); background:var(--field)}
    2026. The board keeps the size it asks for and the pane scrolls, which is
    what zoom means. */
 .stage > svg{flex:none}
+#ctx .obrow{display:flex; gap:4px; align-items:center; margin:3px 0}
+#ctx .obrow input, #ctx .obrow select{min-width:0; flex:1 1 0; margin:0}
+#ctx .obrow .obid{flex:1.2 1 0}
+#ctx .obrow .obx{flex:none; padding:2px 7px}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
 .bhit{fill:transparent; cursor:pointer}
@@ -1012,7 +1016,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.1.3';
+const APP_VERSION = 'v1.2.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1317,6 +1321,32 @@ function migrate(obj){
 
   o.pads = (Array.isArray(o.pads) ? o.pads : []).filter(d =>
     d && typeof d === 'object' && isHole(d.at) && typeof d.label === 'string' && d.label.trim());
+  /* off-board entries on a pad: an entry naming a kind or a lug the library
+     does not have is dropped and counted. The pad itself stays. */
+  let lostOb = 0;
+  for(const d of o.pads){
+    if(d.parts === undefined) continue;
+    const ok = (Array.isArray(d.parts) ? d.parts : []).filter(e => {
+      const lib = e && typeof e === 'object' && OFFBOARD_LIB[e.kind];
+      const good = !!(lib && typeof e.id === 'string' && e.id.trim() &&
+                      lib.lugs.indexOf(String(e.lug).toUpperCase()) >= 0);
+      if(!good) lostOb++;
+      return good;
+    }).map(e => {
+      const q = {id:e.id.trim().toUpperCase(), kind:e.kind, lug:String(e.lug).toUpperCase()};
+      if(typeof e.value === 'string' && e.value.trim()) q.value = e.value.trim();
+      return q;
+    });
+    if(ok.length) d.parts = ok; else delete d.parts;
+  }
+  if(lostOb) note(lostOb + ' off-board part entr' + (lostOb === 1 ? 'y' : 'ies') + ' (unknown kind or lug)');
+  if(o.offboard !== undefined){
+    const had = Array.isArray(o.offboard) ? o.offboard : [];
+    const keep = had.filter(w => typeof w === 'string' && OFFBOARD_WIRE.test(w)).map(w => w.trim());
+    const lostW = (Array.isArray(o.offboard) ? had.length : 1) - keep.length;
+    if(lostW) note(lostW + ' off-board wire' + (lostW === 1 ? '' : 's') + ' (not written as A.lug - B.lug)');
+    if(keep.length) o.offboard = keep; else delete o.offboard;
+  }
 
   for(const k of ['cuts', 'parts', 'ics', 'pads']){
     const lost = before[k] - o[k].length;
@@ -3047,7 +3077,81 @@ function holeShort(r, c){
 
 /* Solder the flat things first or you will not be able to reach them later. */
 const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8,
-                     xfmr:9, xfmr5:9, xfmrct:9, xfmrsp:9, trim:10, pot:11, vres:11, spst:12, spdt:13};
+                     xfmr:9, xfmr5:9, xfmrct:9, xfmrsp:9, trim:10, pot:11, vres:11, spst:12, spdt:13,
+                     /* off-board parts list after everything soldered; see OFFBOARD_LIB */
+                     'ob:pot':21, 'ob:toggle':22, 'ob:jack':23, 'ob:led':24, 'ob:dc':25};
+
+/* ============================================================
+   OFF THE BOARD
+   The pot, the jack, the toggle, the LED and the DC jack: the parts that
+   never touch the copper and that the printed sheet, the parts list and the
+   share image used to know nothing about. Her ask, Sept 9 2026: "the
+   potentiometers and such should also be listed with the stripboard", and
+   Sept 13: draw them, the way the classic vero images do.
+
+   A pad may carry a list of entries - {id, kind, lug, value} - each saying
+   which panel part, and which of its lugs, the wire off this pad reaches.
+   Pads that name the same id are one part: a pot is three pads and one
+   part, so the parts list says 1 x B100K pot, not three lugs. The value
+   belongs to the part; it is stored on every entry so a file stays flat,
+   and the panel writes it to all of them. A pad with two entries is a pad
+   two parts share (the Firefly's step pads take a pot lug and an LED anode).
+
+   Wires between two panel parts that never touch the board - a jack tip to
+   a pot's lug 3 - live in S.offboard as strings, "J1.T - POT1.3".
+
+   None of this touches the netlist: pads are already its edge. A file
+   without any of it is unchanged, and migrate() drops an entry it cannot
+   read rather than repairing it - a part we invented is a lie about
+   somebody's panel.
+   ============================================================ */
+const OFFBOARD_LIB = {
+  pot:    {name:'potentiometer', prefix:'POT', lugs:['1','W','3']},
+  toggle: {name:'toggle switch', prefix:'SW',  lugs:['1','C','2']},
+  jack:   {name:'jack',          prefix:'JK',  lugs:['T','S','R','N']},   // JK, not J: J is a wire link's ref   // tip, sleeve, ring, switch contact
+  led:    {name:'LED',           prefix:'LED', lugs:['A','K']},
+  dc:     {name:'DC jack',       prefix:'DC',  lugs:['+','-']},
+};
+const OFFBOARD_ORDER = {pot:1, toggle:2, jack:3, led:4, dc:5};
+const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
+
+function padParts(d){ return Array.isArray(d.parts) ? d.parts : []; }
+
+/* every off-board part the pads name, with its lugs and the pads on each */
+function offboardParts(){
+  const map = new Map();
+  for(const d of S.pads){
+    for(const e of padParts(d)){
+      const id = String(e.id).trim().toUpperCase();
+      if(!map.has(id)) map.set(id, {id:id, kind:e.kind, value:'', lugs:new Map(), pads:[]});
+      const q = map.get(id);
+      if(!q.value && e.value) q.value = e.value;
+      if(!q.lugs.has(e.lug)) q.lugs.set(e.lug, []);
+      q.lugs.get(e.lug).push(d);
+      if(q.pads.indexOf(d) < 0) q.pads.push(d);
+    }
+  }
+  return [...map.values()].sort((a, b) =>
+    (OFFBOARD_ORDER[a.kind] || 9) - (OFFBOARD_ORDER[b.kind] || 9) ||
+    a.id.localeCompare(b.id, undefined, {numeric:true}));
+}
+
+/* the part-to-part wires that resolve to parts the pads actually name; one
+   naming a part or a lug that does not exist is left out, never guessed at */
+function offboardWires(){
+  const known = new Map(offboardParts().map(q => [q.id, q]));
+  const out = [];
+  for(const w of (Array.isArray(S.offboard) ? S.offboard : [])){
+    const m = OFFBOARD_WIRE.exec(String(w));
+    if(!m) continue;
+    const a = known.get(m[1].toUpperCase()), b = known.get(m[3].toUpperCase());
+    if(!a || !b) continue;
+    const al = m[2].toUpperCase(), bl = m[4].toUpperCase();
+    if(OFFBOARD_LIB[a.kind].lugs.indexOf(al) < 0 || OFFBOARD_LIB[b.kind].lugs.indexOf(bl) < 0) continue;
+    out.push({a:a.id, al:al, b:b.id, bl:bl, text:String(w)});
+  }
+  return out;
+}
 
 function buildList(){
   const items = [];
@@ -3344,6 +3448,14 @@ function bom(){
                   icShown(ic), ic.pins + '-pin DIP');
     r.qty++; r.refs.push(ic.ref);
   }
+  /* Off the board: grouped by the id the pads share, so a pot is one part
+     and not three lugs. Flagged, because the parts check must not count a
+     panel part against a list of what is soldered. */
+  for(const q of offboardParts()){
+    const r = add('ob:' + q.kind, OFFBOARD_LIB[q.kind].name, q.value, '');
+    r.offboard = true;
+    r.qty++; r.refs.push(q.id);
+  }
 
   const out = [...rows.values()];
   const byRef = (a, b) => a.localeCompare(b, undefined, {numeric:true});
@@ -3505,6 +3617,23 @@ function walkthrough(){
   for(const d of S.pads)
     step('P - pad. Click ' + at(d.at) + ', type ' + d.label + ', press Enter.',
       d.to ? ['This is where ' + d.to + ' joins the board.'] : null);
+
+  /* the panel parts, wired last: each lug to the pads that name it, and to
+     any other panel part it reaches without touching the board */
+  const obw = offboardWires();
+  for(const q of offboardParts()){
+    const lib = OFFBOARD_LIB[q.kind];
+    const body = [];
+    for(const lug of lib.lugs){
+      const pads = (q.lugs.get(lug) || []).map(d => 'pad ' + d.label);
+      const ties = obw.filter(w => (w.a === q.id && w.al === lug) || (w.b === q.id && w.bl === lug))
+                      .map(w => w.a === q.id && w.al === lug ? w.b + ' lug ' + w.bl : w.a + ' lug ' + w.al);
+      const to = pads.concat(ties);
+      if(to.length) body.push('Lug ' + lug + ' to ' + to.join(' and ') + '.');
+      else if(q.kind === 'pot' || q.kind === 'toggle') body.push('Lug ' + lug + ' stays empty.');
+    }
+    step(q.id + ' - ' + lib.name + (q.value ? ' ' + q.value : '') + ', on the panel, off the board.', body);
+  }
 
   if(S.netlist){
     L.push('When it is all placed, paste this into the netlist pane and it should');
@@ -3708,6 +3837,7 @@ function checkBom(text){
   const have = new Map();
   for(const row of bom()){
     if(row.kind === 'link') continue;          // wire is not a part you buy
+    if(row.offboard) continue;                 // and a panel part is not on the board
     const k = bomKey(row.what);
     if(!have.has(k)) have.set(k, {value:row.what, qty:0, refs:[]});
     const h = have.get(k);
@@ -3742,9 +3872,10 @@ function checkBom(text){
    reads back as exactly two 1k and never as a part called R3. */
 function partsListFromBoard(){
   const rows    = bom();
-  const listed  = rows.filter(r => r.kind !== 'link' && r.what);
+  const listed  = rows.filter(r => r.kind !== 'link' && !r.offboard && r.what);
   const links   = rows.filter(r => r.kind === 'link');
-  const unnamed = rows.filter(r => r.kind !== 'link' && !r.what);
+  const unnamed = rows.filter(r => r.kind !== 'link' && !r.offboard && !r.what);
+  const off     = rows.filter(r => r.offboard);
 
   const out = [
     '# ' + (S.name || 'untitled') + ' - the parts on the board',
@@ -3780,6 +3911,14 @@ function partsListFromBoard(){
   if(unnamed.length){
     const refs = unnamed.reduce((a, r) => a.concat(r.refs), []).join(', ');
     out.push('', '# no value set, so not listed: ' + refs + '.');
+  }
+
+  /* Panel parts ride as comments: read back in, they must not count against
+     the board, which has no copper under them to count. */
+  if(off.length){
+    out.push('', '# Off the board - on the panel, wired to the pads:');
+    for(const r of off)
+      out.push('#   ' + r.qty + ' x ' + (r.what ? r.what + ' ' : '') + r.name + '  (' + r.refs.join(', ') + ')');
   }
 
   return out.join('\n');
@@ -3834,7 +3973,8 @@ function buildMarkdown(){
           cuts.map(c => [dRow(c.row), dCol(c.col), c.back]));
   }
 
-  const parts = bom();
+  const bomAll = bom();
+  const parts = bomAll.filter(r => !r.offboard), offParts = bomAll.filter(r => r.offboard);
   const totalParts = parts.reduce((n, r) => n + r.qty, 0);
   L.push('## Parts (' + totalParts + ')');
   L.push('');
@@ -3844,6 +3984,14 @@ function buildMarkdown(){
         parts.map(r => [r.qty, r.name,
                         (r.what || '-') + (r.note ? ' (' + r.note + ')' : ''),
                         r.refs.join(' ')]));
+  if(offParts.length){
+    L.push('## Off the board (' + offParts.reduce((n, r) => n + r.qty, 0) + ')');
+    L.push('');
+    L.push('On the panel, wired to the pads.');
+    L.push('');
+    table(['qty', 'part', 'value', 'ids'],
+          offParts.map(r => [r.qty, r.name, r.what || '-', r.refs.join(' ')]));
+  }
 
   const items = buildList();
   L.push('## Build order (' + items.length + ')');
@@ -3953,6 +4101,7 @@ function duplicateRegion(reg, dr, dc){
   for(const d of src.pads){
     const q = {id:uid(), label:d.label, at:[d.at[0] + dr, d.at[1] + dc]};
     if(d.to) q.to = d.to;
+    if(d.parts) q.parts = JSON.parse(JSON.stringify(d.parts));
     S.pads.push(q);
     made.pads.push(q);
   }
@@ -8029,7 +8178,8 @@ function saveBuilt(set){
 function renderSheet(){
   const done = builtSet();
   const cuts = cutList(), items = buildList(), wires = wireList();
-  const parts = bom(), totalParts = parts.reduce((n, r) => n + r.qty, 0);
+  const bomAll = bom(), parts = bomAll.filter(r => !r.offboard), offParts = bomAll.filter(r => r.offboard);
+  const totalParts = parts.reduce((n, r) => n + r.qty, 0);
   const box = (key) => {
     const on = done.has(key);
     return '<label class="tick"><input type="checkbox" data-key="' + esc(key) + '"' +
@@ -8044,6 +8194,15 @@ function renderSheet(){
     '<tr><td><b>' + r.qty + '</b></td><td>' + esc(r.name) + '</td><td>' +
     esc(r.what || '-') + (r.note ? ' <span class="n">' + esc(r.note) + '</span>' : '') +
     '</td><td>' + esc(r.refs.join(' ')) + '</td></tr>').join('');
+  const offRows = offParts.map(r =>
+    '<tr><td><b>' + r.qty + '</b></td><td>' + esc(r.name) + '</td><td>' + esc(r.what || '-') +
+    '</td><td>' + esc(r.refs.join(' ')) + '</td></tr>').join('');
+  const offTable = offParts.length
+    ? '<h2>Off the board <span class="n">' + offParts.reduce((n, r) => n + r.qty, 0) + '</span></h2>' +
+      '<p>On the panel, wired to the pads. The wiring table below says which hole each lug reaches.</p>' +
+      '<table><thead><tr><th>qty</th><th>part</th><th>value</th><th>ids</th></tr></thead>' +
+      '<tbody>' + offRows + '</tbody></table>'
+    : '';
   const itemRows = items.map((it, i) =>
     '<tr><td>' + box(it.key) + '</td><td>' + (i+1) + '</td><td><b>' + esc(it.ref) + '</b></td><td>' +
     esc(it.name) + '</td><td>' + esc(it.what || '-') + '</td><td class="mono">' + esc(it.holes) +
@@ -8074,6 +8233,7 @@ function renderSheet(){
       'resistor standing on end is still the same resistor, but a DO-41 diode is not a DO-35.</p>' +
     '<table><thead><tr><th>qty</th><th>part</th><th>value</th><th>refs</th></tr></thead>' +
       '<tbody>' + (partRows || '<tr><td colspan="4">nothing placed</td></tr>') + '</tbody></table>' +
+    offTable +
     '<h2>Build order <span class="n">' + items.length + '</span></h2>' +
     '<p>Flat parts first, tall parts last, so nothing blocks the iron.</p>' +
     '<table><thead><tr><th></th><th>#</th><th>ref</th><th>part</th><th>value</th><th>holes</th></tr></thead>' +
@@ -8172,9 +8332,34 @@ function downloadSVG(side){
    calibration bar. The build sheet remains the working document; this is
    the one you post.
    ============================================================ */
-function classicSVG(){
+function classicSVG(opts){
   const rows = S.board.rows, cols = S.board.cols;
   const CP = 30;                       // hole pitch in image px
+  /* ---- the apron: the panel parts the pads name, drawn beside the board ----
+     The vero images people trade show the pots and jacks off the edge with a
+     wire to every hole they land in; this is that, from the entries on the
+     pads. Drawn whenever the file has them, unless opts.offboard is false.
+     A part hangs off the margin most of its pads sit on. Each side is one or
+     more columns, filled round-robin so every column spans the board and a
+     wire from an outer column passes between the inner column's bodies. */
+  const ob = (opts && opts.offboard === false) ? [] : offboardParts();
+  const obWires = ob.length ? offboardWires() : [];
+  const OB_COL = 170, OB_SLOT = 84;
+  const obCols = {left:[], right:[]};
+  for(const q of ob){
+    const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
+    q.left = lefts * 2 >= q.pads.length;
+    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / Math.max(q.pads.length, 1);
+  }
+  for(const side of ['left', 'right']){
+    const parts = ob.filter(q => q.left === (side === 'left')).sort((a, b) => a.row - b.row);
+    if(!parts.length) continue;
+    const perCol = Math.max(1, Math.floor((rows * CP + 40) / OB_SLOT));
+    const n = Math.ceil(parts.length / perCol);
+    for(let j = 0; j < n; j++) obCols[side].push([]);
+    parts.forEach((q, i) => obCols[side][i % n].push(q));
+  }
+  const apL = obCols.left.length * OB_COL, apR = obCols.right.length * OB_COL;
   /* the margins earn their width from the pad labels that live in them -
      fixed margins clipped +5V and SPK_A off both edges on the first cut */
   let padL = 0, padR = 0;
@@ -8182,7 +8367,7 @@ function classicSVG(){
     if(d.at[1] < cols / 2) padL = Math.max(padL, String(d.label).length);
     else padR = Math.max(padR, String(d.label).length);
   }
-  const BX = 74 + padL * 9, BW = (cols - 1) * CP + CP;   // board block: left edge, width
+  const BX = apL + 74 + padL * 9, BW = (cols - 1) * CP + CP;   // board block: left edge, width
   const TITLE_H = 86;
   const boardTop = TITLE_H + 34;
   const boardH = (rows - 1) * CP + CP;
@@ -8212,6 +8397,7 @@ function classicSVG(){
                         (p.kind === 'ecap' && p.polarized === false ? ' NP' : '')]);
   }
   for(const ic of S.ics) listed.push([ic.ref, icShown(ic)]);
+  for(const q of ob) listed.push([q.id, OFFBOARD_LIB[q.kind].name + (q.value ? ' ' + q.value : '')]);
   const colOf = ref => /^R/i.test(ref) ? 0 : /^C/i.test(ref) ? 1 : 2;
   const listCols = [[], [], []];
   for(const row of listed) listCols[colOf(row[0])].push(row);
@@ -8224,7 +8410,7 @@ function classicSVG(){
   const backTop = boardTop + boardH + 64;
   const listTop = backTop + boardH + 44;
   const listH = listRows ? listRows * 19 + 8 : 0;
-  const W = Math.max(BX + BW + 74 + padR * 9, 460);
+  const W = Math.max(BX + BW + 74 + padR * 9 + apR, 460);
   const H = listTop + listH + 46;
 
   o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
@@ -8295,10 +8481,13 @@ function classicSVG(){
   const PAD_PAL = ['#24357E', '#6B3A0B', '#0A5640', '#8A0F52',
                    '#4A5F00', '#6A2E9E', '#4E342E'];
   const padGroup = s => String(s == null ? '' : s).trim().toUpperCase().split(/[_\s]/)[0] || '?';
+  /* a pad that names a panel part takes that part's color, so the part, its
+     wires, the dot and the label all read as one thing */
+  const padKey = d => padParts(d).length ? padParts(d)[0].id : padGroup(d.label);
   const padInk = (() => {
     const map = new Map();
     let next = 0;
-    for(const g of [...new Set(S.pads.map(d => padGroup(d.label)))].sort()){
+    for(const g of [...new Set(S.pads.map(padKey).concat(ob.map(q => q.id)))].sort()){
       const pc = powerClass(g);
       map.set(g, pc && PAD_INK[pc.cls] ? PAD_INK[pc.cls] : PAD_PAL[next++ % PAD_PAL.length]);
     }
@@ -8321,7 +8510,7 @@ function classicSVG(){
   }
   for(const q of padPlan){
     const d = q.d, px = x(d.at[1]), py = y(d.at[0]);
-    const ink = padInk.get(padGroup(d.label)) || '#24357E';
+    const ink = padInk.get(padKey(d)) || '#24357E';
     o.push('<circle cx="' + px + '" cy="' + py + '" r="4.4" fill="' + ink + '"/>');
     const tx = q.left ? BX - 26 : BX + BW + 26;
     const ex = q.left ? BX - 20 : BX + BW + 20;
@@ -8475,6 +8664,101 @@ function classicSVG(){
               esc(ic.ref + '  ' + icShown(ic)) + '</text>');
   }
 
+  /* ---- the apron itself: wires under, bodies over, pad labels on top ---- */
+  if(ob.length){
+    const obW = [], obB = [];
+    const lugAt = new Map();                       // 'ID.LUG' -> [x, y, facing]
+    const txt = (tx, ty, str, size, extra) =>
+      obB.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" font-family="Verdana, sans-serif" ' +
+               (extra || '') + '>' + esc(str) + '</text>');
+    /* one body, its lugs on the edge that faces the board (f = +1: board is to the right) */
+    const body = (q, cx, cy, f, ink) => {
+      const lib = OFFBOARD_LIB[q.kind];
+      const lug = (name, lx, ly, show) => {
+        lugAt.set(q.id + '.' + name, [lx, ly, f]);
+        if(!show) return;
+        obB.push('<circle cx="' + lx + '" cy="' + ly + '" r="3.6" fill="#fff" stroke="#444" stroke-width="1.2"/>');
+        txt(lx + f * 7, ly + 3, name, 8, 'fill="#444" text-anchor="' + (f > 0 ? 'start' : 'end') + '"');
+      };
+      const used = name => q.lugs.has(name) || obWires.some(w => (w.a === q.id && w.al === name) || (w.b === q.id && w.bl === name));
+      let top = cy - 24, bot = cy + 24;
+      if(q.kind === 'pot'){
+        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="23" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
+                 '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#D8D8D8" stroke="#777" stroke-width="1.2"/>' +
+                 '<line x1="' + (cx - 5) + '" y1="' + (cy - 5) + '" x2="' + (cx + 5) + '" y2="' + (cy - 5) + '" stroke="#777" stroke-width="1.2"/>');
+        [-14, 0, 14].forEach((dy, i) => {
+          obB.push('<line x1="' + (cx + f * 21) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 30) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
+          lug(lib.lugs[i], cx + f * 32, cy + dy, true);
+        });
+        top = cy - 30; bot = cy + 30;
+      }else if(q.kind === 'toggle'){
+        obB.push('<rect x="' + (cx - 11) + '" y="' + (cy - 18) + '" width="22" height="36" rx="4" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
+                 '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy - 30) + '" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>' +
+                 '<circle cx="' + cx + '" cy="' + (cy - 30) + '" r="3.5" fill="#3B4A5A"/>');
+        [-12, 0, 12].forEach((dy, i) => lug(lib.lugs[i], cx + f * 19, cy + dy, true));
+        top = cy - 36; bot = cy + 24;
+      }else if(q.kind === 'jack'){
+        const xo = cx - f * 22;                      // the outer edge, away from the board
+        obB.push('<rect x="' + (f > 0 ? xo - 12 : xo) + '" y="' + (cy - 7) + '" width="12" height="14" fill="#BBB" stroke="#444" stroke-width="1.2"/>' +
+                 '<rect x="' + (cx - 22) + '" y="' + (cy - 13) + '" width="44" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+        const slots = {T:-12, R:-4, N:4, S:12};
+        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + slots[nm], nm === 'T' || nm === 'S' || used(nm));
+        top = cy - 20; bot = cy + 20;
+      }else if(q.kind === 'led'){
+        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
+        lug('A', cx + f * 17, cy - 7, true); lug('K', cx + f * 17, cy + 7, true);
+        txt(cx - f * 16, cy - 4, '+', 10, 'fill="#7E1E16" font-weight="bold" text-anchor="middle"');
+        top = cy - 18; bot = cy + 18;
+      }else{                                         // dc
+        obB.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+        txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
+        lug('+', cx + f * 25, cy - 8, true); lug('-', cx + f * 25, cy + 8, true);
+        top = cy - 20; bot = cy + 20;
+      }
+      txt(cx, top - 6, q.id, 11, 'fill="' + ink + '" font-weight="bold" text-anchor="middle"');
+      if(q.value) txt(cx, bot + 12, q.value, 10, 'fill="#333" text-anchor="middle"');
+    };
+    const inkOf = q => padInk.get(q.id) || '#24357E';
+    for(const side of ['left', 'right']){
+      const f = side === 'left' ? 1 : -1;
+      const edge = side === 'left' ? BX - 74 - padL * 9 : BX + BW + 74 + padR * 9;
+      obCols[side].forEach((col, j) => {
+        const cx = edge + (side === 'left' ? -1 : 1) * OB_COL * (j + 0.5);
+        const slot = (rows * CP + 40) / col.length;
+        col.forEach((q, i) => {
+          /* an outer column sits half a slot down, so its wires thread between the inner bodies */
+          const cy = boardTop - 20 + slot * (i + 0.5) + (j % 2 ? Math.min(slot / 2, OB_SLOT / 2) : 0);
+          body(q, cx, cy, f, inkOf(q));
+        });
+      });
+    }
+    /* every lug to every pad that names it */
+    for(const q of ob){
+      const ink = inkOf(q);
+      for(const [lugName, pads] of q.lugs){
+        const L0 = lugAt.get(q.id + '.' + lugName);
+        if(!L0) continue;
+        for(const d of pads){
+          const px = x(d.at[1]), py = y(d.at[0]);
+          const dx = Math.max(30, Math.min(90, Math.abs(px - L0[0]) / 2));
+          obW.push('<path d="M' + L0[0] + ' ' + L0[1] + ' C ' + (L0[0] + L0[2] * dx) + ' ' + L0[1] + ', ' +
+                   (px - L0[2] * dx) + ' ' + py + ', ' + px + ' ' + py +
+                   '" fill="none" stroke="' + ink + '" stroke-width="2" stroke-linecap="round" opacity="0.85"/>');
+        }
+      }
+    }
+    /* and the part-to-part wires, bowed away from the board */
+    for(const w of obWires){
+      const A = lugAt.get(w.a + '.' + w.al), B = lugAt.get(w.b + '.' + w.bl);
+      if(!A || !B) continue;
+      const ink = padInk.get(w.a) || '#24357E';
+      obW.push('<path d="M' + A[0] + ' ' + A[1] + ' C ' + (A[0] + A[2] * 34) + ' ' + A[1] + ', ' +
+               (B[0] + B[2] * 34) + ' ' + B[1] + ', ' + B[0] + ' ' + B[1] +
+               '" fill="none" stroke="' + ink + '" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round" opacity="0.85"/>');
+    }
+    o.push(obW.join('') + obB.join(''));
+  }
+
   o.push(late.join(''));
 
   /* ---- the solder side: the same board mirrored, copper facing you ----
@@ -8557,7 +8841,7 @@ function classicSVG(){
     const lateB = [];
     for(const q of backPlan){
       const d = q.d, px = xm(d.at[1]), py = yb(d.at[0]);
-      const ink = padInk.get(padGroup(d.label)) || '#24357E';
+      const ink = padInk.get(padKey(d)) || '#24357E';
       o.push('<circle cx="' + px + '" cy="' + py + '" r="4.4" fill="' + ink + '"/>');
       const tx = q.left ? BX - 26 : BX + BW + 26;
       const ex2 = q.left ? BX - 20 : BX + BW + 20;
@@ -9079,6 +9363,28 @@ function renderCtx(){
              '" placeholder="LDR1 leg 1">');
       o.push('<div class="hint">what the wire off this pad actually connects to. ' +
              'it fills the last column of the wiring table on the build sheet.</div>');
+      /* the panel part behind this pad - see OFFBOARD_LIB. One row per entry,
+         because a pad can serve two parts (a pot lug and an LED anode). */
+      const ents = padParts(pd);
+      o.push('<label>OFF THE BOARD</label>');
+      ents.forEach((e, i) => {
+        const lib = OFFBOARD_LIB[e.kind];
+        o.push('<div class="obrow" data-i="' + i + '">' +
+               '<select class="obk" title="kind">' + opts(Object.keys(OFFBOARD_LIB), e.kind) + '</select>' +
+               '<input class="obid" title="part id" value="' + esc(e.id) + '" placeholder="' + lib.prefix + '1">' +
+               '<select class="obl" title="lug">' + opts(lib.lugs, e.lug) + '</select>' +
+               '<input class="obv" title="value" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<button class="obx" type="button" title="remove this entry">x</button></div>');
+      });
+      o.push('<button id="edPadPartAdd" type="button">+ part on this pad</button>');
+      o.push('<div class="hint">the panel part the wire off this pad reaches - pot, toggle, jack, LED or DC jack - ' +
+             'and which of its lugs. pads that share an id are one part: the parts list counts it once, the ' +
+             'walkthrough wires it last, and the share image draws it beside the board. the value is the part\'s, ' +
+             'so typing it on one pad sets it on all of them.</div>');
+      o.push('<label>OFF-BOARD WIRES</label><textarea id="edOffboard" rows="2" placeholder="J1.T - POT1.3">' +
+             esc((S.offboard || []).join('\n')) + '</textarea>');
+      o.push('<div class="hint">wires between two panel parts that never touch the board, one per line, ' +
+             'written id.lug - id.lug. this list belongs to the whole layout, not to this pad.</div>');
     }else if(ic){
       o.push('<label>REF</label><input id="edRef" value="' + esc(ic.ref) + '">');
       o.push('<label>PART</label><select id="edIc">' + opts(Object.keys(IC_LIB), ic.part) + '</select>');
@@ -9328,6 +9634,46 @@ function renderCtx(){
     const d = selObj(); if(!d) return;
     const v = e.target.value.trim();
     if(v) d.to = v; else delete d.to;
+  }));
+  const obEnt = (i) => { const d = selObj(); return d ? padParts(d)[i] : null; };
+  document.querySelectorAll('#ctx .obrow').forEach(row => {
+    const i = +row.dataset.i;
+    row.querySelector('.obk').onchange = e => edit(() => {
+      const en = obEnt(i); if(!en) return;
+      en.kind = e.target.value; en.lug = OFFBOARD_LIB[en.kind].lugs[0];
+    });
+    row.querySelector('.obid').onchange = e => edit(() => {
+      const en = obEnt(i); if(!en) return;
+      const v = e.target.value.trim().toUpperCase();
+      if(v) en.id = v;
+    });
+    row.querySelector('.obl').onchange = e => edit(() => { const en = obEnt(i); if(en) en.lug = e.target.value; });
+    row.querySelector('.obv').onchange = e => edit(() => {
+      const en = obEnt(i); if(!en) return;
+      const v = e.target.value.trim();
+      /* the value is the part's, so every pad naming this part takes it */
+      for(const d of S.pads) for(const x of padParts(d)) if(x.id === en.id){ if(v) x.value = v; else delete x.value; }
+    });
+    row.querySelector('.obx').onclick = () => edit(() => {
+      const d = selObj(); if(!d || !Array.isArray(d.parts)) return;
+      d.parts.splice(i, 1);
+      if(!d.parts.length) delete d.parts;
+    });
+  });
+  on('edPadPartAdd', 'onclick', () => edit(() => {
+    const d = selObj(); if(!d) return;
+    const have = padParts(d);
+    const kind = have.length ? have[have.length - 1].kind : 'pot';
+    /* the next free id of that kind, so two new pots do not both come up POT1 */
+    const used = new Set();
+    for(const p of S.pads) for(const x of padParts(p)) used.add(x.id);
+    let n = 1;
+    while(used.has(OFFBOARD_LIB[kind].prefix + n)) n++;
+    d.parts = have.concat([{id:OFFBOARD_LIB[kind].prefix + n, kind:kind, lug:OFFBOARD_LIB[kind].lugs[0]}]);
+  }));
+  on('edOffboard', 'onchange', e => edit(() => {
+    const lines = e.target.value.split('\n').map(x => x.trim()).filter(Boolean);
+    if(lines.length) S.offboard = lines; else delete S.offboard;
   }));
   on('edModSave', 'onclick', () => {
     const ic = selObj(); if(!ic) return;
@@ -10057,8 +10403,10 @@ const SHARE_TAG = {deflateRaw:'z', deflate:'d', plain:'j'};
 const SHARE_WARN = 2000;        // where links start getting mangled in the wild
 
 function shareProject(){
-  return {version:2, name:S.name, board:S.board, cuts:S.cuts,
-          parts:S.parts, ics:S.ics, pads:S.pads};
+  const p = {version:2, name:S.name, board:S.board, cuts:S.cuts,
+             parts:S.parts, ics:S.ics, pads:S.pads};
+  if(Array.isArray(S.offboard) && S.offboard.length) p.offboard = S.offboard;
+  return p;
 }
 function b64url(bytes){
   let s = '';

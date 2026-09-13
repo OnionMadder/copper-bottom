@@ -2966,5 +2966,53 @@ ok(buildList().some(it => it.ref === 'T1' && it.holes.split('  ').length === 4),
 ok(JSON.stringify(walkthrough()).indexOf('T1') >= 0, 'and the walkthrough places it');
 S = demoProject(); computeNets();
 
+console.log('-- off the board: parts on the pads --');
+{
+  const raw = {version:2, name:'ob', board:{rows:6, cols:8}, cuts:[], parts:[], ics:[],
+    pads:[
+      {id:'a', label:'W1',  at:[1,1], parts:[{id:'pot1', kind:'pot', lug:'w', value:'B100K'}]},
+      {id:'b', label:'GND', at:[5,1], parts:[{id:'POT1', kind:'pot', lug:'1'}, {id:'J1', kind:'jack', lug:'S'},
+                                             {id:'LED1', kind:'led', lug:'K'}]},
+      {id:'c', label:'OUT', at:[3,6], parts:[{id:'J1', kind:'jack', lug:'T'}]},
+      {id:'d', label:'S1',  at:[2,6], parts:[{id:'POT2', kind:'pot', lug:'3', value:'B100K'},
+                                             {id:'LED1', kind:'led', lug:'A'}]},
+      {id:'e', label:'BAD', at:[4,6], parts:[{id:'X1', kind:'relay', lug:'1'}, {id:'POT2', kind:'pot', lug:'Q'}]},
+    ],
+    offboard:['J1.T - POT1.3', 'nonsense', 'J9.T - POT1.1']};
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  const byL = l => up.pads.find(d => d.label === l);
+  ok(byL('W1').parts[0].id === 'POT1' && byL('W1').parts[0].lug === 'W', 'an entry is kept, id and lug upper-cased');
+  ok(byL('GND').parts.length === 3, 'a pad may carry three entries');
+  ok(byL('BAD') && byL('BAD').parts === undefined, 'unknown kind and unknown lug are dropped, the pad stays');
+  ok(up.offboard.length === 2 && up.offboard.indexOf('nonsense') < 0, 'a wire not written A.lug - B.lug is dropped');
+  S = up; computeNets();
+  const parts = offboardParts();
+  ok(parts.length === 4, 'four panel parts from the pads (' + parts.map(q => q.id).join(' ') + ')');
+  const pot1 = parts.find(q => q.id === 'POT1');
+  ok(pot1 && pot1.value === 'B100K' && pot1.lugs.get('W')[0].label === 'W1' && pot1.lugs.get('1')[0].label === 'GND',
+     'POT1 has its value from W1 and its lugs on W1 and GND');
+  ok(!pot1.lugs.has('3'), 'and lug 3 is empty');
+  const w = offboardWires();
+  ok(w.length === 1 && w[0].a === 'J1' && w[0].al === 'T' && w[0].b === 'POT1' && w[0].bl === '3',
+     'one part-to-part wire resolves; the one naming J9 does not');
+  const rows = bom();
+  const pots = rows.find(r => r.kind === 'ob:pot');
+  ok(pots && pots.qty === 2 && pots.offboard === true && String(pots.refs) === 'POT1,POT2', 'the BOM lists two B100K pots once, flagged off-board');
+  ok(rows.some(r => r.kind === 'ob:led' && r.qty === 1), 'and one LED');
+  const chk = checkBom('# nothing on the board');
+  ok(chk.rows.every(r => r.status !== 'extra'), 'the parts check does not count panel parts against the board');
+  const list = partsListFromBoard();
+  ok(/^#.*2 x B100K potentiometer/m.test(list), 'the written parts list carries them as comments');
+  ok(!list.split('\n').some(l => !l.startsWith('#') && /B100K/.test(l)), 'never as a countable line');
+  const wt = walkthrough();
+  ok(/POT1 - potentiometer B100K, on the panel/.test(wt) && /Lug W to pad W1/.test(wt) && /Lug 3 to J1 lug T/.test(wt),
+     'the walkthrough wires POT1 last, lug by lug, pads and the jack tip both');
+  ok(/Lug 1 stays empty/.test(wt) && /Lug W stays empty/.test(wt), 'and says which pot lugs stay empty (POT2 has only lug 3 wired)');
+  ok(wireList().length === 5, 'the wiring table is untouched by any of it');
+  const md = buildMarkdown();
+  ok(/## Off the board \(4\)/.test(md), 'the markdown sheet has its own section');
+}
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
