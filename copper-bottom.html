@@ -8344,7 +8344,7 @@ function classicSVG(opts){
      wire from an outer column passes between the inner column's bodies. */
   const ob = (opts && opts.offboard === false) ? [] : offboardParts();
   const obWires = ob.length ? offboardWires() : [];
-  const OB_COL = 170, OB_SLOT = 84;
+  const OB_COL = 170, OB_SLOT = 96;       // 96: a body plus its name above and value below never meet the next
   const obCols = {left:[], right:[]};
   for(const q of ob){
     const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
