@@ -90,6 +90,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | flying leads and bent legs - a part that lives off the board | done |
 | off-board switches, panel pots, trimpots | done |
 | the panel parts drawn beside the board - pots, switches, jacks, LEDs, DC, speakers, photocells, vactrols, buttons, batteries, modules, tube sockets - with a wire to every hole | done |
+| a panel part that touches no pad at all - the far pole of a DPDT, a jack wired only to a switch | done |
 | axial parts stood on end, on the board and on the sheet | done |
 | light and dark, following whatever the machine already asks for | done |
 | share links - a whole layout in the URL, nothing uploaded | done |
@@ -397,6 +398,7 @@ Click any finding to ring the offending hole and pin its net. Hover to light the
 | warn | an axial part is wider than the holes it spans - will not lie flat |
 | error | a chip is on a supply outside its datasheet range |
 | warn | a chip is below its minimum supply |
+| warn | an off-board wire, or a pad, names a panel part or a lug that nothing on the layout declares |
 
 ### Lead span, and why it says "will not lie flat"
 

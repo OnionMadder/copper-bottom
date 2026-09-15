@@ -3055,5 +3055,67 @@ console.log('-- off the board: the v1.3.0 kinds --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- off the board: a part no pad names --');
+{
+  /* the Clean Boost's DPDT, Sept 15 2026: the near pole lands on pads, the far
+     pole is wired part to part and touches no copper anywhere. */
+  const raw = {version:2, name:'panel', board:{rows:6, cols:8}, cuts:[], ics:[], parts:[],
+    panel:[{id:'sw2', kind:'toggle', value:'DPDT pole 2'}, {id:'X9', kind:'relay'}, 'nonsense'],
+    pads:[
+      {id:'a', label:'IN',  at:[2,0], parts:[{id:'JK1', kind:'jack', lug:'T'}]},
+      {id:'b', label:'OUT', at:[3,7], parts:[{id:'SW1', kind:'toggle', lug:'C'}]},
+    ],
+    offboard:['SW2.1 - SW1.C', 'SW2.C - JK1.T', 'SW3.1 - SW1.1', 'SW2.Q - JK1.T']};
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  ok(up.panel.length === 1 && up.panel[0].id === 'SW2' && up.panel[0].value === 'DPDT pole 2',
+     'a declaration is kept and its id upper-cased; an unknown kind and a non-object are dropped');
+  S = up;
+  /* the wires textarea writes straight to S.offboard without migrating, so a
+     line that is not a wire at all can be sitting there live */
+  S.offboard = S.offboard.concat(['SW2 - JK1.T']);
+  computeNets();
+  const parts = offboardParts();
+  const sw2 = parts.find(q => q.id === 'SW2');
+  ok(sw2 && !sw2.pads.length && sw2.lugs.size === 0, 'SW2 is a panel part with no pads and no pad lugs');
+  ok(parts.length === 3, 'and it counts alongside the two the pads name');
+  const rep = offboardWireReport();
+  ok(rep.wires.length === 2, 'the two wires that reach it resolve (' + rep.wires.map(w => w.text).join(' | ') + ')');
+  ok(rep.bad.length === 3, 'and three do not, instead of vanishing');
+  ok(rep.bad.some(b => /nothing on this layout is called SW3/.test(b.why)), 'one names a part nobody declares');
+  ok(rep.bad.some(b => /SW2 has no lug Q/.test(b.why)), 'one names a lug a toggle does not have');
+  ok(rep.bad.some(b => /not written as id.lug/.test(b.why)), 'one is not written as a wire at all');
+  const f = runDRC().filter(x => x.rule === 'panel-wire');
+  ok(f.length === 3 && f.every(x => x.sev === 'warn' && x.why),
+     'the DRC warns once for each, every one carrying its consequence');
+  const rows = bom();
+  ok(rows.filter(r => r.kind === 'ob:toggle').length === 2, 'the BOM has two toggle rows, SW1 and SW2');
+  ok(rows.some(r => r.kind === 'ob:toggle' && r.offboard === true && r.what === 'DPDT pole 2' &&
+                    String(r.refs) === 'SW2'), 'SW2 is on it under its own value, off-board like the rest');
+  const wt = walkthrough();
+  ok(/SW2 - toggle switch DPDT pole 2, on the panel/.test(wt) && /Lug C to JK1 lug T/.test(wt),
+     'the walkthrough wires it part to part, with no pad in sight');
+  ok(nextOffboardId('toggle') === 'SW3', 'a new toggle numbers past the declared one rather than over it');
+  S.offboard = ['SW2.1 - SW1.C', 'SW2.C - JK1.T'];
+  ok(runDRC().every(x => x.rule !== 'panel-wire'), 'and says nothing at all once every wire resolves');
+}
+S = demoProject(); computeNets();
+
+console.log('-- off the board: one id, two kinds --');
+{
+  /* possible before any of this existed, and silent: the part keeps the first
+     kind it was given and the other pad's lug then belongs to nobody. */
+  S = migrate({version:2, name:'clash', board:{rows:4, cols:6}, cuts:[], ics:[], parts:[],
+    pads:[{id:'a', label:'W', at:[1,1], parts:[{id:'POT1', kind:'pot', lug:'W'}]},
+          {id:'b', label:'K', at:[2,1], parts:[{id:'POT1', kind:'led', lug:'K'}]}]});
+  computeNets();
+  const q = offboardParts()[0];
+  ok(q.kind === 'pot' && q.lugs.has('K'), 'the first kind wins, and the odd lug is still on the part');
+  const f = runDRC().filter(x => x.rule === 'panel-wire');
+  ok(f.length === 1 && /POT1 is a potentiometer and has no lug K/.test(f[0].msg),
+     'the DRC says so rather than letting it fall quietly off the drawing');
+  ok(String(f[0].at) === '2,1', 'pointing at the pad that disagrees');
+}
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

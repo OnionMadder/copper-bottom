@@ -363,10 +363,10 @@ button[disabled]:hover{border-color:var(--line2); background:var(--field)}
    2026. The board keeps the size it asks for and the pane scrolls, which is
    what zoom means. */
 .stage > svg{flex:none}
-#ctx .obrow{display:flex; gap:4px; align-items:center; margin:3px 0}
-#ctx .obrow input, #ctx .obrow select{min-width:0; flex:1 1 0; margin:0}
-#ctx .obrow .obid{flex:1.2 1 0}
-#ctx .obrow .obx{flex:none; padding:2px 7px}
+#ctx .obrow, #ctx .pnrow{display:flex; gap:4px; align-items:center; margin:3px 0}
+#ctx .obrow input, #ctx .obrow select, #ctx .pnrow input, #ctx .pnrow select{min-width:0; flex:1 1 0; margin:0}
+#ctx .obrow .obid, #ctx .pnrow .pnid{flex:1.2 1 0}
+#ctx .obrow .obx, #ctx .pnrow .pnx{flex:none; padding:2px 7px}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
 .bhit{fill:transparent; cursor:pointer}
@@ -1016,7 +1016,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1340,6 +1340,21 @@ function migrate(obj){
     if(ok.length) d.parts = ok; else delete d.parts;
   }
   if(lostOb) note(lostOb + ' off-board part entr' + (lostOb === 1 ? 'y' : 'ies') + ' (unknown kind or lug)');
+  /* a panel part declared in its own right. Same deal as a pad's entries:
+     an unknown kind is dropped and counted, never repaired into a guess. */
+  if(o.panel !== undefined){
+    const hadP = Array.isArray(o.panel) ? o.panel : [];
+    const keepP = hadP.filter(e => e && typeof e === 'object' && OFFBOARD_LIB[e.kind] &&
+                                   typeof e.id === 'string' && e.id.trim())
+                      .map(e => {
+                        const q = {id:e.id.trim().toUpperCase(), kind:e.kind};
+                        if(typeof e.value === 'string' && e.value.trim()) q.value = e.value.trim();
+                        return q;
+                      });
+    const lostP = (Array.isArray(o.panel) ? hadP.length : 1) - keepP.length;
+    if(lostP) note(lostP + ' panel part' + (lostP === 1 ? '' : 's') + ' (unknown kind)');
+    if(keepP.length) o.panel = keepP; else delete o.panel;
+  }
   if(o.offboard !== undefined){
     const had = Array.isArray(o.offboard) ? o.offboard : [];
     const keep = had.filter(w => typeof w === 'string' && OFFBOARD_WIRE.test(w)).map(w => w.trim());
@@ -2597,6 +2612,10 @@ const DRC_WHY = {
   'pad-name':
     'The netlist looks a pad up by its name. Two pads wearing one name means only ever one ' +
     'of them gets found, and the other is invisible to every check that mentions it.',
+  'panel-wire':
+    'The tool cannot tell which part or which lug you mean, so that connection is left out of ' +
+    'the drawing, the walkthrough and the build sheet. Somebody building from those never makes ' +
+    'it, and nothing tells them it was ever meant to be there.',
   'vee-ground':
     'That pin is the negative supply of the chip, and at ground it sits at 0V. On a split rail the ' +
     'part needs the negative side to pull below ground - tied to ground it has none, its outputs ' +
@@ -2960,6 +2979,25 @@ function runDRC(){
     add('warn', 'orphan', only.label + ' is the only thing on its net - connects nowhere', only.at, net.id);
   }
 
+  /* --- a lug the part it belongs to does not have ---
+     One id, two kinds: two pads disagreeing about what POT1 is, or a
+     declaration disagreeing with a pad. The part keeps the first kind it was
+     given, and the odd lug then belongs to nobody and is quietly not drawn. */
+  for(const q of offboardParts()){
+    const lib = OFFBOARD_LIB[q.kind];
+    for(const [lug, lugPads] of q.lugs)
+      if(lib.lugs.indexOf(lug) < 0)
+        add('warn', 'panel-wire', 'pad ' + lugPads[0].label + ' wires ' + q.id + ' lug ' + lug +
+            ', but ' + q.id + ' is a ' + lib.name + ' and has no lug ' + lug, lugPads[0].at);
+  }
+
+  /* --- an off-board wire that names something nothing declares ---
+     Not a fault in the board: the copper is untouched by any of this. It is
+     a fault in the description of the panel, and it is invisible without a
+     finding, because the wire simply stops appearing. */
+  for(const b of offboardWireReport().bad)
+    add('warn', 'panel-wire', 'off-board wire "' + b.text + '" goes nowhere - ' + b.why);
+
   const order = {error:0, warn:1};
   out.sort((a, b) => order[a.sev] - order[b.sev] ||
                      (a.at ? a.at[0] : 0) - (b.at ? b.at[0] : 0) ||
@@ -3100,6 +3138,11 @@ const BUILD_ORDER = {link:1, res:2, diode:3, ic:4, cap:5, trans:6, reg:7, ecap:8
    Wires between two panel parts that never touch the board - a jack tip to
    a pot's lug 3 - live in S.offboard as strings, "J1.T - POT1.3".
 
+   A part that reaches no pad at all is declared in S.panel, {id, kind,
+   value}, because there is no pad for it to introduce itself on. That is the
+   whole of the difference: S.panel says a part exists, the pads and the wires
+   say where its lugs go.
+
    None of this touches the netlist: pads are already its edge. A file
    without any of it is unchanged, and migrate() drops an entry it cannot
    read rather than repairing it - a part we invented is a lie about
@@ -3127,15 +3170,31 @@ const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
 
 function padParts(d){ return Array.isArray(d.parts) ? d.parts : []; }
 
-/* every off-board part the pads name, with its lugs and the pads on each */
+/* the panel parts declared in their own right, S.panel - {id, kind, value}.
+   Nearly every panel part introduces itself through a pad, because nearly
+   every one reaches the copper. The ones that never do have nowhere else to
+   be said: the far pole of a DPDT whose near pole carries the pads, a wiper
+   that goes straight to the next board, a jack wired only to a switch. Before
+   Sept 15 2026 those existed in the wires alone and were dropped without a
+   word. A declaration carries no lugs of its own - the wires supply those. */
+function declaredParts(){ return Array.isArray(S.panel) ? S.panel : []; }
+
+/* every off-board part, from the declarations and from the pads that name
+   them, with its lugs and the pads on each */
 function offboardParts(){
   const map = new Map();
+  const put = (id, kind, value) => {
+    const key = String(id).trim().toUpperCase();
+    if(!map.has(key)) map.set(key, {id:key, kind:kind, value:'', lugs:new Map(), pads:[]});
+    const q = map.get(key);
+    if(!q.value && value) q.value = value;
+    return q;
+  };
+  /* declarations first, so a part that names itself owns its own kind */
+  for(const e of declaredParts()) put(e.id, e.kind, e.value);
   for(const d of S.pads){
     for(const e of padParts(d)){
-      const id = String(e.id).trim().toUpperCase();
-      if(!map.has(id)) map.set(id, {id:id, kind:e.kind, value:'', lugs:new Map(), pads:[]});
-      const q = map.get(id);
-      if(!q.value && e.value) q.value = e.value;
+      const q = put(e.id, e.kind, e.value);
       if(!q.lugs.has(e.lug)) q.lugs.set(e.lug, []);
       q.lugs.get(e.lug).push(d);
       if(q.pads.indexOf(d) < 0) q.pads.push(d);
@@ -3146,21 +3205,44 @@ function offboardParts(){
     a.id.localeCompare(b.id, undefined, {numeric:true}));
 }
 
-/* the part-to-part wires that resolve to parts the pads actually name; one
-   naming a part or a lug that does not exist is left out, never guessed at */
-function offboardWires(){
+/* Every part-to-part wire, sorted into the ones that resolve and the ones
+   that do not. A wire naming a part or a lug nothing knows about is never
+   guessed at - but it is not dropped in silence either, because a wire the
+   picture leaves out is a connection nobody makes. The bad ones come back
+   with a reason and the DRC reads them out. */
+function offboardWireReport(){
   const known = new Map(offboardParts().map(q => [q.id, q]));
-  const out = [];
+  const out = [], bad = [];
   for(const w of (Array.isArray(S.offboard) ? S.offboard : [])){
-    const m = OFFBOARD_WIRE.exec(String(w));
-    if(!m) continue;
-    const a = known.get(m[1].toUpperCase()), b = known.get(m[3].toUpperCase());
-    if(!a || !b) continue;
+    const text = String(w).trim();
+    const m = OFFBOARD_WIRE.exec(text);
+    if(!m){ bad.push({text:text, why:'it is not written as id.lug - id.lug'}); continue; }
+    const aid = m[1].toUpperCase(), bid = m[3].toUpperCase();
+    const a = known.get(aid), b = known.get(bid);
+    if(!a || !b){
+      const miss = [...new Set([a ? null : aid, b ? null : bid].filter(Boolean))];
+      bad.push({text:text, why:'nothing on this layout is called ' + miss.join(' or ')});
+      continue;
+    }
     const al = m[2].toUpperCase(), bl = m[4].toUpperCase();
-    if(OFFBOARD_LIB[a.kind].lugs.indexOf(al) < 0 || OFFBOARD_LIB[b.kind].lugs.indexOf(bl) < 0) continue;
-    out.push({a:a.id, al:al, b:b.id, bl:bl, text:String(w)});
+    const lugs = [];
+    if(OFFBOARD_LIB[a.kind].lugs.indexOf(al) < 0) lugs.push(a.id + ' has no lug ' + al);
+    if(OFFBOARD_LIB[b.kind].lugs.indexOf(bl) < 0) lugs.push(b.id + ' has no lug ' + bl);
+    if(lugs.length){ bad.push({text:text, why:lugs.join(', ')}); continue; }
+    out.push({a:a.id, al:al, b:b.id, bl:bl, text:text});
   }
-  return out;
+  return {wires:out, bad:bad};
+}
+function offboardWires(){ return offboardWireReport().wires; }
+
+/* the next free id of a kind, counted across the pads AND the declarations,
+   so two new parts never both come up POT1 */
+function nextOffboardId(kind){
+  const used = new Set(offboardParts().map(q => q.id));
+  const pre = OFFBOARD_LIB[kind].prefix;
+  let n = 1;
+  while(used.has(pre + n)) n++;
+  return pre + n;
 }
 
 function buildList(){
@@ -8356,11 +8438,40 @@ function classicSVG(opts){
   const obWires = ob.length ? offboardWires() : [];
   const OB_COL = 170, OB_SLOT = 96;       // 96: a body plus its name above and value below never meet the next
   const obCols = {left:[], right:[]};
+  /* A part with pads hangs off the margin most of them sit on, at the average
+     height of those pads. A part that reaches no pad has no hole to hang off,
+     so it takes the side and the height of the panel parts it IS wired to,
+     and the pass repeats so a chain of them settles rather than piling up in
+     the top left corner. One that reaches nothing anchored goes to the right
+     margin at mid board - arbitrary, but stated, and it is drawn. */
+  const anchored = new Set();
   for(const q of ob){
+    if(!q.pads.length) continue;
     const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
     q.left = lefts * 2 >= q.pads.length;
-    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / Math.max(q.pads.length, 1);
+    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
+    anchored.add(q.id);
   }
+  for(let pass = 0; pass < ob.length; pass++){
+    let settled = 0;
+    for(const q of ob){
+      if(anchored.has(q.id)) continue;
+      const near = [];
+      for(const w of obWires){
+        const other = w.a === q.id ? w.b : w.b === q.id ? w.a : null;
+        if(other && other !== q.id && anchored.has(other)){
+          const z = ob.find(x => x.id === other);
+          if(z) near.push(z);
+        }
+      }
+      if(!near.length) continue;
+      q.left = near.filter(z => z.left).length * 2 >= near.length;
+      q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
+      anchored.add(q.id); settled++;
+    }
+    if(!settled) break;
+  }
+  for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
   for(const side of ['left', 'right']){
     const parts = ob.filter(q => q.left === (side === 'left')).sort((a, b) => a.row - b.row);
     if(!parts.length) continue;
@@ -9448,10 +9559,27 @@ function renderCtx(){
                '<button class="obx" type="button" title="remove this entry">x</button></div>');
       });
       o.push('<button id="edPadPartAdd" type="button">+ part on this pad</button>');
-      o.push('<div class="hint">the panel part the wire off this pad reaches - pot, toggle, jack, LED or DC jack - ' +
+      o.push('<div class="hint">the panel part the wire off this pad reaches - a pot, a jack, a switch, a speaker, a tube socket, anything in the kind list - ' +
              'and which of its lugs. pads that share an id are one part: the parts list counts it once, the ' +
              'walkthrough wires it last, and the share image draws it beside the board. the value is the part\'s, ' +
              'so typing it on one pad sets it on all of them.</div>');
+      /* the panel parts no pad names. Layout-wide, like the wires under it,
+         and shown here because this is where the off-board vocabulary already
+         lives - a padless part exists to be wired to one that has pads, so
+         anybody who needs it is already in this panel. */
+      const decl = declaredParts();
+      o.push('<label>PANEL PARTS - on no pad</label>');
+      decl.forEach((e, i) => {
+        o.push('<div class="pnrow" data-i="' + i + '">' +
+               '<select class="pnk" title="kind">' + opts(Object.keys(OFFBOARD_LIB), e.kind) + '</select>' +
+               '<input class="pnid" title="part id" value="' + esc(e.id) + '" placeholder="' + OFFBOARD_LIB[e.kind].prefix + '2">' +
+               '<input class="pnv" title="value" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<button class="pnx" type="button" title="remove this part">x</button></div>');
+      });
+      o.push('<button id="edPanelAdd" type="button">+ panel part</button>');
+      o.push('<div class="hint">a part that reaches no pad at all - the far pole of a DPDT whose ' +
+             'near pole carries the pads, a jack wired only to a switch. name it here and the ' +
+             'wires below can reach it. anything that lands on a pad is declared up there instead.</div>');
       o.push('<label>OFF-BOARD WIRES</label><textarea id="edOffboard" rows="2" placeholder="J1.T - POT1.3">' +
              esc((S.offboard || []).join('\n')) + '</textarea>');
       o.push('<div class="hint">wires between two panel parts that never touch the board, one per line, ' +
@@ -9722,8 +9850,10 @@ function renderCtx(){
     row.querySelector('.obv').onchange = e => edit(() => {
       const en = obEnt(i); if(!en) return;
       const v = e.target.value.trim();
-      /* the value is the part's, so every pad naming this part takes it */
+      /* the value is the part's, so every pad naming this part takes it, and
+         its declaration too if it has one */
       for(const d of S.pads) for(const x of padParts(d)) if(x.id === en.id){ if(v) x.value = v; else delete x.value; }
+      for(const x of declaredParts()) if(x.id === en.id){ if(v) x.value = v; else delete x.value; }
     });
     row.querySelector('.obx').onclick = () => edit(() => {
       const d = selObj(); if(!d || !Array.isArray(d.parts)) return;
@@ -9735,12 +9865,31 @@ function renderCtx(){
     const d = selObj(); if(!d) return;
     const have = padParts(d);
     const kind = have.length ? have[have.length - 1].kind : 'pot';
-    /* the next free id of that kind, so two new pots do not both come up POT1 */
-    const used = new Set();
-    for(const p of S.pads) for(const x of padParts(p)) used.add(x.id);
-    let n = 1;
-    while(used.has(OFFBOARD_LIB[kind].prefix + n)) n++;
-    d.parts = have.concat([{id:OFFBOARD_LIB[kind].prefix + n, kind:kind, lug:OFFBOARD_LIB[kind].lugs[0]}]);
+    d.parts = have.concat([{id:nextOffboardId(kind), kind:kind, lug:OFFBOARD_LIB[kind].lugs[0]}]);
+  }));
+  const pnEnt = (i) => declaredParts()[i] || null;
+  document.querySelectorAll('#ctx .pnrow').forEach(row => {
+    const i = +row.dataset.i;
+    row.querySelector('.pnk').onchange = e => edit(() => { const en = pnEnt(i); if(en) en.kind = e.target.value; });
+    row.querySelector('.pnid').onchange = e => edit(() => {
+      const en = pnEnt(i); if(!en) return;
+      const v = e.target.value.trim().toUpperCase();
+      if(v) en.id = v;
+    });
+    row.querySelector('.pnv').onchange = e => edit(() => {
+      const en = pnEnt(i); if(!en) return;
+      const v = e.target.value.trim();
+      if(v) en.value = v; else delete en.value;
+    });
+    row.querySelector('.pnx').onclick = () => edit(() => {
+      if(!Array.isArray(S.panel)) return;
+      S.panel.splice(i, 1);
+      if(!S.panel.length) delete S.panel;
+    });
+  });
+  on('edPanelAdd', 'onclick', () => edit(() => {
+    /* a toggle by default: the DPDT's far pole is what this is for */
+    S.panel = declaredParts().concat([{id:nextOffboardId('toggle'), kind:'toggle'}]);
   }));
   on('edOffboard', 'onchange', e => edit(() => {
     const lines = e.target.value.split('\n').map(x => x.trim()).filter(Boolean);
@@ -10476,6 +10625,7 @@ const SHARE_WARN = 2000;        // where links start getting mangled in the wild
 function shareProject(){
   const p = {version:2, name:S.name, board:S.board, cuts:S.cuts,
              parts:S.parts, ics:S.ics, pads:S.pads};
+  if(Array.isArray(S.panel) && S.panel.length) p.panel = S.panel;
   if(Array.isArray(S.offboard) && S.offboard.length) p.offboard = S.offboard;
   return p;
 }
