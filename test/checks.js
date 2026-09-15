@@ -3014,5 +3014,46 @@ console.log('-- off the board: parts on the pads --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- off the board: the v1.3.0 kinds --');
+{
+  const raw = {version:2, name:'kinds', board:{rows:6, cols:8}, cuts:[], ics:[], parts:[],
+    pads:[
+      {id:'a', label:'SPK+', at:[0,7], parts:[{id:'SPK1', kind:'spk', lug:'+', value:'8 ohm'}]},
+      {id:'b', label:'SPK-', at:[1,7], parts:[{id:'SPK1', kind:'spk', lug:'-'}]},
+      {id:'c', label:'LDR_A', at:[2,7], parts:[{id:'LDR1', kind:'ldr', lug:'1'}]},
+      {id:'d', label:'LDR_B', at:[3,7], parts:[{id:'LDR1', kind:'ldr', lug:'2'}]},
+      {id:'e', label:'GRID', at:[4,7], parts:[{id:'V1', kind:'tube', lug:'1', value:'6E2'}]},
+      {id:'f', label:'ANODE', at:[5,7], parts:[{id:'V1', kind:'tube', lug:'9'}, {id:'V1', kind:'tube', lug:'10'}]},
+      {id:'g', label:'IN_A', at:[0,0], parts:[{id:'BTN1', kind:'btn', lug:'1'}]},
+      {id:'h', label:'V_OUT', at:[1,0], parts:[{id:'MOD1', kind:'module', lug:'+', value:'ISD1820'}]},
+      {id:'i', label:'+V', at:[2,0], parts:[{id:'BT1', kind:'batt', lug:'+', value:'3x AA'}]},
+      {id:'j', label:'VLED_A', at:[3,0], parts:[{id:'VAC1', kind:'vactrol', lug:'A'}]},
+      {id:'k', label:'LDR_1', at:[4,0], parts:[{id:'VAC1', kind:'vactrol', lug:'1'}]},
+    ],
+    offboard:['BTN1.2 - MOD1.IN', 'R1.1 - MOD1.OUT']};
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  const byL = l => up.pads.find(d => d.label === l);
+  ok(byL('SPK+').parts[0].kind === 'spk' && byL('SPK+').parts[0].lug === '+', 'a speaker entry with a + lug is kept');
+  ok(byL('ANODE').parts.length === 1 && byL('ANODE').parts[0].lug === '9', 'tube pin 9 is a lug; pin 10 is not and is dropped');
+  ok(byL('VLED_A').parts[0].kind === 'vactrol' && byL('LDR_1').parts[0].lug === '1', 'a vactrol carries both the LED and the cell lugs');
+  S = up; computeNets();
+  const parts = offboardParts();
+  ok(parts.map(q => q.id).join(' ') === 'BTN1 BT1 SPK1 LDR1 VAC1 MOD1 V1',
+     'seven parts, ordered button, battery, speaker, photocell, vactrol, module, tube (' + parts.map(q => q.id).join(' ') + ')');
+  const w = offboardWires();
+  ok(w.length === 1 && w[0].a === 'BTN1' && w[0].bl === 'IN', 'a button-to-module wire resolves; one naming an R1 nobody declared does not');
+  const rows = bom();
+  ok(rows.some(r => r.kind === 'ob:spk' && r.offboard === true && r.what === '8 ohm'), 'the BOM has the speaker, flagged off-board, with its value');
+  ok(rows.some(r => r.kind === 'ob:tube' && r.what === '6E2'), 'and the tube socket carries the tube it is for');
+  const wt = walkthrough();
+  ok(/SPK1 - speaker 8 ohm, on the panel/.test(wt) && /Lug \+ to pad SPK\+/.test(wt), 'the walkthrough wires the speaker lug by lug');
+  ok(/V1 - tube socket 6E2/.test(wt) && /Lug 9 to pad ANODE/.test(wt) && !/Lug 5 stays empty/.test(wt),
+     'the tube socket is wired by pin, and an unwired socket pin is not called empty');
+  ok(/BTN1 - momentary button/.test(wt) && /Lug 2 to MOD1 lug IN/.test(wt), 'and the button reaches the module without touching the board');
+  const list = partsListFromBoard();
+  ok(/^#.*1 x 8 ohm speaker/m.test(list) && /^#.*1 x ISD1820 module/m.test(list), 'the written parts list carries them as comments');
+}
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
