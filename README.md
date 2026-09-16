@@ -4,6 +4,23 @@ A stripboard layout editor that tells you what's actually connected to what.
 
 Named for the copper bottom of the board - the side you cut.
 
+**It checks the board electrically, and it needs no schematic to do it.** That is the
+part people miss, so it goes first: nets are worked out from the copper alone - strips,
+cuts, links - and then read against a library of **50 chips** that knows what each pin
+is for. **15 rules** run on every edit. Two pins of one chip on a strip with no supply
+on it. A CMOS input connected to nothing. A DIP straddling strips nothing has cut. Two
+leads in one hole. A strip with one thing on it. A part shorted end to end. A chip on a
+supply its datasheet does not allow.
+
+A real one, from somebody who hand-routed a board and sent us the file: an R-2R ladder
+run through a 4024's unused Q5, Q6 and Q7, shorting two counter outputs together.
+Geometrically legal, dead chip on first power-up. That is `pin-short`, and it fires
+the moment you place it.
+
+Every finding says what the board will **do** if you build it anyway, not just what is
+wrong. Nothing else here asks you for a schematic first, and nothing else checks
+against what the pins are actually for.
+
 Single self-contained HTML file. No build step, no install, no server - double-click
 `copper-bottom.html` and it opens. Works offline at the bench.
 
@@ -30,7 +47,7 @@ way the board in your hand actually looks:
 node test/fixture.test.js
 ```
 
-767 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
+1,107 checks against the CD40106 two-voice fixture. The test parses the entire `<script>`
 block first, then extracts the model verbatim from `copper-bottom.html` (between the
 `#region model` markers) and runs against that, so it can't drift from the app. Every
 DRC rule has both a positive test (it fires when it should) and a negative one (it
@@ -379,6 +396,96 @@ Pinouts are read left to right with the flat face toward you and the legs pointi
 any device you're unsure of against its own datasheet** - packages vary by manufacturer,
 and the library is a convenience, not an authority.
 
+## The file format
+
+A layout is one JSON file. This section is the contract, and it exists because on
+Sept 15 2026 somebody wrote their own router and their own checker against one of
+these files, and the four things they had to guess at are all written down here now.
+
+```jsonc
+{
+  "version": 2,
+  "name": "Bazz Fuss",
+  "board":  { "rows": 10, "cols": 10, "kind": "strip", "pitch": 0.1 },
+  "cuts":   ["4,6"],
+  "parts":  [ { "id": "p1", "kind": "res", "ref": "R1", "value": "100k",
+                "pins": [[1,2],[1,5]] } ],
+  "ics":    [ { "id": "i1", "ref": "IC1", "part": "CD40106", "pins": 14,
+                "pin1": [3,7], "span": 3 } ],
+  "pads":   [ { "id": "d1", "label": "GND", "at": [9,0], "to": "sleeve of the jack" } ]
+}
+```
+
+**The first index is the STRIP.** `[3,7]` is strip 3, hole 7 - `rows` counts strips
+and `cols` counts holes along them, and the app's own prose says so ("12 strips of 38
+holes"). The keys are named rows and cols because the board is drawn with its strips
+running across, but the electrically continuous axis is always the first one. Both
+count from **zero**; everything a person reads counts from one, which is what
+`dRow` / `dCol` / `holeText` are for.
+
+**A cut takes the hole with it.** A cut at `"4,6"` means the copper at strip 4, hole 6
+is gone: holes 5 and 7 end up on different nets and hole 6 is on **neither**. A lead
+in a cut hole is an `on-cut` **error**, not a warning, because it looks soldered and
+is connected to nothing.
+
+**Cuts are strings, `"r,c"`, and everything else is `[r, c]`.** That is an
+inconsistency and it is deliberate now: cuts are a set and the string is its key, and
+changing it would rewrite every layout ever saved and every generator that writes one,
+for a `split` a consumer does once. If it ever changes it rides a version bump.
+
+**`pins` order is the polarity.** For a two-lead polarized part - an electrolytic, a
+diode - **`pins[0]` is the positive end**: the anode of a diode, the plus leg of a
+can. `pins[1]` is the cathode, the end with the band or the stripe. Nothing in the
+file restates it, so this line is the whole of the convention, and it is the one
+ambiguity in the format that can cost you a part on first power-up. An electrolytic
+may also carry `"polarized": false`, which means an NP or bipolar can with no plus leg
+at all.
+
+**`ics[].autoCuts` is derived - `cuts` is the record.** It names which of the entries
+in `cuts` a chip owns, so that moving the chip moves its own cuts and no others. The
+app rebuilds it for every chip immediately after loading a file and never reads what
+was in there, so when the two disagree, **`cuts` is true**. The app no longer writes
+it; some generators still do, and that is harmless.
+
+**`board.pitch` is hole spacing in inches, and 0.1 is the default.** A file that says
+nothing means 0.1, which is every board you can buy. Set it when yours is vintage or
+surplus and genuinely is not, and the checks will tell you which chips cannot go in
+it: a DIP's pins are on 0.1 in centers and do not bend to suit.
+
+**`to` is free text, on a pad or on a part** - where that wire actually goes, in your
+words. It prints in the wiring table on the build sheet. On a part it applies to the
+legs you have flown, and it replaces the line the tool would have written itself.
+
+**`panel` and `offboard` are the panel.** `pads[].parts` names the off-board part a
+pad's wire reaches and which of its lugs; `panel` declares a part that reaches no pad
+at all; `offboard` is a list of `"JK1.T - POT1.3"` strings for wires between two panel
+parts that never touch the board. None of it affects the netlist - pads are already
+the netlist's edge.
+
+**`netlist` is a view, never the source.** It is a string, written from the copper by
+the app, and checking a board against a netlist derived from that same board can only
+ever pass. To get the solved nets as data, derive them - do not parse the string, and
+do not store your own copy beside the copper, because then there are two records and
+one of them is wrong:
+
+```bash
+node test/check-layout.js layouts/bazz-fuss.json --json
+```
+
+```jsonc
+{ "nets": { "+9V": ["@+9V", "R1.A", "C3.A"],
+            "GND": ["@GND", "@VOL_3", "Q1.E", "C3.B"] },
+  "findings": [ ... ], "cuts": [ ... ], "bom": [ ... ], "wires": [ ... ] }
+```
+
+That script lifts the model verbatim out of `copper-bottom.html` and needs no DOM, so
+it is the real solver rather than a second implementation of it. Members read
+`@PAD_LABEL` for a pad, `IC1.7` for a chip pin, and `R1.A` or `Q1.E` for a part leg.
+
+**`migrate()` drops what it cannot read and says so.** A malformed part, an unknown
+off-board kind, a pitch that is not a number: dropped and counted, never repaired into
+a guess, because a part whose position we invented is a lie about somebody's board.
+
 ## DRC rules
 
 Click any finding to ring the offending hole and pin its net. Hover to light the net.
@@ -399,6 +506,7 @@ Click any finding to ring the offending hole and pin its net. Hover to light the
 | error | a chip is on a supply outside its datasheet range |
 | warn | a chip is below its minimum supply |
 | warn | an off-board wire, or a pad, names a panel part or a lug that nothing on the layout declares |
+| error | a DIP on a board whose hole spacing is not 0.1 in - its pins will not reach |
 
 ### Lead span, and why it says "will not lie flat"
 

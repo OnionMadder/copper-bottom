@@ -3117,5 +3117,72 @@ console.log('-- off the board: one id, two kinds --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- hole spacing --');
+{
+  ok(boardPitch() === 0.1, 'a board that says nothing is 0.1 in, which is every file ever saved here');
+  ok(pitchTakesDIP(), 'and takes a DIP');
+  const up = migrate({version:2, name:'vintage', board:{rows:6, cols:10, pitch:0.15}, cuts:[], parts:[],
+    ics:[{id:'i', ref:'IC1', part:'NE555', pins:8, pin1:[1,2], span:3}], pads:[]});
+  ok(up.board.pitch === 0.15, 'a pitch it can read is kept');
+  S = up; computeNets();
+  ok(boardPitch() === 0.15 && !pitchTakesDIP(), 'and the board reports it');
+  const f = runDRC().filter(x => x.rule === 'board-pitch');
+  ok(f.length === 1 && f[0].sev === 'error' && /IC1 is a DIP and this board is 0.15 in/.test(f[0].msg),
+     'a DIP on it is an error, per chip, naming the chip');
+  ok(f[0].why && f[0].why.length > 40, 'carrying what the board does if you build it');
+  const bad = migrate({version:2, name:'x', board:{rows:6, cols:10, pitch:'wide'}, cuts:[], parts:[], ics:[], pads:[]});
+  ok(bad.board.pitch === undefined, 'a pitch it cannot read is dropped, not guessed at');
+  ok(MIGRATE_NOTES.some(n => /pitch/.test(n)), 'and said out loud');
+  const back = migrate({version:2, name:'x', board:{rows:6, cols:10, pitch:0.1}, cuts:[], parts:[], ics:[], pads:[]});
+  ok(back.board.pitch === 0.1, '0.1 written explicitly is still kept, and simply agrees with the default');
+}
+S = demoProject(); computeNets();
+
+console.log('-- a part says where its wire goes --');
+{
+  S = migrate({version:2, name:'to', board:{rows:6, cols:8}, cuts:[], ics:[], pads:[],
+    parts:[{id:'p', kind:'pot', ref:'POT1', value:'B100K', pins:[[1,1],[2,1],[3,1]],
+            fly:[0,1,2], to:'  panel, front left  '},
+           {id:'q', kind:'res', ref:'R1', value:'10k', pins:[[4,1],[4,3]], to:'   '}]});
+  computeNets();
+  const pot = S.parts.find(p => p.ref === 'POT1');
+  ok(pot.to === 'panel, front left', 'a part carries the same free-text field a pad does, trimmed');
+  ok(!('to' in S.parts.find(p => p.ref === 'R1')), 'and an empty one is dropped rather than stored blank');
+  const w = wireList().filter(r => r.key.indexOf('fly:') === 0);
+  ok(w.length === 3 && w.every(r => r.to === 'panel, front left'),
+     'every flown leg of it reads the way the builder wrote it, not the way the tool would have');
+  delete pot.to;
+  const w2 = wireList().filter(r => r.key.indexOf('fly:') === 0);
+  ok(/potentiometer POT1, leg W - off the board/.test(w2[1].to), 'with the tool wording back when it says nothing');
+}
+S = demoProject(); computeNets();
+
+console.log('-- the solved nets, as data --');
+{
+  const rows = netTableFromBoard();
+  ok(rows.length > 0 && rows.every(r => r.name && Array.isArray(r.members) && r.members.length),
+     'netTableFromBoard gives every net a name and its members');
+  const text = netlistFromBoard();
+  for(const r of rows)
+    ok(text.indexOf(r.name + ':') >= 0, 'the text renders the row for ' + r.name + ' rather than being parsed for it');
+  const gnd = rows.find(r => /GND/.test(r.name));
+  ok(gnd && gnd.members.indexOf('@GND') >= 0, 'and a pad appears in its net by name');
+  ok(rows.every(r => r.id === r.net.id), 'each row carries the net id it came from');
+}
+S = demoProject(); computeNets();
+
+console.log('-- what goes in the file --');
+{
+  const p = saveProject();
+  ok(p.ics.length === S.ics.length && p.ics.every(ic => !('autoCuts' in ic)),
+     'the chips go in without autoCuts - refreshAutoCuts rebuilds it on load, so the file copy is never read');
+  ok(S.ics.every(ic => Array.isArray(ic.autoCuts)), 'and the live chips keep theirs');
+  ok(p.cuts === S.cuts && p.parts === S.parts && p.pads === S.pads, 'everything else is written as it stands');
+  const back = migrate(JSON.parse(JSON.stringify(p)));
+  ok(back.ics.length === S.ics.length, 'a file written that way loads with every chip');
+  ok(back.cuts.length === S.cuts.length, 'and every cut - cuts is the record, autoCuts only names which are whose');
+}
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);

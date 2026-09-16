@@ -1016,7 +1016,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.5.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1235,6 +1235,17 @@ function migrate(obj){
   const b = (o.board && typeof o.board === 'object') ? o.board : {};
   o.board = {rows:clampInt(b.rows, 2, 60, 13), cols:clampInt(b.cols, 2, 80, 20),
              kind:b.kind === 'perf' ? 'perf' : b.kind === 'bread' ? 'bread' : 'strip'};
+  /* Hole spacing in inches. 0.1 is the whole modern world and stays the
+     default, so a file that says nothing means 0.1 and every layout ever
+     saved is unaffected. It is here because vintage and surplus board is not
+     always 0.1, and a DIP's pins are rigid: the one thing the tool can say
+     with certainty about a 0.15 board is that a chip will not go in it. A
+     pitch it cannot read is dropped rather than guessed at. */
+  if(b.pitch !== undefined){
+    const pit = Number(b.pitch);
+    if(Number.isFinite(pit) && pit > 0 && pit < 1) o.board.pitch = pit;
+    else note('board pitch (not a spacing in inches)');
+  }
   /* a permanent breadboard IS its fourteen rows - rails, two banks, rails.
      A file claiming another count is repaired to the real shape and told. */
   if(o.board.kind === 'bread' && o.board.rows !== BREAD_ROWS){
@@ -1318,6 +1329,13 @@ function migrate(obj){
     if(skip.length) r.cutSkip = skip; else delete r.cutSkip;
     return r;
   });
+
+  /* where a part's wire goes, in the builder's own words - the same free-text
+     field a pad carries, because a flown leg is off-board wiring too */
+  for(const q of o.parts){
+    if(q.to === undefined) continue;
+    if(typeof q.to === 'string' && q.to.trim()) q.to = q.to.trim(); else delete q.to;
+  }
 
   o.pads = (Array.isArray(o.pads) ? o.pads : []).filter(d =>
     d && typeof d === 'object' && isHole(d.at) && typeof d.label === 'string' && d.label.trim());
@@ -2612,6 +2630,10 @@ const DRC_WHY = {
   'pad-name':
     'The netlist looks a pad up by its name. Two pads wearing one name means only ever one ' +
     'of them gets found, and the other is invisible to every check that mentions it.',
+  'board-pitch':
+    'The holes are further apart than the chip is. Its pins are pressed into the package on ' +
+    'a tenth of an inch and there is no bending them into line without breaking the seal - ' +
+    'that board takes discrete parts and flying leads, not DIPs.',
   'panel-wire':
     'The tool cannot tell which part or which lug you mean, so that connection is left out of ' +
     'the drawing, the walkthrough and the build sheet. Somebody building from those never makes ' +
@@ -2979,6 +3001,16 @@ function runDRC(){
     add('warn', 'orphan', only.label + ' is the only thing on its net - connects nowhere', only.at, net.id);
   }
 
+  /* --- a chip on a board that is not 0.1 in ---
+     The one thing worth saying with certainty about vintage or surplus board:
+     a DIP's pins are rigid and on 0.1 in centers, so they do not reach. Said
+     per chip, because the answer is to move that chip off the board, not to
+     nudge it. Silent on a 0.1 board, which is every file that says nothing. */
+  if(!pitchTakesDIP())
+    for(const ic of S.ics)
+      add('error', 'board-pitch', ic.ref + ' is a DIP and this board is ' + boardPitch() +
+          ' in - its pins land on 0.1 in centers and will not reach', ic.pin1);
+
   /* --- a lug the part it belongs to does not have ---
      One id, two kinds: two pads disagreeing about what POT1 is, or a
      declaration disagreeing with a pad. The part keeps the first kind it was
@@ -3168,6 +3200,13 @@ const OFFBOARD_LIB = {
 const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13};
 const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
 
+function boardPitch(){
+  const p = S.board && Number(S.board.pitch);
+  return Number.isFinite(p) && p > 0 ? p : 0.1;
+}
+/* a DIP's pins are on 0.1 in centers and do not bend to suit a board */
+function pitchTakesDIP(){ return Math.abs(boardPitch() - 0.1) < 0.0005; }
+
 function padParts(d){ return Array.isArray(d.parts) ? d.parts : []; }
 
 /* the panel parts declared in their own right, S.panel - {id, kind, value}.
@@ -3234,6 +3273,26 @@ function offboardWireReport(){
   return {wires:out, bad:bad};
 }
 function offboardWires(){ return offboardWireReport().wires; }
+
+/* What goes in the file: S minus what the app works out for itself on load.
+   `ic.autoCuts` only names which of `cuts` a chip owns, and
+   refreshAutoCuts() rebuilds it for every chip the moment migrate() returns -
+   so the copy in the file is written and never read, a second record of a
+   fact that can only ever disagree with the first. `cuts` is the record.
+
+   Told on Sept 15 2026 by somebody who wrote their own router and checker
+   against one of these files and had to ask which of the two was true.
+
+   Note the generators on messopedals.com still write autoCuts themselves, so
+   a file this app last saved and the same file freshly generated differ by
+   that block. Harmless - it is ignored on load either way - but it is diff
+   noise if you are comparing a generator run against a shipped layout. */
+function saveProject(){
+  const p = Object.assign({}, S);
+  p.ics = S.ics.map(ic => { const q = Object.assign({}, ic); delete q.autoCuts; return q; });
+  return p;
+}
+
 
 /* the next free id of a kind, counted across the pads AND the declarations,
    so two new parts never both come up POT1 */
@@ -3800,23 +3859,36 @@ function netMembers(net){
   return out;
 }
 
-function netlistFromBoard(){
+/* supplies first, because that is the order a person reads a circuit in */
+function netRank(net){
+  const c = padsOnNet(net).map(d => powerClass(d.label)).filter(Boolean)[0];
+  if(c && c.cls === 'pos') return 0;
+  if(c && c.cls === 'neg') return 1;
+  if(c && c.cls === 'gnd') return 2;
+  return 3;
+}
+
+/* The solved nets AS DATA - named, ordered, members in the netlist's own
+   vocabulary. netlistFromBoard() renders this; it is not parsed back out of
+   the text.
+
+   Asked for on Sept 15 2026 by somebody who had written their own tooling
+   against a layout and found the most useful thing in the file was also the
+   least machine-readable. They wanted it stored in the file, which is the one
+   thing it must not be: a solved net written down beside the copper is a
+   second record that can disagree with the first, and the whole premise here
+   is that the board is the truth and the netlist is a view of it. So it is
+   computed on demand and handed out instead - the model lifts out of this
+   file with no DOM (test/check-layout.js --json does exactly that), which
+   makes re-deriving it cheaper than trusting a copy. */
+function netTableFromBoard(){
   const rows = [];
   for(const net of NET.nets){
     const members = netMembers(net);
     if(!members.length) continue;            // an empty strip has nothing to say
-    rows.push({net:net, name:netName(net), members:members});
+    rows.push({net:net, id:net.id, name:netName(net), members:members});
   }
-
-  /* supplies first, because that is the order a person reads a circuit in */
-  const rank = (r) => {
-    const c = padsOnNet(r.net).map(d => powerClass(d.label)).filter(Boolean)[0];
-    if(c && c.cls === 'pos') return 0;
-    if(c && c.cls === 'neg') return 1;
-    if(c && c.cls === 'gnd') return 2;
-    return 3;
-  };
-  rows.sort((a, b) => rank(a) - rank(b) || a.net.id - b.net.id);
+  rows.sort((a, b) => netRank(a.net) - netRank(b.net) || a.net.id - b.net.id);
 
   /* two nets can want the same name - the pad-name rule flags that as a fault,
      but a file that silently used one name twice would be worse than one that
@@ -3827,6 +3899,12 @@ function netlistFromBoard(){
     used.set(r.name, n + 1);
     if(n) r.name = r.name + '_' + (n + 1);
   }
+  return rows;
+}
+
+function netlistFromBoard(){
+  const rows = netTableFromBoard();
+  const rank = (r) => netRank(r.net);
 
   /* nothing placed yet: say so rather than reducing over an empty list, which
      gives -Infinity for the padding and asks rank() about a net that does not
@@ -4031,9 +4109,10 @@ function wireList(){
     for(const i of p.fly){
       const at = p.pins[i];
       const nm = names ? names[i] : (i < 2 ? 'AB'[i] : String(i + 1));
+      /* what the builder wrote outranks what we can work out */
       out.push({key:'fly:' + p.id + ':' + i, label:p.ref + '.' + nm,
                 row:at[0], col:at[1], back:backHole(at[1]),
-                to:((PART_LIB[p.kind] || {}).name || p.kind) + ' ' + p.ref + ', leg ' + nm + ' - off the board'});
+                to:p.to || ((PART_LIB[p.kind] || {}).name || p.kind) + ' ' + p.ref + ', leg ' + nm + ' - off the board'});
     }
   }
   return out;
@@ -8540,7 +8619,9 @@ function classicSVG(opts){
 
   /* ---- title block ---- */
   T(W / 2, 40, S.name || 'untitled', 30, 'text-anchor="middle" fill="#1926C8" font-weight="bold"');
-  T(W / 2, 64, cols + ' x ' + rows + ' stripboard', 15, 'text-anchor="middle" fill="#333"');
+  T(W / 2, 64, cols + ' x ' + rows + ' stripboard' +
+    (pitchTakesDIP() ? '' : '  -  ' + boardPitch() + ' in hole spacing'), 15,
+    'text-anchor="middle" fill="#333"');
 
   /* ---- rulers: numbers across, letters down (the classic frame) ---- */
   for(let c = 0; c < cols; c++)
@@ -9457,6 +9538,11 @@ function renderCtx(){
         o.push('<div class="hint">no blank edges - the board is already cut to what it holds.</div>');
       }
     }
+    o.push('<label>HOLE SPACING - inches</label>');
+    o.push('<input id="lnPitch" type="number" step="0.005" min="0.02" max="0.5" value="' + boardPitch() + '">');
+    o.push('<div class="hint">0.1 is every modern board and is what you have unless you measured ' +
+           'otherwise. Vintage and surplus board is sometimes not, and then a DIP will not go in it - ' +
+           'say so here and the checks will say which chips cannot fit.</div>');
     if(!LINE){
       o.push('<div class="hint">click any hole.<br>its row and column light up, then add or remove one.</div>');
     }else{
@@ -9524,6 +9610,13 @@ function renderCtx(){
           '<button type="button" class="bentleg' + (bset.has(i) ? ' on' : '') + '" data-leg="' + i + '">' +
           esc(fll[i] || String(i + 1)) + '</button>').join('') + '</div>');
         o.push('<div class="hint">fold a leg up out of the way and leave it unwired - an unused lug or pin. it is on no net and its hole is free. click again to unfold it.</div>');
+      }
+      if(p.kind !== 'link'){
+        o.push('<label>GOES TO</label><input id="edPartTo" value="' + esc(p.to || '') +
+               '" placeholder="panel, front left">');
+        o.push('<div class="hint">where the wire off this part actually goes, in your words. it fills the ' +
+               'wiring table on the build sheet for every leg you have flown, in place of the line ' +
+               'the tool writes itself.</div>');
       }
       const efp = footprintOf(p);
       if(p.pins.length === 2 && efp && efp.leads === 'axial'){
@@ -9674,6 +9767,13 @@ function renderCtx(){
   const on = (id, ev, fn) => { const el = document.getElementById(id); if(el) el[ev] = fn; };
   on('ctxVal', 'oninput',  e => { VALUES[TOOL] = e.target.value; });
   on('ctxPad', 'oninput',  e => { PAD_LABEL = e.target.value; });
+  on('lnPitch', 'onchange', e => edit(() => {
+    const v = Number(e.target.value);
+    /* 0.1 is the default, so it is stored as the absence of a pitch rather
+       than as a number every file would then carry */
+    if(Number.isFinite(v) && v > 0 && v < 1 && Math.abs(v - 0.1) > 0.0005) S.board.pitch = v;
+    else delete S.board.pitch;
+  }));
   on('ctxIc',  'onchange', e => { IC_PART = e.target.value; renderCtx(); });   // custom reveals a pin-count field
   on('ctxDelMod', 'onclick', () => {
     const nm = IC_PART.slice(5);
@@ -9828,6 +9928,11 @@ function renderCtx(){
     FOOT = false;
     commit();
   });
+  on('edPartTo', 'onchange', e => edit(() => {
+    const p = selObj(); if(!p) return;
+    const v = e.target.value.trim();
+    if(v) p.to = v; else delete p.to;
+  }));
   on('edPadLabel','onchange', e => edit(() => { const d = selObj(); if(d) d.label = e.target.value; }));
   on('edPadTo',   'onchange', e => edit(() => {
     const d = selObj(); if(!d) return;
@@ -10624,7 +10729,7 @@ const SHARE_WARN = 2000;        // where links start getting mangled in the wild
 
 function shareProject(){
   const p = {version:2, name:S.name, board:S.board, cuts:S.cuts,
-             parts:S.parts, ics:S.ics, pads:S.pads};
+             parts:S.parts, ics:saveProject().ics, pads:S.pads};
   if(Array.isArray(S.panel) && S.panel.length) p.panel = S.panel;
   if(Array.isArray(S.offboard) && S.offboard.length) p.offboard = S.offboard;
   return p;
@@ -10693,7 +10798,7 @@ let _sv;
 function autosave(){
   clearTimeout(_sv);
   _sv = setTimeout(() => {
-    try{ localStorage.setItem(LS, JSON.stringify(S)); saved.textContent = 'saved'; }
+    try{ localStorage.setItem(LS, JSON.stringify(saveProject())); saved.textContent = 'saved'; }
     catch(err){ saved.textContent = 'autosave failed'; }
   }, 250);
 }
@@ -10721,7 +10826,15 @@ window.addEventListener('beforeprint', () => {
 window.addEventListener('afterprint', () => { document.title = TITLE_BEFORE_PRINT; });
 
 btnExport.onclick = () => {
-  const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+  /* "app" is not read back by anything and is not part of the format. It is
+     there because the FILE is what travels: on Sept 15 2026 somebody wrote a
+     router and a checker of their own against one of these and never learnt
+     that the tool it came from already checks boards. A file that cannot say
+     where it came from cannot answer that. */
+  const out = saveProject();
+  out.app = 'Copper Bottom ' + APP_VERSION + ' - checks stripboard layouts electrically, ' +
+            'no schematic needed: https://messopedals.com/diy/copper-bottom/';
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '.json';

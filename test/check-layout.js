@@ -1,16 +1,31 @@
 /* Run a saved layout through the model and report what the DRC makes of it.
  *
  *   node test/check-layout.js layouts/optical-theremin.json
+ *   node test/check-layout.js layouts/optical-theremin.json --json
  *
  * Same trick as fixture.test.js: the model is lifted verbatim out of the app,
  * so this is the real checker, not a reimplementation of it.
+ *
+ * --json prints the solved board as data on stdout: the nets by name with
+ * their members, the findings, the cut list, the BOM and the off-board wires.
+ * It exists because the most useful thing in a layout file - what is actually
+ * connected to what - was also the least machine-readable, so anybody writing
+ * their own tooling had to re-implement the geometry solver to reach what
+ * this file had already worked out. Said plainly on Sept 15 2026 by somebody
+ * who had done exactly that.
+ *
+ * It is DERIVED here rather than stored in the layout, and that is the point:
+ * the copper is the truth and the nets are a view of it. A view written into
+ * the file is a second record that can disagree with the first, which is the
+ * one thing this tool exists not to do.
  */
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 
-const target = process.argv[2];
-if(!target){ console.error('usage: node test/check-layout.js <layout.json>'); process.exit(2); }
+const asJson = process.argv.includes('--json');
+const target = process.argv.slice(2).filter(a => !a.startsWith('--'))[0];
+if(!target){ console.error('usage: node test/check-layout.js <layout.json> [--json]'); process.exit(2); }
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'copper-bottom.html'), 'utf8');
 const m = /\/\*#region model[^*]*\*\/([\s\S]*?)\/\*#endregion model \*\//.exec(html);
@@ -29,6 +44,10 @@ out.bom = bom();
 out.wires = wireList();
 out.md = buildMarkdown();
 out.netlist = S.netlist ? checkNetlist(S.netlist) : null;
+out.byName = {};
+for(const r of netTableFromBoard()) out.byName[r.name] = r.members;
+out.board = S.board;
+out.name = S.name;
 out.netTable = NET.nets.map(n => ({
   id: n.id,
   holes: n.holes.length,
@@ -42,6 +61,18 @@ out.netTable = NET.nets.map(n => ({
 `, ctx, { filename:'model' });
 
 const o = ctx.out;
+
+if(asJson){
+  /* every number here was worked out from the copper a moment ago, so it
+     cannot be stale the way a stored copy could be */
+  console.log(JSON.stringify({
+    name: o.name, board: o.board,
+    nets: o.byName,
+    findings: o.findings.map(f => ({sev:f.sev, rule:f.rule, msg:f.msg, at:f.at, why:f.why})),
+    cuts: o.cuts, bom: o.bom, wires: o.wires,
+  }, null, 2));
+  process.exit(o.findings.some(f => f.sev === 'error') ? 1 : 0);
+}
 console.log('\n' + layout.name + '   ' + layout.board.rows + ' x ' + layout.board.cols +
             '   ' + o.nets + ' nets\n');
 
