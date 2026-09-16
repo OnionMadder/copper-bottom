@@ -1016,7 +1016,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.5.0';
+const APP_VERSION = 'v1.5.1';
 
 const K = (r,c) => r + ',' + c;
 
@@ -8561,13 +8561,21 @@ function classicSVG(opts){
   }
   const apL = obCols.left.length * OB_COL, apR = obCols.right.length * OB_COL;
   /* the margins earn their width from the pad labels that live in them -
-     fixed margins clipped +5V and SPK_A off both edges on the first cut */
+     fixed margins clipped +5V and SPK_A off both edges on the first cut.
+
+     Both margins take the WIDER side's allowance, because the solder side is
+     MIRRORED and shares these gutters: a pad on the front's right prints its
+     name in the left gutter down there, which was never sized for it. On a
+     board whose pads are all on one edge the other margin was the bare 74,
+     and a five-character label ran off the page. Found Sept 15 2026 on the
+     Dual-Wave LFO, whose six pads all sat on the right. */
   let padL = 0, padR = 0;
   for(const d of S.pads){
     if(d.at[1] < cols / 2) padL = Math.max(padL, String(d.label).length);
     else padR = Math.max(padR, String(d.label).length);
   }
-  const BX = apL + 74 + padL * 9, BW = (cols - 1) * CP + CP;   // board block: left edge, width
+  const padMax = Math.max(padL, padR);
+  const BX = apL + 74 + padMax * 9, BW = (cols - 1) * CP + CP;   // board block: left edge, width
   const TITLE_H = 86;
   const boardTop = TITLE_H + 34;
   const boardH = (rows - 1) * CP + CP;
@@ -8610,7 +8618,7 @@ function classicSVG(opts){
   const backTop = boardTop + boardH + 64;
   const listTop = backTop + boardH + 44;
   const listH = listRows ? listRows * 19 + 8 : 0;
-  const W = Math.max(BX + BW + 74 + padR * 9 + apR, 460);
+  const W = Math.max(BX + BW + 74 + padMax * 9 + apR, 460);
   const H = listTop + listH + 46;
 
   o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
@@ -8984,7 +8992,7 @@ function classicSVG(opts){
     const inkOf = q => padInk.get(q.id) || '#24357E';
     for(const side of ['left', 'right']){
       const f = side === 'left' ? 1 : -1;
-      const edge = side === 'left' ? BX - 74 - padL * 9 : BX + BW + 74 + padR * 9;
+      const edge = side === 'left' ? BX - 74 - padMax * 9 : BX + BW + 74 + padMax * 9;
       obCols[side].forEach((col, j) => {
         const cx = edge + (side === 'left' ? -1 : 1) * OB_COL * (j + 0.5);
         const slot = (rows * CP + 40) / col.length;
