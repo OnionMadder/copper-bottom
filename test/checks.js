@@ -1354,6 +1354,36 @@ for(const [name, def] of Object.entries(IC_LIB)){
 }
 ok(modBad.length === 0, 'module pad names are unique and agree with their pin tables: ' + modBad.join(', '));
 
+/* The Eurorack bus header is the one library entry that is a CONNECTOR rather
+   than a chip or a bought board, and every unusual thing about it is load
+   bearing. Its two pin columns are adjacent, so there is nowhere for a cut and
+   none is wanted: each pair is one rail. */
+console.log('-- the Eurorack bus header --');
+{
+  const d = IC_LIB['EURO-16'];
+  const at = (i) => d.pinMap[i - 1];
+  ok(d.pinMap.length === 16 && d.span === 1, 'sixteen pins in two adjacent columns');
+  const pairs = [[1,16],[2,15],[3,14],[4,13],[5,12],[6,11],[7,10],[8,9]];
+  ok(pairs.every(([a, b]) => at(a)[0] === at(b)[0] && at(a)[1] !== at(b)[1]),
+     'each pair sits on ONE strip, one pin per column - which is what a bus header is');
+  ok(pairs.every(([a, b]) => d.ties.some(g => g.indexOf(a) >= 0 && g.indexOf(b) >= 0)),
+     'and every pair is declared a tie, so pin-short stays quiet on the rails with no pad');
+  ok(new Set(d.pinMap.map(x => x[0])).size === 8, 'eight strips, one rail each');
+  ok(d.padNames[0].indexOf('-12') === 0 && d.padNames[15].indexOf('-12') === 0,
+     'the red-stripe pair is -12 V, which is the one thing a backwards cable ruins');
+  /* pins 1-10 are read off her own modules; 11-16 are inference and the entry
+     says so. The test pins the VERIFIED half - that is the half that must not
+     move on somebody's tidy-up. */
+  const doep = n => d.padNames.find(x => x.split('/')[1] === String(n));
+  ok(doep(1).indexOf('-12') === 0 && doep(2).indexOf('-12') === 0, 'Doepfer 1 and 2 are -12 V');
+  ok([3,4,5,6,7,8].every(n => doep(n).indexOf('GND') === 0), 'Doepfer 3 to 8 are ground');
+  ok(doep(9).indexOf('+12') === 0 && doep(10).indexOf('+12') === 0, 'Doepfer 9 and 10 are +12 V');
+  /* a shaped part takes no auto-cuts, which is what keeps ic-nocuts off it */
+  const inst = {part:'EURO-16', pins:16, pin1:[0,0], span:1, pinMap:d.pinMap};
+  ok(hasFootprint(inst), 'it reads as a shaped part, so it is exempt from ic-nocuts');
+  ok(new Set(d.padNames).size === 16, 'and every pad name is still unique');
+}
+
 S = demoProject(); computeNets();
 
 /* These are the parts with no pattern to fall back on, so the pin order is

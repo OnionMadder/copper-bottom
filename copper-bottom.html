@@ -1351,13 +1351,21 @@ function migrate(obj){
     return r;
   }).filter(Boolean);
 
-  o.ics = (Array.isArray(o.ics) ? o.ics : []).filter(ic =>
+  const icsIn = Array.isArray(o.ics) ? o.ics : [];
+  o.ics = icsIn.filter(ic =>
     ic && typeof ic === 'object' && isHole(ic.pin1) &&
     Number.isInteger(ic.pins) &&
     /* a fixed DIP is an even count of at least 4; a custom module can be any
        count from 2 up, odd included - the footprint editor lays it out. */
     (IC_LIB[ic.part] && (IC_LIB[ic.part].custom || IC_LIB[ic.part].module) ? ic.pins >= 2 : (ic.pins >= 4 && ic.pins % 2 === 0)) &&
-    Number.isInteger(ic.span) && ic.span >= 2
+    /* `span` is the gap a DIP's two pin rows sit either side of, and a SHAPED
+       part does not have one - its geometry is entirely its pinMap. Demanding
+       two of something that is not there threw away every header on a Eurorack
+       bus board, whose two pin columns are deliberately adjacent. So a shaped
+       part only has to carry a whole number; an ordinary DIP still needs its
+       gap, because a chip with no gap is a chip shorting its own pin rows. */
+    Number.isInteger(ic.span) &&
+    (ic.span >= 2 || (Array.isArray(ic.pinMap) && ic.pinMap.length === ic.pins && ic.span >= 1))
   ).map(ic => {
     /* A cut line that cannot be where it says it is goes back to the middle,
        and rows it claims not to cut that the chip does not have are dropped.
@@ -1370,6 +1378,13 @@ function migrate(obj){
     if(skip.length) r.cutSkip = skip; else delete r.cutSkip;
     return r;
   });
+  /* Say so. Every other thing this function drops is announced and chips were
+     not, which is how twelve headers left a board without a word - and then the
+     netlist reported them as names nothing on the board answers to, which reads
+     like a typo in the netlist rather than a chip that never loaded. */
+  if(o.ics.length < icsIn.length)
+    note((icsIn.length - o.ics.length) + ' chip' + (icsIn.length - o.ics.length > 1 ? 's' : '') +
+         ' the file describes in a way this version cannot place');
 
   /* where a part's wire goes, in the builder's own words - the same free-text
      field a pad carries, because a flown leg is off-board wiring too */
@@ -2165,6 +2180,59 @@ const IC_LIB = {
              4:{n:'SGND', d:'signal ground - joined to pin 2 inside the module'},
              5:{n:'OUT2', d:'output 2'},
              6:{n:'OUT1', d:'output 1'}}},
+  /* Not a chip and not a bought board: the 2 x 8 header a Eurorack case buses
+     its power on. It is here because a bus board is sixteen holes twelve times
+     over, and the alternative - a pad per pin - is 192 pads on one drawing.
+
+     It carries its OWN footprint, which is what makes it work at all. The two
+     pin columns are ADJACENT, so there is no column between the rows for a cut
+     to live in, and no cut is wanted: each pair sits on one strip and IS one
+     rail, which is the whole idea. A shaped chip gets no auto-cuts and is
+     exempt from ic-nocuts, and `ties` says the eight pairs are meant to be
+     joined, so pin-short stays quiet on the CV and Gate strips - the two with
+     no supply pad to speak for them.
+
+     NUMBERING: pins 1-8 walk down the left column and 9-16 back up the right,
+     which is this file's canon and NOT Doepfer's. Doepfer walks across the
+     pairs, so its 1 and 2 are this file's 1 and 16. `padNames` carries the
+     rail, which is the thing anybody actually reads.
+
+     SOURCING, and read this before trusting the top three rows. Pins 1-10 are
+     VERIFIED off six of Kellye's own modules, which all agree: the red-stripe
+     pair is -12, then six grounds, then +12. The +5, CV and Gate rows are
+     DERIVED, not read off a table - Doepfer keeps the 16-pin assignment in an
+     image, and two independent sources give the same physical order. Treat the
+     top three rows as inference and let a module's own documentation win. */
+  'EURO-16':{pins:16, module:true, cmos:false, span:1,
+    name:'Eurorack bus header, 2x8',
+    about:"the sixteen-pin power header a Eurorack case buses on. Eight strips, one rail each, two pins per rail - the pairs are meant to be joined, so nothing here needs a cut. The cable's RED STRIPE goes to the -12 V row. Pins 1-10 are read off real modules; the +5, CV and Gate rows are inference from Doepfer's published order, so check your own module before you trust them",
+    pinMap:[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],
+            [7,1],[6,1],[5,1],[4,1],[3,1],[2,1],[1,1],[0,1]],
+    /* Every pad name carries its DOEPFER pin number after the rail, which does
+       two jobs at once: the six grounds stop being six pads called GND (module
+       pad names have to be unique, the same reason the Belton brick's two G
+       pads are G1 and G2), and the number beside each hole is the one printed
+       on every pinout table anybody will compare this against. */
+    padNames:['-12/1','GND/3','GND/5','GND/7','+12/9','+5/11','CV/13','GATE/15',
+              'GATE/16','CV/14','+5/12','+12/10','GND/8','GND/6','GND/4','-12/2'],
+    /* the eight rails, each as its own pair. Not a fault: it is the connector */
+    ties:[[1,16],[2,15],[3,14],[4,13],[5,12],[6,11],[7,10],[8,9]],
+    /* only the grounds get a role. The supplies are deliberately left out - a
+       chip may declare one positive supply pin and this thing has three
+       different ones, and saying nothing is the house answer to that */
+    roles:{2:'gnd',3:'gnd',4:'gnd',13:'gnd',14:'gnd',15:'gnd'},
+    pinInfo:{1: {n:'-12/1',   d:'the -12 V rail. THE RED STRIPE END - a cable fitted backwards feeds -12 V to the +12 V pins'},
+             16:{n:'-12/2',   d:'the other half of the -12 V rail'},
+             2: {n:'GND/3',   d:'ground'},   15:{n:'GND/4',   d:'ground'},
+             3: {n:'GND/5',   d:'ground'},   14:{n:'GND/6',   d:'ground'},
+             4: {n:'GND/7',   d:'ground'},   13:{n:'GND/8',   d:'ground'},
+             5: {n:'+12/9',   d:'the +12 V rail'},  12:{n:'+12/10', d:'the other half of the +12 V rail'},
+             6: {n:'+5/11',   d:'the +5 V rail. INFERRED, not read off a table - the module you plug in wins'},
+             11:{n:'+5/12',   d:'the other half of the +5 V rail. Inferred'},
+             7: {n:'CV/13',   d:'the legacy CV bus. Inferred, and driven by nothing on a plain supply board'},
+             10:{n:'CV/14',   d:'the other half of the CV bus. Inferred'},
+             8: {n:'GATE/15', d:'the legacy gate bus. Inferred, and driven by nothing on a plain supply board'},
+             9: {n:'GATE/16', d:'the other half of the gate bus. Inferred'}}},
 };
 
 /* pin i (1-based) of an IC to [row,col]. By default pins run down the left row
@@ -10416,6 +10484,19 @@ function onHole(r, c){
       for(let i = 0; i < half; i++) pinMap.push([-1, half - 1 - i]);  // back leftward along F
       S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:pin1,
                   span:2, autoCuts:[], pinMap:pinMap});
+      commit(); return;
+    }
+    /* A library part may carry its own footprint - the Eurorack bus header is
+       two adjacent columns with no cut between them, which the default DIP
+       shape cannot express. Placed exactly as the library draws it, and with
+       no auto-cuts, because a shaped part has no "between the pin rows". */
+    if(Array.isArray(def.pinMap) && def.pinMap.length === pinCount){
+      const rs = def.pinMap.map(d => d[0]), cs = def.pinMap.map(d => d[1]);
+      if(r + Math.max.apply(null, rs) >= S.board.rows ||
+         c + Math.max.apply(null, cs) >= S.board.cols){ flash('that part would run off the board'); return; }
+      pushUndo();
+      S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:[r,c],
+                  span:def.span || 1, autoCuts:[], pinMap:def.pinMap.map(d => [d[0], d[1]])});
       commit(); return;
     }
     if(r + half - 1 >= S.board.rows || c + IC_SPAN >= S.board.cols){ flash('IC would run off the board'); return; }
