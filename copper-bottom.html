@@ -1016,7 +1016,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.5.1';
+const APP_VERSION = 'v1.6.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1148,7 +1148,13 @@ const legBent = (p, i) => Array.isArray(p.bent) && p.bent.indexOf(i) >= 0;
 /* Three-leg pinouts, read left to right with the flat face toward you and the
    legs pointing down. Getting this backwards is the classic stripboard
    build-killer, so the legs are lettered on the board. Check any device you
-   are unsure of against its own datasheet -- packages do vary by maker. */
+   are unsure of against its own datasheet -- packages do vary by maker.
+
+   "Flat face toward you" is TO-92 wording and it does not carry over to a
+   TO-220, which has no flat face: it has a printed plastic front and a metal
+   tab behind. Every TO-220 below is read the way its own datasheet draws the
+   front view -- PRINTED FACE TOWARD YOU, TAB AWAY, legs down -- and left to
+   right is then pin 1, 2, 3. */
 const LEG_LIB = {
   /* P is the primary, S the secondary, CT a center tap. Winding topology, not
      a manufacturer's pinout - no real transformer's physical pin order is
@@ -1185,9 +1191,40 @@ const LEG_LIB = {
     '2N5458':['D','S','G'],  'BS170' :['D','G','S'],
     '2N7000':['S','G','D'], 'TO-92' :['1','2','3'],
   },
+  /* The TO-92 hundred-milliamp parts. Flat face toward you, legs down. */
   reg:{ '78L05':['O','G','I'], '78L09':['O','G','I'], '78L12':['O','G','I'],
+        /* The big ones, and the reason this family had to be written out
+           rather than left to default. A 78L05 is OUT GND IN and a 7805 is
+           IN GND OUT - the SAME regulator in two packages, with its legs in
+           OPPOSITE order. Anything that labels a TO-220 from the TO-92 entry
+           is wrong end for end, and on a supply board that is the input rail
+           delivered to the output pin.
+
+           onsemi MC7800/D rev 29, Nov 2021, CASE 221AB:
+             "Pin 1. Input  2. Ground  3. Output", heatsink surface on pin 2.
+           onsemi MC7900/D rev 21, Oct 2021, same case:
+             "Pin 1. Ground  2. Input  3. Output", heatsink surface on pin 2.
+
+           Read those two together: the positive part's TAB IS GROUND and the
+           negative part's TAB IS ITS INPUT. Bolt a 7812 and a 7912 to one
+           heatsink without insulating them and the raw negative rail is
+           shorted to ground through the metalwork.
+
+           The 7806 is here because the shelf's Tube Meter uses one, and it
+           was being labeled O,G,I - the TO-92 order, reached by the unknown
+           device fallback. That drawing has been wrong end for end since it
+           was published. Same datasheet covers it: "these two digits of the
+           type number indicate nominal voltage".
+
+           Watch the key ORDER here, and do not lean on it. '7805' is a
+           canonical array index as far as JavaScript is concerned, so these
+           get hoisted to the front of Object.keys ahead of 'TO-92' whatever
+           order they are written in. Nothing may decide anything by position
+           in this family - see GENERIC_DEVICE below. */
+        '7805':['I','G','O'], '7806':['I','G','O'], '7812':['I','G','O'],
+        '7912':['G','I','O'],
         /* the adjustable one: ADJ, OUT, IN left to right, tab is OUT. A TO-220 on
-           the shelf's Power Starve; drawn as a TO-92 like every reg here */
+           the shelf's Power Starve */
         'LM317':['A','O','I'],
         'TO-92':['1','2','3'] },
   trim:{ 'trimpot':['1','W','3'] },
@@ -1198,7 +1235,11 @@ const LEG_LIB = {
 function legLabels(p){
   const fam = LEG_LIB[p.kind];
   if(!fam) return null;
-  return fam[p.device] || fam[Object.keys(fam)[0]] || null;
+  /* LEG_FALLBACK is defined below, beside DEV_LIB - by the time any part is
+     drawn or checked it exists. Named rather than positional: see the note
+     there, and the '7805 sorts first' trap in LEG_LIB.reg above. */
+  const fb = (typeof LEG_FALLBACK !== 'undefined' && LEG_FALLBACK[p.kind]) || Object.keys(fam)[0];
+  return fam[p.device] || fam[fb] || fam[Object.keys(fam)[0]] || null;
 }
 
 /* v1 kept two-lead parts as a/b. v2 keeps pins[], which is what lets a
@@ -1650,6 +1691,24 @@ const PINS_PT2399 = {
   13:{n:'LPF2 IN'}, 14:{n:'LPF2 OUT'}, 15:{n:'LPF1 OUT'}, 16:{n:'LPF1 IN'},
 };
 
+/* Read off TI SLVS033G, Feb 1990 revised July 2015, the "Pin Configuration and
+   Functions" table for the P package, 8-pin PDIP:
+     FB/SD 1, CAP+ 2, GND 3, CAP- 4, VOUT 5, VREF 6, OSC 7, VCC 8.
+   Pin 6 is the thing to have looked up rather than remembered. The LT1054 is
+   sold as pin-compatible with the LTC1044 and the 7660, and on those two pin 6
+   is LV, the low-voltage pin you ground below 3.5V. On an LT1054 it is VREF, a
+   2.5V OUTPUT. Grounding pin 6 out of habit shorts a reference. */
+const PINS_LT1054 = {
+  1:{n:'FB/SD', d:'feedback for the regulating version, and shutdown if you pull it to ground. Left open on a plain inverter, which is why this chip is not marked cmos - the floating-input rule would nag about a pin that is meant to be open'},
+  2:{n:'CAP+', d:'the + end of the flying capacitor - the pump cap, not a decoupler'},
+  3:{n:'GND', d:'ground, and the reference the output is negative of'},
+  4:{n:'CAP−', d:'the - end of the flying capacitor'},
+  5:{n:'VOUT', d:'the converted output; as an inverter this is the negative rail, and it needs its own reservoir cap'},
+  6:{n:'VREF', d:'a 2.5V reference OUTPUT - not the 7660/LTC1044 LV pin, so do not ground it'},
+  7:{n:'OSC', d:'oscillator: about 25kHz on its own, a cap here slows it, an external clock syncs it'},
+  8:{n:'VCC', d:'the positive supply, 3.5V to 15V'},
+};
+
 /* Pin roles by family. A family's pinout is written once and shared, because
    the alternative is what this replaces: CD4011 and CD4093 are the same
    silicon arrangement, one entry drifted from the other, and pins 8 and 10 sat
@@ -1712,6 +1771,23 @@ const DEV_PKG = {
   'CDISC': {shape:'disc', dia:1.2, leads:'radial'},             // ceramic disc: a thin wafer edge-on, drawn (and DRC'd) at the footprint it actually blocks, not its 5mm face
   'BOXF':  {shape:'box',  len:2.83, wid:0.98, leads:'radial'},  // box film, WIMA MKS2-style 7.2 x 2.5 mm
   'LDR5':  {shape:'disc', dia:1.97, leads:'radial'},            // 5mm round LDR
+  /* TO-220, the one-amp regulator body, from onsemi CASE 221AB: B = 10.28mm
+     across the legs at maximum and C = 4.82mm thick, on a 0.1in lead pitch
+     (G = 2.42-2.66mm), so it lands on the grid and then hangs about a hole
+     past its outer legs on each side.
+
+     That overhang is the whole reason this entry exists. Drawn as a TO-92 the
+     part looks two holes wide when it is four, and the clash check believed
+     the picture - which is how a supply board gets a decoupling cap tucked
+     under a regulator that is not actually there. A tall part is nobody's
+     friend either: most of these want a clip heatsink, which is wider still.
+
+     Unlike the transformers, this is NOT the small end of a guessed range.
+     A TO-220 is one known body and the number is off its own case outline.
+     Its legs are long (K = 12.7mm), so a builder who stands the body clear of
+     the board can ignore a clash the check reports - but the check would
+     rather name it than pretend the part is TO-92 sized. */
+  'TO220': {shape:'box',  len:4.05, wid:1.90, leads:'radial'},  // 10.3 x 4.8 mm body, 0.1in pitch
 };
 const DEV_LIB = {
   diode: {
@@ -1829,6 +1905,37 @@ const DEV_LIB = {
     'LDR':   {value:'LDR',  pkg:'LDR5', draw:'ldr',
               about:'a light-dependent resistor. No polarity - it is a resistor whose value falls as light rises, which is what makes an optical theremin work'},
   },
+  /* Regulators are the one family where LEG_LIB and DEV_LIB name the SAME
+     things, because for a regulator the part number IS the device: the legs
+     come from the part number and so does the body. The dropdown is built
+     from LEG_LIB, so the keys here have to match it exactly or a part picks
+     up legs with no package.
+
+     'TO-92' sits first on purpose. The BOM, the walkthrough and the
+     breadboard translation all treat the FIRST key of a family as the generic
+     default and print nothing for it - right for 'fixed' and 'film', and
+     right here only for the unnamed TO-92, since every other key is a part
+     number worth saying out loud. */
+  reg: {
+    'TO-92': {generic:true, pkg:null, draw:'to92',
+              about:'an unnamed three-leg regulator in a TO-92 - the legs are whatever your own datasheet says'},
+    '78L05': {pkg:null,    draw:'to92',
+              about:'the 100mA 5V regulator, TO-92. Flat face toward you: OUT, GND, IN. Note that is the OPPOSITE order to a 7805 in a TO-220'},
+    '78L09': {pkg:null,    draw:'to92',
+              about:'the 100mA 9V regulator, TO-92. Flat face toward you: OUT, GND, IN'},
+    '78L12': {pkg:null,    draw:'to92',
+              about:'the 100mA 12V regulator, TO-92. Flat face toward you: OUT, GND, IN'},
+    '7805':  {pkg:'TO220', draw:'to220',
+              about:'the one-amp 5V regulator, TO-220. Printed face toward you and the tab away: IN, GND, OUT - the reverse of the little 78L05. The TAB IS GROUND on a positive part. Needs a heatsink for anything past a few tens of milliamps, because it burns the whole input-to-output difference as heat'},
+    '7806':  {pkg:'TO220', draw:'to220',
+              about:'the one-amp 6V regulator, TO-220 - the magic-eye heater part. Printed face toward you: IN, GND, OUT. The TAB IS GROUND'},
+    '7812':  {pkg:'TO220', draw:'to220',
+              about:'the one-amp 12V regulator, TO-220. Printed face toward you and the tab away: IN, GND, OUT. The TAB IS GROUND. Wants about 2V more than 12 on its input even at the bottom of the ripple'},
+    '7912':  {pkg:'TO220', draw:'to220',
+              about:'the one-amp NEGATIVE 12V regulator, TO-220, and its legs are not the mirror of the 7812: printed face toward you, GND, IN, OUT. The TAB IS THE INPUT, not ground - bolt one to the same bare heatsink as a 7812 and the raw negative rail is shorted to ground through the metal'},
+    'LM317': {pkg:'TO220', draw:'to220',
+              about:'the adjustable one, TO-220. Printed face toward you: ADJ, OUT, IN, and the tab is OUT. Output is 1.25V x (1 + R2/R1), and it needs at least about 10mA through the divider to regulate'},
+  },
 };
 /* the device a part is actually using, or null when it has none */
 /* An LED's value is its color, so the drawing may as well use it. Anything
@@ -1847,6 +1954,41 @@ function devOf(part){
   const fam = DEV_LIB[part && part.kind];
   return (fam && part.device && fam[part.device]) || null;
 }
+
+/* "Is this device name worth printing?" The BOM, the walkthrough and the
+   breadboard translation all ask it. A family-default name ('fixed', 'film')
+   says nothing a reader wants; a part number says everything.
+
+   All three used to answer by POSITION - the first key of the family was the
+   generic one. That held until regulators arrived and then failed in a way
+   nobody would think to look for: '7805' is a canonical array index, so
+   JavaScript sorts it ahead of every non-numeric key regardless of how the
+   object is written. 'TO-92' was put first and landed fourth, which quietly
+   made the 7805 the family default and stopped the BOM naming it.
+
+   So a family may declare its generic entry with `generic:true`, and once ANY
+   entry in it does, the flag is the only thing consulted. Families that
+   declare none keep the old positional answer, so nothing else moved. */
+function isGenericDevice(kind, device){
+  const fam = DEV_LIB[kind];
+  if(!fam || !device || !fam[device]) return false;
+  const declared = Object.keys(fam).some(k => fam[k].generic);
+  return declared ? !!fam[device].generic : device === Object.keys(fam)[0];
+}
+
+/* The legs of a part whose device the library does not know. Positional for
+   the same reason and with the same hazard, so it is named instead. A
+   regulator falls back to bare 1/2/3 on purpose: this file does not guess at
+   pinouts, and "legs 1, 2, 3, check your own datasheet" is the honest answer
+   where "OUT GND IN" is a confident wrong one. */
+const LEG_FALLBACK = {trans:'2N5088', reg:'TO-92'};
+
+/* All three renderers and the clash check have to agree about which parts get
+   the big body. If they disagree the drawing and the findings describe
+   different boards, which is the one failure a checker must never have - so
+   this is one predicate, read off the device's own draw field, in the same
+   spirit as xfmrBox() being shared rather than copied three times. */
+const isTO220 = p => { const d = devOf(p); return !!d && d.draw === 'to220'; };
 
 const IC_LIB = {
   /* ---- CMOS logic, the Lunetta and noise-box shelf ---- */
@@ -1955,6 +2097,21 @@ const IC_LIB = {
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
+  /* The chip that makes a negative rail out of a positive one, for a board
+     that has only a single wall wart and needs -12V for its op-amps. Added
+     Sept 2026 for the Eurorack bus board.
+
+     CAP+ and CAP- are marked 'out' rather than 'in' on purpose. They are
+     switch nodes the chip drives, and it is the honest label, but it also
+     makes the pin-short rule do the right thing: with both as outputs, two
+     pump-cap legs landing on one strip is an error, which is what it is. Call
+     them inputs and the rule counts zero drivers and lets a shorted flying
+     capacitor through without a word. */
+  LT1054 :{pins:8, about:"a charge pump: it makes a negative rail out of a positive one with two capacitors and no inductor. About 100mA, which is five times what a 7660 or an ICL7660 will do, and it sags rather than shorting when you ask for more", name:'switched-capacitor converter', cmos:false,
+    volts:{min:3.5, max:15},
+    note:'As a plain inverter the flying cap goes across CAP+ (2) and CAP- (4), the reservoir from VOUT (5) to ground, ' +
+         'and FB/SD (1) is left open. Pin 6 is VREF, an output - it is the LV pin on a 7660 or an LTC1044 but not on this one.',
+    roles:{1:'in',2:'out',3:'gnd',4:'out',5:'out',6:'out',7:'in',8:'vdd'}, pinInfo:PINS_LT1054},
   LM13700:{pins:16, about:"two OTAs - amplifiers whose gain is set by a current rather than a resistor. This is the chip a voltage-controlled filter or amplifier is built around", name:'dual OTA', cmos:false,
     volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
     roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'vee',
@@ -3585,8 +3742,7 @@ function bom(){
        different drawer trips. A family-default device ('fixed', 'film') says
        nothing and notes nothing. How a part is MOUNTED still does not split
        the row - a resistor standing on end is the same resistor. */
-    const fam = DEV_LIB[q.kind];
-    const isDef = fam && q.device === Object.keys(fam)[0];
+    const isDef = isGenericDevice(q.kind, q.device);
     const note = q.kind === 'diode'
       ? (isDef || !q.device ? diodePkg(q) : q.device)
       : (q.kind === 'ecap' && q.polarized === false) ? 'NP / bipolar'
@@ -3652,7 +3808,14 @@ const WALK_NOTES = {
   xfmr5: 'Five clicks: P1, the center tap, P2 - that is the tapped winding, the one with three pins - then S1 and S2. If the tap on your part is on the other side, place that winding first.',
   xfmrct:'Six clicks, primary first: P1, the primary center tap, P2, then S1, the secondary center tap, S2. A diode ring modulator needs both taps.',
   xfmrsp:'Seven clicks: P1, the primary center tap, P2, then the two secondaries walking down the pin row - start of A, start of B, finish of A, finish of B. A and B do not touch inside the part. Series them for the full ratio, parallel them for half the turns.',
-  res:   null, cap: null, trim: null, reg: null,
+  /* The regulator had no note at all until Sept 2026, which is backwards: it
+     is the part where getting the legs round the wrong way does visible
+     damage. Kellye fitted a 78L05 backwards on the first rack module she
+     built - no sound, and the regulator hot enough to notice. The note is
+     written to be true of BOTH packages, because a 78L05 and a 7805 carry
+     their legs in opposite order and knowing that is the whole lesson. */
+  reg:   'The clicks go in leg order, so watch the letters the panel puts on them. A regulator does not tell you which way round it is: check the letters against your own part, not against another regulator - a TO-92 78L05 is OUT GND IN and a TO-220 7805 is IN GND OUT, and backwards they get hot.',
+  res:   null, cap: null, trim: null,
 };
 
 function walkthrough(){
@@ -3741,8 +3904,7 @@ function walkthrough(){
        DEVICE. Saying device-or-value would have swallowed the value of every
        resistor placed since types were added, because those carry device
        'fixed'. A device that is merely the family default is not worth a word. */
-    const fam = DEV_LIB[part.kind];
-    const isDefault = fam && part.device === Object.keys(fam)[0];
+    const isDefault = isGenericDevice(part.kind, part.device);
     const bits = [];
     if(part.device && !isDefault)
       bits.push((LEG_LIB[part.kind] ? 'DEVICE ' : 'TYPE ') + part.device);
@@ -5453,8 +5615,7 @@ function breadboardText(planArg){
   };
   const group = (name) => { L.push('== ' + name + ' =='); L.push(''); };
   const val = (p) => {
-    const fam = DEV_LIB[p.kind];
-    const isDefault = fam && p.device === Object.keys(fam)[0];
+    const isDefault = isGenericDevice(p.kind, p.device);
     const dev = p.device && !isDefault ? p.device : '';
     return [p.value, dev].filter(Boolean).join(' ');
   };
@@ -5502,8 +5663,14 @@ function breadboardText(planArg){
        flyNote(p, row.targets), bentNote(p)]);
   }
   for(const row of byKind(['reg']))
+    /* "flat face toward you" is TO-92 wording and a TO-220 has no flat face,
+       so the big ones are told how their own datasheets draw them: printed
+       side toward you, tab away. Saying flat-face at a TO-220 is exactly the
+       instruction that reads fine and helps nobody. */
     step('Regulator ' + row.part.ref + (val(row.part) ? ' (' + val(row.part) + ')' : '') +
-         ': flat face toward you, legs ' + (legLabels(row.part) || []).join('/') +
+         ': ' + (isTO220(row.part) ? 'printed face toward you and the metal tab away'
+                                   : 'flat face toward you') +
+         ', legs ' + (legLabels(row.part) || []).join('/') +
          ' left to right into ' + holesOf(row).filter(Boolean).join(', ') + '.',
       [flyNote(row.part, row.targets), bentNote(row.part)]);
   for(const row of byKind(['trim']))
@@ -6835,6 +7002,21 @@ function render(){
           '<line x1="0" y1="0" x2="' + (TR*0.55) + '" y2="' + (-TR*0.95) + '" stroke="#C9C3DA" stroke-width="' + (TR*0.34) + '" stroke-linecap="round"/>' +
           '<circle cx="0" cy="0" r="' + (TR*0.24) + '" fill="#C9C3DA" stroke="#0B0A12" stroke-width="0.8"/>' +
           '</g>');
+      }else if(isTO220(p)){
+        /* TO-220 from above, drawn at the size it really is: the printed face
+           is the edge the legs leave by, so it faces the way the TO-92's flat
+           does, and the metal tab is the bar on the far side. Four holes wide
+           against the TO-92's two, which is the entire point of drawing it
+           differently - a builder who sees the small one plans a board that
+           part will not fit on. */
+        const fp3 = footprintOf(p);
+        const hx3 = PITCH * fp3.len / 2, hy3 = PITCH * fp3.wid / 2;
+        o.push(g3 +
+          '<rect x="' + (-hx3) + '" y="' + (-hy3) + '" width="' + (2*hx3) + '" height="' + (2*hy3) +
+          '" rx="' + (PITCH*0.1) + '" fill="#1E1B26" stroke="#B9B4C7" stroke-width="1.3"/>' +
+          '<rect x="' + (-hx3) + '" y="' + (-hy3) + '" width="' + (2*hx3) + '" height="' + (hy3*0.6) +
+          '" fill="#6E6A7C" stroke="#B9B4C7" stroke-width="1"/>' +
+          '<circle cx="0" cy="' + (-hy3*0.7) + '" r="' + (PITCH*0.15) + '" fill="#1E1B26"/></g>');
       }else{
         /* TO-92 from above: a circle with one flat, the flat facing the legs */
         const fx = TR*0.9075, fy = TR*0.42;
@@ -7999,6 +8181,17 @@ function exportSVG(side, fit){
           o.push(g + '<rect x="' + (-R*0.72) + '" y="' + (-R*1.1) + '" width="' + (R*1.44) + '" height="' + (R*2.2) +
                  '" rx="' + (R*0.28) + '"/><line x1="0" y1="0" x2="' + (R*0.55) + '" y2="' + (-R*0.9) +
                  '" stroke-width="' + (R*0.3) + '" stroke-linecap="round"/><circle cx="0" cy="0" r="' + (R*0.22) + '"/></g>');
+        else if(isTO220(p)){
+          /* the big regulator body, stroke-only and to scale - see the board
+             renderer for why this is not the TO-92 glyph */
+          const fpS = footprintOf(p);
+          const hxS = MM * fpS.len / 2, hyS = MM * fpS.wid / 2;
+          o.push(g + '<rect x="' + (-hxS).toFixed(2) + '" y="' + (-hyS).toFixed(2) +
+                 '" width="' + (2*hxS).toFixed(2) + '" height="' + (2*hyS).toFixed(2) + '" rx="0.4"/>' +
+                 '<line x1="' + (-hxS).toFixed(2) + '" y1="' + (-hyS*0.4).toFixed(2) +
+                 '" x2="' + hxS.toFixed(2) + '" y2="' + (-hyS*0.4).toFixed(2) + '"/>' +
+                 '<circle cx="0" cy="' + (-hyS*0.7).toFixed(2) + '" r="0.5"/></g>');
+        }
         else
           o.push(g + '<path d="M' + (-R*0.9075) + ' ' + (R*0.42) + 'A' + R + ' ' + R + ' 0 1 1 ' +
                  (R*0.9075) + ' ' + (R*0.42) + 'Z"/></g>');
@@ -8828,7 +9021,24 @@ function classicSVG(opts){
     if(p.kind === 'trans' || p.kind === 'reg'){
       pts.forEach((q, i) => lead(i));
       const g = '<g transform="translate(' + cx + ',' + cy + ') rotate(' + (a2 * 180 / Math.PI) + ')">';
-      o.push(g + '<path d="M-14 7 A14 14 0 0 1 14 7 Z" fill="#D9A45B" stroke="#8A6323" stroke-width="1.4"/></g>');
+      if(isTO220(p)){
+        /* The one three-leg body drawn TO SCALE here rather than as a symbol.
+           The TO-92 glyph is a token - about a hole wide where the real part
+           is nearly two - and that costs nothing, because a TO-92 sits inside
+           the span of its own legs. A TO-220 does not: it is four holes across
+           where its legs are two, so it hangs a hole past each outer leg, and
+           a picture that hides that is a picture somebody plans a board from.
+           The tab is the bar on the far side from the legs. */
+        const fpC = footprintOf(p);
+        const hxC = CP * fpC.len / 2, hyC = CP * fpC.wid / 2;
+        o.push(g +
+          '<rect x="' + (-hxC).toFixed(1) + '" y="' + (-hyC).toFixed(1) + '" width="' + (2*hxC).toFixed(1) +
+          '" height="' + (2*hyC).toFixed(1) + '" rx="3" fill="#D9A45B" stroke="#8A6323" stroke-width="1.6"/>' +
+          '<rect x="' + (-hxC).toFixed(1) + '" y="' + (-hyC).toFixed(1) + '" width="' + (2*hxC).toFixed(1) +
+          '" height="' + (hyC*0.6).toFixed(1) + '" fill="#C9C4B8" stroke="#8A6323" stroke-width="1.2"/>' +
+          '<circle cx="0" cy="' + (-hyC*0.7).toFixed(1) + '" r="4" fill="#F5F5F0" stroke="#8A6323" stroke-width="1"/></g>');
+      }else
+        o.push(g + '<path d="M-14 7 A14 14 0 0 1 14 7 Z" fill="#D9A45B" stroke="#8A6323" stroke-width="1.4"/></g>');
       label(cx, cy - 14, p.ref, 0, '#111');
       const ll = legLabels(p);
       if(ll) pts.forEach((q, i) =>

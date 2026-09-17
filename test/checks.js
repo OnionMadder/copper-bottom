@@ -1243,6 +1243,22 @@ ok(Object.keys(IC_LIB).length >= 40, 'the library holds at least 40 parts');
 ok(IC_LIB.LM13700.roles[8] === 'vee' && IC_LIB.LM13700.roles[16] === 'vdd',
    'LM13700 rails are 8 and 16, not the 7/14 an op-amp habit would guess');
 
+/* The LT1054 is sold as pin-compatible with the LTC1044 and the 7660, and on
+   both of those pin 6 is LV - the low-voltage pin you tie to ground. On an
+   LT1054 it is VREF, an OUTPUT, so grounding it out of habit shorts a
+   reference. TI SLVS033G, Feb 1990 rev July 2015, P package, 8-pin PDIP. */
+console.log('-- LT1054: the pin that the family resemblance gets wrong --');
+ok(IC_LIB.LT1054.pinInfo[6].n === 'VREF' && IC_LIB.LT1054.roles[6] === 'out',
+   'pin 6 is VREF and an output, NOT the 7660/LTC1044 LV pin');
+ok(IC_LIB.LT1054.roles[3] === 'gnd' && IC_LIB.LT1054.roles[8] === 'vdd',
+   'ground is 3 and the supply is 8');
+ok(IC_LIB.LT1054.roles[2] === 'out' && IC_LIB.LT1054.roles[4] === 'out',
+   'the two flying-cap pins are driven nodes, so a shorted pump cap reads as a pin short');
+ok(IC_LIB.LT1054.cmos === false,
+   'marked not-cmos on purpose: FB/SD is meant to be left open and the floating rule would nag');
+ok(IC_LIB.LT1054.volts.min === 3.5 && IC_LIB.LT1054.volts.max === 15,
+   'and it runs 3.5V to 15V');
+
 /* On a +-12V rack an op-amp's pin 4 goes to -12V, not to ground. CMOS logic is
    the other way: its VSS really does sit at 0V, on racks and pedals alike. */
 console.log('-- rails: vee is not ground --');
@@ -2084,6 +2100,67 @@ ok(String(LEG_LIB.trans['BS170']) === 'D,G,S', 'BS170 is D-G-S');
 ok(String(LEG_LIB.trans['2N5458']) === 'D,S,G', '2N5458 matches the 2N5457 JFET family (D-S-G)');
 // left out on purpose: its datasheets disagreed on pin order
 ok(!('PN2907A' in LEG_LIB.trans), 'PN2907A is deliberately absent - sources disagreed');
+
+/* The regulator family, and the one relationship in it a tidy-up would
+   destroy: the TO-92 part and the TO-220 part of the same number carry their
+   legs in OPPOSITE order. Anything that "makes 7805 agree with 78L05" has
+   just handed the input rail to the output pin.
+   Sources: onsemi MC7800/D rev 29 (Nov 2021) and MC7900/D rev 21 (Oct 2021),
+   both CASE 221AB, both quoted where the table is defined. */
+console.log('-- regulator pinouts (verified against datasheets) --');
+ok(String(LEG_LIB.reg['78L05']) === 'O,G,I', '78L05 in TO-92 is OUT GND IN');
+ok(String(LEG_LIB.reg['7805'])  === 'I,G,O', '7805 in TO-220 is IN GND OUT');
+ok(String(LEG_LIB.reg['7812'])  === 'I,G,O', '7812 matches the positive TO-220 family');
+ok(String(LEG_LIB.reg['78L05']) === String(LEG_LIB.reg['7805'].slice().reverse()),
+   'and those two are exact reverses - do not "fix" either one to match the other');
+// the negative part is NOT the positive one mirrored; its ground and input swap
+ok(String(LEG_LIB.reg['7912'])  === 'G,I,O', '7912 is GND IN OUT');
+ok(String(LEG_LIB.reg['7912']) !== String(LEG_LIB.reg['7812'].slice().reverse()),
+   'and it is not the 7812 reversed either, which is the guess that looks right');
+ok(String(LEG_LIB.reg['LM317']) === 'A,O,I', 'LM317 is ADJ OUT IN');
+ok(Object.keys(LEG_LIB.reg).every(k => !!DEV_LIB.reg[k]),
+   'every regulator with legs has a device entry too, so none gets legs with no package');
+/* The trap, pinned so it is learned from a test rather than from a wrong BOM:
+   '7805' is a canonical array index, so JavaScript hoists it to the front of
+   Object.keys no matter where it is written. Nothing may read a family default
+   off position. */
+ok(Object.keys(DEV_LIB.reg)[0] !== 'TO-92',
+   "the regulator family's key order is NOT the written order - numeric part numbers sort first");
+ok(isGenericDevice('reg', 'TO-92'), 'the unnamed TO-92 is the generic regulator, by flag');
+ok(!isGenericDevice('reg', '7805') && !isGenericDevice('reg', '78L05'),
+   'and a part number is never treated as the family default, wherever it lands in the keys');
+ok(isGenericDevice('cap', 'film') && !isGenericDevice('cap', 'box film'),
+   'families that declare no flag keep the old positional answer');
+ok(isGenericDevice('res', 'fixed') && !isGenericDevice('res', 'LDR'), 'and so does res');
+ok(isGenericDevice('diode', 'switching') && !isGenericDevice('diode', 'LED'), 'and diode');
+
+/* The Tube Meter's 7806 had no library entry, so it took the unknown-device
+   fallback and came out labeled with the 78L05's legs - backwards for a
+   TO-220, on a published drawing. It has its own entry now, and the fallback
+   it used to reach no longer guesses at all. */
+ok(String(LEG_LIB.reg['7806']) === 'I,G,O', '7806 is IN GND OUT, the same TO-220 family');
+ok(legLabels({kind:'reg', device:'made up'}).join('') === '123',
+   'an unknown regulator gets bare 1/2/3 - this file does not guess at a pinout');
+ok(legLabels({kind:'trans', device:'made up'}).join('') === 'EBC',
+   'an unknown transistor still falls back to EBC, as it always did');
+
+console.log('-- TO-220: one body, and the picture agrees with the check --');
+{
+  const big = ['7805','7812','7912','LM317'];
+  const at3 = d => ({kind:'reg', device:d, pins:[[0,0],[0,1],[0,2]]});
+  ok(big.every(d => isTO220(at3(d))), 'the four TO-220 parts are recognized as such');
+  ok(!isTO220(at3('78L05')), 'a 78L05 is not');
+  ok(!isTO220({kind:'trans', device:'2N3904'}), 'and neither is a transistor');
+  const fpBig = footprintOf(at3('7812')), fpLil = footprintOf(at3('78L05'));
+  ok(fpBig.shape === 'box' && fpBig.len > 4 && fpBig.wid > 1.8,
+     'a TO-220 body is a box spanning four holes, not a TO-92 disc');
+  ok(fpLil.shape === 'disc', 'a 78L05 keeps the TO-92 disc');
+  /* The failure this guards: the three renderers branch on isTO220 while the
+     clash check reads footprintOf. Let those disagree and the drawing and the
+     findings are describing different boards. */
+  ok(big.every(d => footprintOf(at3(d)).shape === 'box'),
+     'everything isTO220 calls big really does carry the big footprint');
+}
 
 console.log('-- bent legs --');
 // a transistor with two legs on one strip is shorted; bending one of them clears it

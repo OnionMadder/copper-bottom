@@ -6,7 +6,7 @@ Named for the copper bottom of the board - the side you cut.
 
 **It checks the board electrically, and it needs no schematic to do it.** That is the
 part people miss, so it goes first: nets are worked out from the copper alone - strips,
-cuts, links - and then read against a library of **50 chips** that knows what each pin
+cuts, links - and then read against a library of **51 chips** that knows what each pin
 is for. **15 rules** run on every edit. Two pins of one chip on a strip with no supply
 on it. A CMOS input connected to nothing. A DIP straddling strips nothing has cut. Two
 leads in one hole. A strip with one thing on it. A part shorted end to end. A chip on a
@@ -652,7 +652,7 @@ additions beyond the original plan:
 Around forty parts: the CMOS 4000 series a noise box reaches for (hex inverters and
 buffers, the quad gate family, 4013, 4017, 4040, 4046, 4051, 4066), the op-amps a pedal
 reaches for (TL07x/TL08x singles, duals and quads, 4558, 4580, 5532, 5534, LM358, LM324,
-LM833, OPA134/2134), the NE555, and the odd-shaped ones - LM386, LM13700, PT2399.
+LM833, OPA134/2134), the NE555, and the odd-shaped ones - LM386, LM13700, PT2399, LT1054.
 
 Pinouts inside a family are written **once** and shared by reference - `GATE_QUAD2`,
 `OPAMP_DUAL`, `OPAMP_QUAD`, `INV_HEX`, `BUF_HEX`. That is not tidiness. `CD4011` and
