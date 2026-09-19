@@ -3450,18 +3450,22 @@ function declaredParts(){ return Array.isArray(S.panel) ? S.panel : []; }
    them, with its lugs and the pads on each */
 function offboardParts(){
   const map = new Map();
-  const put = (id, kind, value) => {
+  const put = (id, kind, value, role) => {
     const key = String(id).trim().toUpperCase();
-    if(!map.has(key)) map.set(key, {id:key, kind:kind, value:'', lugs:new Map(), pads:[]});
+    if(!map.has(key)) map.set(key, {id:key, kind:kind, value:'', role:'', lugs:new Map(), pads:[]});
     const q = map.get(key);
     if(!q.value && value) q.value = value;
+    /* role is what the control DOES - "timing", "volume". Optional, and the
+       first one given wins, same rule as value. Never guessed at: a part
+       nobody has named a job for prints without one. */
+    if(!q.role && role) q.role = String(role).trim();
     return q;
   };
   /* declarations first, so a part that names itself owns its own kind */
-  for(const e of declaredParts()) put(e.id, e.kind, e.value);
+  for(const e of declaredParts()) put(e.id, e.kind, e.value, e.role);
   for(const d of S.pads){
     for(const e of padParts(d)){
-      const q = put(e.id, e.kind, e.value);
+      const q = put(e.id, e.kind, e.value, e.role);
       if(!q.lugs.has(e.lug)) q.lugs.set(e.lug, []);
       q.lugs.get(e.lug).push(d);
       if(q.pads.indexOf(d) < 0) q.pads.push(d);
@@ -3501,6 +3505,42 @@ function offboardWireReport(){
   return {wires:out, bad:bad};
 }
 function offboardWires(){ return offboardWireReport().wires; }
+
+/* ---------- what each panel part is, and where its legs go ----------
+   Her ask, 18 Sept 2026: label a variable resistor by number AND function AND
+   where each lead goes, uniformly, on every layout. Before this a control was
+   identifiable only through whatever the pads it landed on happened to be
+   called - which is how one board ended up with four pad labels carrying
+   three pots, and a drill sheet lettering one hole PITCH and the next VR3.
+
+   This is a second VIEW of the apron, never a second record. The parts, the
+   lugs and the destinations all come from offboardParts() and
+   offboardWireReport(), the same two calls that draw the apron, so the block
+   and the picture cannot disagree. A board with no apron data prints nothing.
+
+   A leg reaching two places prints both: on a real panel one pot lug is
+   regularly shared with a switch, and dropping the second one would be the
+   silent kind of wrong. */
+function offboardLines(){
+  const wires = offboardWireReport().wires;
+  const out = [];
+  for(const q of offboardParts()){
+    const lib = OFFBOARD_LIB[q.kind];
+    const order = lib ? lib.lugs : [...q.lugs.keys()];
+    const legs = [];
+    for(const lug of order){
+      const dest = [];
+      for(const d of (q.lugs.get(lug) || [])) dest.push(d.label);
+      for(const w of wires){
+        if(w.a === q.id && w.al === lug) dest.push(w.b + '.' + w.bl);
+        if(w.b === q.id && w.bl === lug) dest.push(w.a + '.' + w.al);
+      }
+      if(dest.length) legs.push(lug + ' > ' + dest.join(' + '));
+    }
+    if(legs.length) out.push({id:q.id, value:q.value || '', role:q.role || '', legs:legs});
+  }
+  return out;
+}
 
 /* What goes in the file: S minus what the app works out for itself on load.
    `ic.autoCuts` only names which of `cuts` a chip owns, and
@@ -8884,7 +8924,36 @@ function classicSVG(opts){
   const listTop = backTop + boardH + 44;
   const listH = listRows ? listRows * 19 + 8 : 0;
   const W = Math.max(BX + BW + 74 + padMax * 9 + apR, 460);
-  const H = listTop + listH + 46;
+
+  /* ---- the off-board block, measured before the image sizes itself ----
+     One line per part, monospace so the columns stack. The type shrinks to
+     fit the width rather than running off the page, and if even the floor
+     will not hold it the legs wrap onto indented continuation lines. A line
+     that runs off the edge is the failure this has to avoid: it is invisible
+     in the editor and only shows up in the downloaded picture. */
+  const obLine = offboardLines();
+  const obPad = (t, n) => (t + '                    ').slice(0, n);
+  let obText = [];
+  if(obLine.length){
+    const wId   = Math.max(...obLine.map(l => l.id.length));
+    const wVal  = Math.max(...obLine.map(l => l.value.length));
+    const wRole = Math.max(...obLine.map(l => l.role.length));
+    const head  = l => obPad(l.id, wId) + '  ' + obPad(l.value, wVal) +
+                       (wRole ? '  ' + obPad(l.role, wRole) : '');
+    for(const l of obLine) obText.push({head:head(l), legs:l.legs});
+  }
+  const obAvail = W * 0.78;
+  let obSize = 13;
+  const obWide = t => t.length * obSize * 0.6;
+  const obFlat = obText.map(r => r.head + '   ' + r.legs.join('   '));
+  while(obSize > 9 && obFlat.some(t => obWide(t) > obAvail)) obSize--;
+  const obWrap = obFlat.some(t => obWide(t) > obAvail);
+  const obRows = obText.length
+    ? 1 + (obWrap ? obText.reduce((n, r) => n + 1 + r.legs.length, 0) : obText.length)
+    : 0;
+  const obH = obRows ? obRows * (obSize + 6) + 16 : 0;
+
+  const H = listTop + listH + obH + 46;
 
   o.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
          '" viewBox="0 0 ' + W + ' ' + H + '">');
@@ -9418,6 +9487,27 @@ function classicSVG(opts){
           'text-anchor="middle" fill="#111" font-family="Verdana, sans-serif"');
       });
     });
+  }
+
+  /* ---- the off-board block ---- */
+  if(obRows){
+    const ox = W * 0.11, lh = obSize + 6;
+    let oy = listTop + listH + 16;
+    T(ox, oy, 'OFF THE BOARD', obSize, 'text-anchor="start" fill="#111" font-weight="bold" font-family="monospace"');
+    for(const r of obText){
+      if(obWrap){
+        oy += lh;
+        T(ox, oy, r.head, obSize, 'text-anchor="start" fill="#111" font-family="monospace"');
+        for(const leg of r.legs){
+          oy += lh;
+          T(ox + obSize * 1.8, oy, leg, obSize, 'text-anchor="start" fill="#111" font-family="monospace"');
+        }
+      }else{
+        oy += lh;
+        T(ox, oy, r.head + '   ' + r.legs.join('   '), obSize,
+          'text-anchor="start" fill="#111" font-family="monospace"');
+      }
+    }
   }
 
   /* ---- the maker's mark ---- */
