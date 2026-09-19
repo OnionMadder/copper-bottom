@@ -366,6 +366,7 @@ button[disabled]:hover{border-color:var(--line2); background:var(--field)}
 #ctx .obrow, #ctx .pnrow{display:flex; gap:4px; align-items:center; margin:3px 0}
 #ctx .obrow input, #ctx .obrow select, #ctx .pnrow input, #ctx .pnrow select{min-width:0; flex:1 1 0; margin:0}
 #ctx .obrow .obid, #ctx .pnrow .pnid{flex:1.2 1 0}
+#ctx .obrow .obr, #ctx .pnrow .pnr{flex:1.1 1 0}
 #ctx .obrow .obx, #ctx .pnrow .pnx{flex:none; padding:2px 7px}
 svg{display:block; margin:0 auto; user-select:none; touch-action:none}
 .hit{fill:transparent; cursor:crosshair}
@@ -1412,6 +1413,7 @@ function migrate(obj){
     }).map(e => {
       const q = {id:e.id.trim().toUpperCase(), kind:e.kind, lug:String(e.lug).toUpperCase()};
       if(typeof e.value === 'string' && e.value.trim()) q.value = e.value.trim();
+      if(typeof e.role === 'string' && e.role.trim()) q.role = e.role.trim();
       return q;
     });
     if(ok.length) d.parts = ok; else delete d.parts;
@@ -1426,6 +1428,7 @@ function migrate(obj){
                       .map(e => {
                         const q = {id:e.id.trim().toUpperCase(), kind:e.kind};
                         if(typeof e.value === 'string' && e.value.trim()) q.value = e.value.trim();
+                        if(typeof e.role === 'string' && e.role.trim()) q.role = e.role.trim();
                         return q;
                       });
     const lostP = (Array.isArray(o.panel) ? hadP.length : 1) - keepP.length;
@@ -10062,7 +10065,8 @@ function renderCtx(){
                '<select class="obk" title="kind">' + opts(Object.keys(OFFBOARD_LIB), e.kind) + '</select>' +
                '<input class="obid" title="part id" value="' + esc(e.id) + '" placeholder="' + lib.prefix + '1">' +
                '<select class="obl" title="lug">' + opts(lib.lugs, e.lug) + '</select>' +
-               '<input class="obv" title="value" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<input class="obv" title="value - what the part IS, e.g. B100K" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<input class="obr" title="does - what this control DOES on the panel, e.g. timing. optional, and never guessed at" value="' + esc(e.role || '') + '" placeholder="does">' +
                '<button class="obx" type="button" title="remove this entry">x</button></div>');
       });
       o.push('<button id="edPadPartAdd" type="button">+ part on this pad</button>');
@@ -10080,7 +10084,8 @@ function renderCtx(){
         o.push('<div class="pnrow" data-i="' + i + '">' +
                '<select class="pnk" title="kind">' + opts(Object.keys(OFFBOARD_LIB), e.kind) + '</select>' +
                '<input class="pnid" title="part id" value="' + esc(e.id) + '" placeholder="' + OFFBOARD_LIB[e.kind].prefix + '2">' +
-               '<input class="pnv" title="value" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<input class="pnv" title="value - what the part IS" value="' + esc(e.value || '') + '" placeholder="value">' +
+               '<input class="pnr" title="does - what this control DOES on the panel. optional" value="' + esc(e.role || '') + '" placeholder="does">' +
                '<button class="pnx" type="button" title="remove this part">x</button></div>');
       });
       o.push('<button id="edPanelAdd" type="button">+ panel part</button>');
@@ -10374,6 +10379,14 @@ function renderCtx(){
       for(const d of S.pads) for(const x of padParts(d)) if(x.id === en.id){ if(v) x.value = v; else delete x.value; }
       for(const x of declaredParts()) if(x.id === en.id){ if(v) x.value = v; else delete x.value; }
     });
+    row.querySelector('.obr').onchange = e => edit(() => {
+      const en = obEnt(i); if(!en) return;
+      const v = e.target.value.trim();
+      /* the job is the part's, not the pad's, so every pad naming this part
+         takes it and its declaration too - exactly how value behaves */
+      for(const d of S.pads) for(const x of padParts(d)) if(x.id === en.id){ if(v) x.role = v; else delete x.role; }
+      for(const x of declaredParts()) if(x.id === en.id){ if(v) x.role = v; else delete x.role; }
+    });
     row.querySelector('.obx').onclick = () => edit(() => {
       const d = selObj(); if(!d || !Array.isArray(d.parts)) return;
       d.parts.splice(i, 1);
@@ -10399,6 +10412,12 @@ function renderCtx(){
       const en = pnEnt(i); if(!en) return;
       const v = e.target.value.trim();
       if(v) en.value = v; else delete en.value;
+    });
+    row.querySelector('.pnr').onchange = e => edit(() => {
+      const en = pnEnt(i); if(!en) return;
+      const v = e.target.value.trim();
+      if(v) en.role = v; else delete en.role;
+      for(const d of S.pads) for(const x of padParts(d)) if(x.id === en.id){ if(v) x.role = v; else delete x.role; }
     });
     row.querySelector('.pnx').onclick = () => edit(() => {
       if(!Array.isArray(S.panel)) return;
