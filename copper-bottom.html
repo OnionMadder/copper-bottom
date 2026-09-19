@@ -938,7 +938,8 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <b>BREADBOARD</b>
     <span class="nlnote">the circuit re-placed on a solderless breadboard - self-checked, then written out</span>
     <span class="sp"></span>
-    <button id="bbSvg">image .svg</button>
+    <button id="bbPng" title="the breadboard picture as a .png - what a forum or a phone will show">image .png</button>
+    <button id="bbSvg" title="the same picture as vector, for printing or editing">image .svg</button>
     <button id="bbCopy">copy</button>
     <button id="bbClose">close</button>
   </div>
@@ -969,8 +970,10 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <span class="sp"></span>
     <label class="barck" title="add full-page reading copies of both board maps at the end - the 1:1 copies stay as they are"><input type="checkbox" id="bigmaps"> full-page maps</label>
     <button id="btnClassic" title="the layout as the classic share image - title, tan strips, parts list - as a .png">layout .png</button>
-    <button id="btnSvgC">component .svg</button>
-    <button id="btnSvgS">solder .svg</button>
+    <button id="btnPngC" title="the component-side board map on its own, as a .png">component .png</button>
+    <button id="btnPngS" title="the solder-side board map on its own, as a .png">solder .png</button>
+    <button id="btnSvgC" title="the same map as vector, for printing 1:1 or editing">component .svg</button>
+    <button id="btnSvgS" title="the same map as vector, for printing 1:1 or editing">solder .svg</button>
     <button id="btnMd">copy markdown</button>
     <button id="btnPrint">print</button>
     <button id="sheetClose">close</button>
@@ -1016,7 +1019,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.7.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -8747,10 +8750,11 @@ function downloadSVG(side){
   const blob = new Blob([exportSVG(side)], {type:'image/svg+xml'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-' + side + '.svg';
+  a.download = fileBase() + '-' + side + '.svg';
   a.click();
   URL.revokeObjectURL(a.href);
 }
+function downloadPNG(side){ svgToPNG(exportSVG(side), fileBase() + '-' + side); }
 
 /* ============================================================
    THE CLASSIC LAYOUT IMAGE
@@ -9423,41 +9427,75 @@ function classicSVG(opts){
   return o.join('');
 }
 
-/* The classic image downloads as PNG - that is what forums and galleries
-   take. Rendered through a canvas at 2x for crisp text; if the canvas path
-   fails for any reason, the SVG itself downloads sooner than nothing. */
-function downloadClassic(){
-  const svg = classicSVG();
-  const name = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-layout';
-  const blob = new Blob([svg], {type:'image/svg+xml'});
-  const url = URL.createObjectURL(blob);
+/* One name for every file this layout exports, so the downloads sort together
+   in a folder however many of them you take. */
+function fileBase(){ return (S.name || 'layout').replace(/[^\w.-]+/g, '_'); }
+
+/* One rasterizer for every picture the app can export, because a .svg is not
+   something a forum, a phone or a messaging app will display - it gets you a
+   download prompt or a broken image, which is the whole reason this exists.
+
+   The size comes from the viewBox and NOT from what a browser makes of the
+   width attribute. exportSVG() and breadboardSVG() are sized in MILLIMETRES
+   so they print 1:1, and a browser resolves a millimetre at 96dpi, so a naive
+   raster of a 100 mm board lands at 378 px and the row letters are mush.
+   Scaling the viewBox to a target pixel width instead makes all three exports
+   come out at the same readable resolution whatever units they carry.
+
+   If any part of the canvas path fails - a tainted canvas, an image that will
+   not decode - the .svg downloads sooner than nothing. That has always been
+   the fallback here and it stays. */
+const PNG_TARGET_PX = 2000;   /* long edge we aim for */
+const PNG_MAX_PX    = 8000;   /* canvas guard: toDataURL gives up on huge ones */
+
+function svgToPNG(svg, name){
+  const saveSVG = () => {
+    const b = new Blob([svg], {type:'image/svg+xml'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = name + '.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const vb = /viewBox="\s*([-\d.]+)[ ,]+([-\d.]+)[ ,]+([-\d.]+)[ ,]+([-\d.]+)\s*"/.exec(svg);
+  const vbW = vb ? parseFloat(vb[3]) : 0;
+  const vbH = vb ? parseFloat(vb[4]) : 0;
+  if(!(vbW > 0 && vbH > 0)){ saveSVG(); return; }
+
+  const long = Math.max(vbW, vbH);
+  let scale = PNG_TARGET_PX / long;
+  if(scale < 2) scale = 2;                      /* never below the old 2x */
+  if(long * scale > PNG_MAX_PX) scale = PNG_MAX_PX / long;
+  const pw = Math.max(1, Math.round(vbW * scale));
+  const ph = Math.max(1, Math.round(vbH * scale));
+
+  /* pin the raster size onto the copy handed to the browser, so a millimetre
+     width attribute cannot decide the resolution for us */
+  const sized = svg.replace(/^(<svg[^>]*?)\swidth="[^"]*"\s+height="[^"]*"/,
+                            '$1 width="' + pw + '" height="' + ph + '"');
+  const url = URL.createObjectURL(new Blob([sized], {type:'image/svg+xml'}));
   const img = new Image();
   img.onload = () => {
     try{
       const cv = document.createElement('canvas');
-      cv.width = img.width * 2; cv.height = img.height * 2;
+      cv.width = pw; cv.height = ph;
       const cx2 = cv.getContext('2d');
-      cx2.scale(2, 2);
-      cx2.drawImage(img, 0, 0);
+      cx2.fillStyle = '#fff';                   /* a PNG starts transparent */
+      cx2.fillRect(0, 0, pw, ph);
+      cx2.drawImage(img, 0, 0, pw, ph);
       const a = document.createElement('a');
       a.href = cv.toDataURL('image/png');
       a.download = name + '.png';
       a.click();
-    }catch(err){
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name + '.svg';
-      a.click();
-    }
+    }catch(err){ saveSVG(); }
     URL.revokeObjectURL(url);
   };
-  img.onerror = () => {
-    const a = document.createElement('a');
-    a.href = url; a.download = name + '.svg'; a.click();
-    URL.revokeObjectURL(url);
-  };
+  img.onerror = () => { URL.revokeObjectURL(url); saveSVG(); };
   img.src = url;
 }
+
+function downloadClassic(){ svgToPNG(classicSVG(), fileBase() + '-layout'); }
 
 
 /* ============================================================
@@ -11886,6 +11924,7 @@ function openBB(){
   bbText.textContent = breadboardText(BB_PLAN);
   bbArt.innerHTML = bad ? '' : breadboardSVG(BB_PLAN);
   bbSvg.disabled = bad;
+  bbPng.disabled = bad;
   bb.hidden = false;
 }
 btnBB.onclick   = openBB;
@@ -11902,9 +11941,13 @@ bbSvg.onclick = () => {
   const blob = new Blob([breadboardSVG(BB_PLAN)], {type:'image/svg+xml'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '-breadboard.svg';
+  a.download = fileBase() + '-breadboard.svg';
   a.click();
   URL.revokeObjectURL(a.href);
+};
+bbPng.onclick = () => {
+  if(!BB_PLAN || BB_PLAN.failed || !BB_PLAN.check.ok) return;
+  svgToPNG(breadboardSVG(BB_PLAN), fileBase() + '-breadboard');
 };
 
 btnNet.onclick     = openNetlist;
@@ -12014,6 +12057,8 @@ bigmaps.onchange = () => {
   renderSheet();
 };
 btnClassic.onclick = () => downloadClassic();
+btnPngC.onclick    = () => downloadPNG('component');
+btnPngS.onclick    = () => downloadPNG('solder');
 btnSvgC.onclick    = () => downloadSVG('component');
 btnSvgS.onclick    = () => downloadSVG('solder');
 btnMd.onclick      = () => {
