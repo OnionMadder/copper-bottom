@@ -713,10 +713,11 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
     <span class="drop" id="outDrop">
       <button id="btnOut" aria-haspopup="true" aria-expanded="false" aria-controls="outMenu"
-              title="everything this layout can be turned into: the printable sheet, the share image, the breadboard version, the written steps">download <span class="caret" aria-hidden="true">&#9662;</span></button>
+              title="everything this layout can be turned into: the printable sheet, the share image, the schematic, the breadboard version, the written steps">download <span class="caret" aria-hidden="true">&#9662;</span></button>
       <div class="dropmenu" id="outMenu" role="menu" hidden>
         <button role="menuitem" id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet<span class="dk">print / PDF</span></button>
         <button role="menuitem" id="btnClassic2" title="the layout as the classic share image - title, tan strips, parts list - as a .png">layout image<span class="dk">.png</span></button>
+        <button role="menuitem" id="btnSch" title="the circuit this board implements, derived from the board itself - the layout says where, a schematic says why">schematic<span class="dk">.png</span></button>
         <button role="menuitem" id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps">breadboard<span class="dk">re-placed</span></button>
         <button role="menuitem" id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough<span class="dk">as steps</span></button>
       </div>
@@ -6752,6 +6753,188 @@ function offBoardMargin(side, bodies){
   return bodies.some(b => b.side === side) ? OFFBOARD_GAP + OFFBOARD_R * 2 + 0.9 : 0;
 }
 
+/* ============================================================
+   THE SCHEMATIC, DERIVED FROM THE BOARD
+
+   Never drawn first. That distinction is the whole argument, and it is why
+   this is not the "schematic capture" in the ROADMAP's Explicitly Not Doing:
+   capture means drawing a schematic BEFORE you can lay anything out, which is
+   the door this tool exists to avoid making people walk through. A schematic
+   DERIVED from a board that already passes its own checks makes nobody walk
+   through it, and it answers the first question any layout post gets - "any
+   chance of a schematic?" - which a picture of copper cannot. The layout says
+   WHERE; a schematic says WHY, and you need the why to move a build onto a
+   board that is not this one.
+
+   The shape is the one these circuits are genuinely drawn in: the supply rail
+   along the top, ground along the bottom, every other net a vertical node line
+   between them, ordered left to right from the input. A two-terminal part
+   either spans two node lines or drops from one to a rail. This is not a
+   compromise for machines - it is how a single-supply oscillator or a
+   one-transistor stage gets drawn by hand, and it stays readable at the size
+   these boards actually are.
+
+   WIRE LINKS DISAPPEAR, and that is the point rather than an omission. A link
+   exists because copper comes in strips; it carries nothing the circuit cares
+   about. Dropping them is exactly what turns a layout back into the circuit it
+   implements. Cuts disappear for the same reason.
+
+   What this does NOT do is pretty it up. Nets are ordered by how the circuit
+   connects, not by what would cross least, so a dense board gets a dense
+   picture. It is a true drawing of the netlist the board already proved, and
+   the netlist is the thing under test - not the aesthetics.
+*/
+function schematicModel(){
+  const rows = netTableFromBoard();
+  if(!rows.length) return {rails:{}, nodes:[], devices:[], pads:[], note:'nothing placed yet'};
+
+  /* ---- rails: the nets that touch everything and so must not be columns ---- */
+  const rails = {pos:null, neg:null, gnd:null};
+  for(const r of rows){
+    const k = netRank(r.net);
+    if(k === 0 && !rails.pos) rails.pos = r;
+    else if(k === 1 && !rails.neg) rails.neg = r;
+    else if(k === 2 && !rails.gnd) rails.gnd = r;
+  }
+  const railOf = r => r === rails.pos ? 'pos' : r === rails.neg ? 'neg'
+                    : r === rails.gnd ? 'gnd' : null;
+
+  /* ---- every leg, with the net it sits on ---- */
+  const byId = new Map(rows.map(r => [r.net.id, r]));
+  const netAtHole = at => {
+    const n = NET.netAt(at[0], at[1]);
+    return n ? byId.get(n.id) || null : null;
+  };
+
+  const devs = new Map();
+  const pads = [];
+  for(const c of connections()){
+    const row = netAtHole(c.at);
+    if(c.kind === 'pad'){ pads.push({label:c.label, net:row}); continue; }
+    const ref = c.kind === 'pin' ? c.ic.ref : c.part.ref;
+    if(!devs.has(ref))
+      devs.set(ref, {ref:ref, kind:c.kind === 'pin' ? 'ic' : c.part.kind,
+                     ic:c.ic || null, part:c.part || null, legs:[]});
+    devs.get(ref).legs.push({
+      name:c.label.slice(ref.length + 1), net:row,
+      role:c.role || '', pin:c.pin || null});
+  }
+  const devices = [...devs.values()];
+
+  /* ---- which nets are columns, and in what order ----
+     Left to right by breadth-first walk from the input, because that is the
+     order somebody reads a circuit in and it puts the signal chain in a line.
+     Two nets are neighbours when one device has a leg on each. Anything the
+     walk never reaches is appended in net order, so nothing is dropped. */
+  const cols = rows.filter(r => !railOf(r));
+  const near = new Map(cols.map(r => [r.net.id, new Set()]));
+  /* Only TWO-TERMINAL parts make two nets neighbours. A chip does not: a 14-pin
+     DIP touching eight nets would otherwise declare all eight mutually adjacent
+     and the walk would wander between them, which on a four-voice board
+     interleaved the voices instead of laying them out one after another. A hub
+     is not a chain, and only chains carry an order worth following. */
+  for(const d of devices){
+    if(d.kind === 'ic' || d.legs.length > 2) continue;
+    const on = d.legs.map(l => l.net).filter(n => n && !railOf(n));
+    for(const a of on) for(const b of on)
+      if(a !== b) near.get(a.net.id).add(b.net.id);
+  }
+  const inPad = pads.find(p => p.net && !railOf(p.net) && /^(IN|INPUT|SIG|SIGNAL)(_|$)/i.test(p.label));
+  /* Start at the input if there is one, else at the least-connected net, which
+     on a chain is one of its ends. Starting in the middle of a chain lays it
+     out from the middle, which reads as two half-circuits. */
+  const degree = r => (near.get(r.net.id) || new Set()).size;
+  const start = (inPad && inPad.net) ||
+                cols.slice().sort((a, b) => degree(a) - degree(b) || a.net.id - b.net.id)[0];
+  /* DEPTH first, not breadth: it follows a chain to its end before starting the
+     next one, so four voices come out as four runs rather than interleaved. */
+  const order = [], seen = new Set();
+  const walk = r => {
+    if(!r || seen.has(r.net.id)) return;
+    seen.add(r.net.id); order.push(r);
+    for(const id of [...(near.get(r.net.id) || [])].sort((a, b) => a - b)) walk(byId.get(id));
+  };
+  walk(start);
+  /* anything the walk never reached - a net hanging only off a chip - in net
+     order, so nothing is silently dropped */
+  for(const r of cols) if(!seen.has(r.net.id)) walk(r);
+  order.forEach((r, i) => { r.col = i; });
+
+  /* ---- place each device ----
+     series  - spans two node lines
+     shunt   - one leg on a node line, the rest on a rail
+     across  - every leg on a rail, which is what a decoupling cap is
+     block   - three legs or more, or a chip: it gets a body and stubs */
+  const placed = [];
+  for(const d of devices){
+    const sig = d.legs.filter(l => l.net && !railOf(l.net));
+    const rail = d.legs.filter(l => l.net && railOf(l.net));
+    const colsHit = [...new Set(sig.map(l => l.net.col))].sort((a, b) => a - b);
+    let shape;
+    if(d.kind === 'ic' || d.legs.length > 2) shape = 'block';
+    else if(!sig.length) shape = 'across';
+    else if(sig.length === 1) shape = 'shunt';
+    else shape = 'series';
+    placed.push({dev:d, shape:shape, cols:colsHit,
+                 from:colsHit.length ? colsHit[0] : 0,
+                 to:colsHit.length ? colsHit[colsHit.length - 1] : 0,
+                 rails:[...new Set(rail.map(l => railOf(l.net)))],
+                 open:d.legs.filter(l => !l.net).length});
+  }
+
+  /* ---- lanes, in three bands ----
+     A part occupies every cell it actually covers, and the thing that took two
+     goes to get right is that a SHUNT covers more than its own lane: it runs
+     from its node line all the way to a rail, crossing every lane between.
+     Reserving only its own lane drew a resistor straight through the middle of
+     a chip on the 555 board - both were legal in their own lane, and the one in
+     between was never asked. Searching for a lane whose whole climb is clear
+     then hangs the moment something sits at lane 0 in that column, because no
+     range starting at 0 can ever come free. Both were real, and both are gone.
+
+     The shape that works is three bands. Everything that climbs to the positive
+     rail lives in a TOP band, everything that drops to ground in a BOTTOM band,
+     and the blocks and series parts in the MIDDLE. A climb never leaves the top
+     band and a drop never leaves the bottom one, so no run can cross a body,
+     and the bands are sized by counting rather than by searching - which
+     terminates by construction. It is also how these get drawn by hand: pull-ups
+     near the supply, pull-downs near the ground.
+
+     Two parts shunting the SAME node to the same rail stack within their band,
+     which is why the bands are as deep as the busiest column and not one lane. */
+  const up = placed.filter(p => p.shape === 'shunt' && p.rails[0] === 'pos');
+  const down = placed.filter(p => p.shape === 'shunt' && p.rails[0] !== 'pos');
+  const mid = placed.filter(p => p.shape === 'block' || p.shape === 'series');
+  const depth = (list) => {
+    const n = new Map();
+    for(const p of list){ const d = n.get(p.from) || 0; p.band = d; n.set(p.from, d + 1); }
+    return Math.max(0, ...[...n.values()]);
+  };
+  const topBand = depth(up), botBand = depth(down);
+
+  const cells = new Set();
+  const free = (L, a, b) => { for(let c = a; c <= b; c++) if(cells.has(L + ',' + c)) return false; return true; };
+  let midLanes = 0;
+  for(const p of mid.sort((x, y) => (x.shape === 'block' ? 0 : 1) - (y.shape === 'block' ? 0 : 1)
+                                 || x.from - y.from)){
+    const a = p.from, b = Math.max(p.to, p.from);
+    let L = 0;
+    while(!free(L, a, b)) L++;
+    for(let c = a; c <= b; c++) cells.add(L + ',' + c);
+    p.band = L; midLanes = Math.max(midLanes, L + 1);
+  }
+
+  const total = topBand + midLanes + botBand || 1;
+  for(const p of up) p.lane = p.band;
+  for(const p of mid) p.lane = topBand + p.band;
+  for(const p of down) p.lane = total - 1 - p.band;
+  for(const p of placed) if(p.lane == null) p.lane = 0;
+  const lanes = {length: total};
+
+  return {rails:rails, railOf:railOf, nodes:order, devices:placed, pads:pads,
+          lanes:lanes.length, note:''};
+}
+
 /*#endregion model */
 /* ============================================================
    RENDER
@@ -9588,7 +9771,240 @@ function svgToPNG(svg, name){
   img.src = url;
 }
 
+/* ============================================================
+   DRAWING THE SCHEMATIC
+
+   schematicModel() decides what goes where; this only puts ink down. Supply
+   rail across the top, ground across the bottom, every other net a vertical
+   node line between them, and each part either spanning two node lines or
+   dropping from one to a rail.
+
+   Symbols are the US ones a stripboard forum already reads - a zigzag
+   resistor, two plates for a cap, a bar and triangle for a diode. Each is
+   drawn once, horizontally, centered on its own origin, and a rotation puts it
+   on a vertical run. Drawing every symbol twice is how the two copies drift.
+
+   THREE-LEG PARTS AND CHIPS ARE BOXES with labeled stubs. For a chip that is
+   the ordinary convention. For a transistor it is not - a real transistor
+   symbol says more - but a box reaching three different node lines is
+   unambiguous, and unambiguous beats handsome on a drawing somebody is about
+   to build from. Worth revisiting.
+*/
+const SCH = {COL:104, LANE:74, PAD:56, RAIL:30, SYM:20};
+
+function schSymbol(kind, value, ref){
+  const R = SCH.SYM, o = [];
+  const line = (x1, y1, x2, y2, w) =>
+    '<path d="M' + x1 + ' ' + y1 + 'L' + x2 + ' ' + y2 + '" stroke="#111" stroke-width="' +
+    (w || 1.6) + '" fill="none" stroke-linecap="round"/>';
+  if(kind === 'res' || kind === 'vres' || kind === 'pot' || kind === 'trim'){
+    let d = 'M' + (-R) + ' 0L' + (-R + 4) + ' 0';
+    for(let i = 0; i < 6; i++)
+      d += 'L' + (-R + 7 + i * 5) + ' ' + (i % 2 ? 7 : -7);
+    d += 'L' + (R - 4) + ' 0L' + R + ' 0';
+    o.push('<path d="' + d + '" stroke="#111" stroke-width="1.6" fill="none" stroke-linejoin="round"/>');
+    if(kind !== 'res')  /* the wiper arrow that makes it a pot */
+      o.push(line(0, 17, 0, 8, 1.4), '<path d="M-3.4 10L0 5L3.4 10Z" fill="#111"/>');
+  }else if(kind === 'cap'){
+    o.push(line(-R, 0, -4, 0), line(4, 0, R, 0), line(-4, -10, -4, 10), line(4, -10, 4, 10));
+  }else if(kind === 'ecap' || kind === 'batt'){
+    o.push(line(-R, 0, -4, 0), line(4, 0, R, 0), line(-4, -10, -4, 10));
+    o.push('<path d="M4 -10 A 13 13 0 0 1 4 10" stroke="#111" stroke-width="1.6" fill="none"/>');
+    o.push('<text x="-9" y="-12" font-size="11" font-family="Verdana, sans-serif" fill="#111">+</text>');
+  }else if(kind === 'diode' || kind === 'led'){
+    o.push(line(-R, 0, -5, 0), line(5, 0, R, 0));
+    o.push('<path d="M-5 -9L-5 9L5 0Z" fill="#111"/>', line(5, -9, 5, 9));
+    if(kind === 'led'){
+      o.push(line(2, -12, 9, -19, 1.2), line(7, -12, 14, -19, 1.2));
+      o.push('<path d="M9 -19L5.5 -17.5L7 -14Z" fill="#111"/>',
+             '<path d="M14 -19L10.5 -17.5L12 -14Z" fill="#111"/>');
+    }
+  }else{                                   /* anything else: a plain body */
+    o.push(line(-R, 0, -12, 0), line(12, 0, R, 0));
+    o.push('<rect x="-12" y="-9" width="24" height="18" fill="#fff" stroke="#111" stroke-width="1.6"/>');
+  }
+  return o.join('');
+}
+
+/* A transistor, drawn as one. It was a box spanning every column it touched,
+   which on the Clean Boost stretched Q1 across the whole drawing and put the
+   supply diode's symbol inside it. A transistor is the most recognisable thing
+   on a schematic and it costs twenty lines to draw properly.
+
+   Terminals come back with it, because whoever routes the leads needs to know
+   where they leave: base at the left, collector up and right, emitter down and
+   right. Which leg is which comes from the leg NAMES the part already carries
+   (E/B/C), never from the order they were placed in. */
+const TRANS_TERM = {B:[-30, 0], C:[16, -30], E:[16, 30]};
+function schTransistor(){
+  const L = (x1, y1, x2, y2, w) =>
+    '<path d="M' + x1 + ' ' + y1 + 'L' + x2 + ' ' + y2 + '" stroke="#111" stroke-width="' +
+    (w || 1.6) + '" fill="none" stroke-linecap="round"/>';
+  return '<circle cx="0" cy="0" r="19" fill="#fff" stroke="#111" stroke-width="1.5"/>' +
+         L(-6, -12, -6, 12, 2.2) +          /* the base bar */
+         L(-30, 0, -6, 0) +                 /* base lead */
+         L(-6, -6, 16, -19) + L(16, -19, 16, -30) +
+         L(-6, 6, 16, 19) + L(16, 19, 16, 30) +
+         '<path d="M9 11.5L16 19L6.5 18Z" fill="#111"/>';   /* the NPN arrow */
+}
+
+function schematicSVG(){
+  const m = schematicModel();
+  const esc2 = esc;
+  if(!m.nodes.length && !m.devices.length)
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="420" height="90" viewBox="0 0 420 90">' +
+           '<rect width="420" height="90" fill="#fff"/><text x="210" y="50" font-size="15" ' +
+           'text-anchor="middle" font-family="Verdana, sans-serif" fill="#666">' +
+           'nothing placed yet - draw a board and the schematic follows</text></svg>';
+
+  /* parts sitting across the rails get their own columns off the right end,
+     which is where a decoupling cap is conventionally drawn anyway */
+  let extra = 0;
+  for(const p of m.devices) if(p.shape === 'across'){ p.at = m.nodes.length + extra; extra++; }
+
+  const ncol = m.nodes.length + extra;
+  const X = i => SCH.PAD + 40 + i * SCH.COL;
+  const topY = SCH.PAD;
+  /* the first lane clears the rail by more than a transistor's collector lead
+     is long, or that lead lands ON the rail and reads as connected to it */
+  const laneY = L => topY + SCH.RAIL + 62 + L * SCH.LANE;
+  const botY = laneY(Math.max(m.lanes, 1) - 1) + SCH.LANE;
+  const W = X(Math.max(ncol - 1, 0)) + SCH.PAD + 40;
+  const H = botY + SCH.PAD + 34;
+
+  const o = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
+             '" viewBox="0 0 ' + W + ' ' + H + '">',
+             '<rect width="' + W + '" height="' + H + '" fill="#fff"/>'];
+  const wire = (x1, y1, x2, y2) =>
+    o.push('<path d="M' + x1 + ' ' + y1 + 'L' + x2 + ' ' + y2 +
+           '" stroke="#111" stroke-width="1.6" fill="none"/>');
+  const dot = (x, y) => o.push('<circle cx="' + x + '" cy="' + y + '" r="3.2" fill="#111"/>');
+  /* one corner, never a diagonal - a schematic wire that slants reads as a
+     component lead rather than as a wire */
+  const route = (x1, y1, x2, y2) => {
+    if(x1 === x2 || y1 === y2){ wire(x1, y1, x2, y2); return; }
+    wire(x1, y1, x2, y1); wire(x2, y1, x2, y2);
+  };
+  const T = (x, y, str, size, extraAttr) =>
+    o.push('<text x="' + x + '" y="' + y + '" font-size="' + size +
+           '" font-family="Verdana, sans-serif" ' + (extraAttr || '') + '>' + esc2(str) + '</text>');
+
+  T(W / 2, 30, (S.name || 'layout') + ' - schematic', 19,
+    'text-anchor="middle" font-weight="bold" fill="#111"');
+  T(W / 2, 48, 'derived from the board, not drawn first', 12,
+    'text-anchor="middle" fill="#777"');
+
+  /* ---- the rails ---- */
+  const rail = (y, label, cls) => {
+    o.push('<path d="M' + (SCH.PAD - 6) + ' ' + y + 'L' + (W - SCH.PAD + 6) + ' ' + y +
+           '" stroke="#111" stroke-width="2.4" fill="none"/>');
+    T(SCH.PAD - 12, y - 8, label, 14, 'text-anchor="start" font-weight="bold" fill="#111"');
+  };
+  const yTop = topY + SCH.RAIL, yBot = botY;
+  if(m.rails.pos) rail(yTop, m.rails.pos.name);
+  if(m.rails.gnd) rail(yBot, m.rails.gnd.name);
+  const railY = k => k === 'pos' ? yTop : yBot;
+
+  /* ---- node lines ---- */
+  m.nodes.forEach((n, i) => {
+    o.push('<path d="M' + X(i) + ' ' + (yTop + 14) + 'L' + X(i) + ' ' + (yBot - 14) +
+           '" stroke="#9aa" stroke-width="1.1" stroke-dasharray="3 4" fill="none"/>');
+    T(X(i), yBot + 22, n.name, 12, 'text-anchor="middle" fill="#445"');
+  });
+
+  /* ---- the parts ---- */
+  for(const p of m.devices){
+    const d = p.dev, y = laneY(p.lane || 0);
+    const label = d.ref + (d.part && d.part.value ? ' ' + d.part.value : '');
+    if(p.shape === 'series'){
+      const x1 = X(p.from), x2 = X(p.to), mid = (x1 + x2) / 2;
+      wire(x1, y, mid - SCH.SYM, y); wire(mid + SCH.SYM, y, x2, y);
+      o.push('<g transform="translate(' + mid + ',' + y + ')">' +
+             schSymbol(d.kind, d.part && d.part.value, d.ref) + '</g>');
+      T(mid, y - 26, label, 12, 'text-anchor="middle" fill="#111"');
+      dot(x1, y); dot(x2, y);
+    }else if(p.shape === 'shunt'){
+      const x = X(p.from), rk = p.rails[0] || 'gnd', ry = railY(rk);
+      const mid = (y + ry) / 2;
+      wire(x, y, x, mid - SCH.SYM); wire(x, mid + SCH.SYM, x, ry);
+      o.push('<g transform="translate(' + x + ',' + mid + ') rotate(90)">' +
+             schSymbol(d.kind, d.part && d.part.value, d.ref) + '</g>');
+      T(x + 16, mid + 4, label, 12, 'text-anchor="start" fill="#111"');
+      dot(x, y); dot(x, ry);
+    }else if(p.shape === 'across'){
+      const x = X(p.at), mid = (yTop + yBot) / 2;
+      wire(x, yTop, x, mid - SCH.SYM); wire(x, mid + SCH.SYM, x, yBot);
+      o.push('<g transform="translate(' + x + ',' + mid + ') rotate(90)">' +
+             schSymbol(d.kind, d.part && d.part.value, d.ref) + '</g>');
+      T(x + 16, mid + 4, label, 12, 'text-anchor="start" fill="#111"');
+      dot(x, yTop); dot(x, yBot);
+    }else if(d.kind === 'trans'){            /* a transistor, drawn as one */
+      const x = X(p.from) + 34;              /* clear of its own base column */
+      o.push('<g transform="translate(' + x + ',' + y + ')">' + schTransistor() + '</g>');
+      T(x - 34, y + 46, label, 12, 'text-anchor="middle" fill="#111"');
+      for(const l of d.legs){
+        const t = TRANS_TERM[l.name] || TRANS_TERM.B;
+        const tx = x + t[0], ty = y + t[1];
+        if(!l.net){ T(tx, ty, l.name, 10, 'fill="#a00"'); continue; }
+        const rk = m.railOf(l.net);
+        const gx = rk ? tx : X(l.net.col), gy = rk ? railY(rk) : ty;
+        route(tx, ty, gx, gy); dot(gx, gy);
+        T(tx + 4, ty - 4, l.name, 10, 'fill="#555"');
+      }
+    }else{                                   /* a chip, or any other block */
+      const wide = d.kind === 'ic';
+      const bw = wide ? Math.max(X(p.to) - X(p.from) + 56, 110) : 104;
+      const bx = wide ? X(p.from) - 28 : (X(p.from) + X(p.to)) / 2 - 52;
+      const bh = 50;
+      o.push('<rect x="' + bx + '" y="' + (y - bh / 2) + '" width="' + bw + '" height="' + bh +
+             '" rx="4" fill="#fff" stroke="#111" stroke-width="1.8"/>');
+      const name = d.ic ? d.ic.part : (d.part && d.part.value) || '';
+      T(bx + bw / 2, y - 3, d.ref, 13, 'text-anchor="middle" font-weight="bold" fill="#111"');
+      if(name) T(bx + bw / 2, y + 13, name, 11, 'text-anchor="middle" fill="#555"');
+      /* ONE STUB PER NET, not per pin. A 555 has pins 4 and 8 both on the
+         supply and pins 2 and 6 tied together; a stub each drew them on top of
+         one another and the numbers came out as "5 8" in one smudge. The pins
+         sharing a net are listed on the one stub, which is also how a datasheet
+         says it. */
+      const byNet = new Map();
+      for(const l of d.legs){
+        if(!l.net) continue;
+        const k = l.net.net.id;
+        if(!byNet.has(k)) byNet.set(k, {net:l.net, names:[]});
+        byNet.get(k).names.push(l.name);
+      }
+      let sig = 0;
+      for(const g of byNet.values()){
+        const tag = g.names.join(',');
+        const rk = m.railOf(g.net);
+        if(rk){
+          const ry = railY(rk);
+          const sx = bx + bw - (rk === 'pos' ? 30 : 64);
+          wire(sx, rk === 'pos' ? y - bh / 2 : y + bh / 2, sx, ry);
+          dot(sx, ry);
+          T(sx + 4, rk === 'pos' ? y - bh / 2 - 7 : y + bh / 2 + 15, tag, 10, 'fill="#555"');
+        }else{
+          const lx = X(g.net.col);
+          const above = (sig++ % 2) === 0;
+          const ey = y + (above ? -bh / 2 : bh / 2);
+          const ty2 = ey + (above ? -22 : 22);
+          const sx = Math.min(Math.max(lx, bx + 12), bx + bw - 12);
+          wire(sx, ey, sx, ty2); route(sx, ty2, lx, ty2);
+          dot(lx, ty2);
+          T(sx + 4, ty2 + (above ? -5 : 12), tag, 10, 'fill="#555"');
+        }
+      }
+    }
+  }
+
+  T(W / 2, H - 14, 'Made with Copper Bottom ' + APP_VERSION + ' - messopedals.com/diy/copper-bottom',
+    11, 'text-anchor="middle" fill="#999"');
+  o.push('</svg>');
+  return o.join('');
+}
+
 function downloadClassic(){ svgToPNG(classicSVG(), fileBase() + '-layout'); }
+function downloadSchematic(){ svgToPNG(schematicSVG(), fileBase() + '-schematic'); }
 
 
 /* ============================================================
@@ -12150,6 +12566,7 @@ outDrop.addEventListener('focusout', () => {
   setTimeout(() => { if(!outDrop.contains(document.activeElement)) outClose(false); }, 0);
 });
 btnClassic2.onclick = () => downloadClassic();
+btnSch.onclick      = () => downloadSchematic();
 sheetClose.onclick = closeSheet;
 btnPrint.onclick   = () => window.print();
 /* the full-page maps ride the sheet by default; unticking saves the paper,

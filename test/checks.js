@@ -3291,5 +3291,42 @@ console.log('-- what goes in the file --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- the schematic, derived from the board --');
+{
+  const m = schematicModel();
+  ok(!!(m.rails.pos && m.rails.gnd), 'both rails are found, so they become rails and not columns');
+  ok(!m.nodes.some(n => n === m.rails.pos || n === m.rails.gnd),
+     'and neither rail is also a node line');
+
+  const refs = new Set(m.devices.map(p => p.dev.ref));
+  ok(S.parts.filter(p => p.kind !== 'link').every(p => refs.has(p.ref)),
+     'every part on the board is placed');
+  ok(S.ics.every(ic => refs.has(ic.ref)), 'and every chip');
+  ok(S.parts.some(p => p.kind === 'link') && ![...refs].some(r => /^J[0-9]/.test(r)),
+     'wire links are NOT placed - a link is stripboard plumbing, not circuit');
+
+  ok(m.nodes.every((n, i) => n.col === i), 'columns are numbered in the order they are drawn');
+
+  /* The bug this pins down: a shunt runs from its node line all the way to a
+     rail, so it crosses every lane in between. Reserving only its own lane
+     drew a resistor straight through the middle of a chip on a real board.
+     The three bands make that impossible, and this is the assertion that
+     says so rather than the comment above it. */
+  const spans = [];
+  for(const p of m.devices)
+    if(p.shape === 'block' || p.shape === 'series')
+      for(let c = p.from; c <= Math.max(p.to, p.from); c++) spans.push([p.lane, c, p.dev.ref]);
+  let crossed = null;
+  for(const p of m.devices){
+    if(p.shape !== 'shunt') continue;
+    const lo = p.rails[0] === 'pos' ? 0 : p.lane;
+    const hi = p.rails[0] === 'pos' ? p.lane : m.lanes - 1;
+    for(const sp of spans)
+      if(sp[1] === p.from && sp[0] >= lo && sp[0] <= hi) crossed = p.dev.ref + ' through ' + sp[2];
+  }
+  ok(!crossed, 'no shunt crosses a body on its way to a rail' + (crossed ? ' (' + crossed + ')' : ''));
+}
+S = demoProject(); computeNets();
+
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
 process.exit(fail ? 1 : 0);
