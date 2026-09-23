@@ -121,6 +121,31 @@ const R = (ref, a, b) => ({id:'z' + ref, kind:'res', ref:ref, value:'1k', pins:[
 ok(has(drcOf(s => { s.pads = s.pads.filter(p => p.label !== 'GND'); }), 'pin-short'),
    'the SAME net with its supply pad removed does trip pin-short');
 
+console.log('-- an op-amp follower, and why one ever errored --');
+/* Output on its own inverting input is unity gain, the commonest analog
+   wiring there is. It is already covered by the cascade idiom below: one
+   output plus inputs on a net is wiring, not a fight. What made a real board
+   error was the op-amp not being in IC_LIB at all, which leaves roles empty,
+   makes every pin read as neither in nor out, and skips the idioms entirely.
+   So the rule to remember is that a pin-short on an obvious follower means
+   the CHIP is missing from the library, not that the board is wrong. */
+const follower = part => {
+  const c = [3,4,5,6].map(r => K(r,8));
+  S = {version:2, name:'follower', board:{rows:10, cols:14}, cuts:c.slice(),
+       parts:[{id:'zfa', kind:'link', ref:'JA', pins:[[4,11],[5,11]]}],
+       ics:[{id:'zfi', ref:'IC1', part:part, pins:8, pin1:[3,7], span:3,
+             autoCuts:c.slice()}],
+       pads:[{id:'zf1', label:'+9V', at:[3,13]}, {id:'zf2', label:'GND', at:[6,0]}]};
+  computeNets(); return runDRC();
+};
+ok(!has(follower('TL072'), 'pin-short'),
+   'a follower on a chip the library knows is clean');
+ok(!has(follower('TLC2272'), 'pin-short'),
+   'and on TLC2272, which is why that part had to be added');
+ok(has(follower('NOTACHIP'), 'pin-short'),
+   'the SAME wiring on a part the library does not know DOES trip - unknown roles, no idioms');
+S = demoProject(); computeNets();
+
 console.log('-- every rule fires when it should --');
 ok(has(drcOf(s => { s.cuts = s.cuts.filter(k => k !== '5,8'); }), 'ic-nocuts'),
    'removing one IC cut trips ic-nocuts');

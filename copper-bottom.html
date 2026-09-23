@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.0';
+const APP_VERSION = 'v1.7.1';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1772,6 +1772,8 @@ const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gn
 const V_CD4000B = {min:3,  max:18, note:'3-18V, with 20V the absolute maximum'};
 const V_TL0XX   = {min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across both rails'};
 const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
+const V_TLC227X = {min:4.4, max:16, note:'single rail 4.4-16V, and the output reaches both rails'};
+const V_TLV237X = {min:2.7, max:16, note:'single rail 2.7-16V, rail to rail in and out'};
 
 /* Two-lead parts that come in visibly different bodies.
 
@@ -2107,6 +2109,14 @@ const IC_LIB = {
   LM358  :{pins:8,  name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+
+  /* Rail-to-rail, and single supply. A TL072 cannot get its output within a
+     volt or two of either rail, which is fine in a pedal biased at half the
+     supply and useless for an envelope that has to reach 0V and V+ on one
+     rail. These two can, which is what lets a single-supply design delete the
+     output diode a split-rail one needs. */
+  TLC2272:{pins:8, about:"a rail-to-rail op-amp that runs from one supply - its output actually reaches 0V and V+, which a TL072 never does", name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLC227X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TLV2372:{pins:8,  name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLV237X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
   TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},

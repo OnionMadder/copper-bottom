@@ -6,7 +6,7 @@ Named for the copper bottom of the board - the side you cut.
 
 **It checks the board electrically, and it needs no schematic to do it.** That is the
 part people miss, so it goes first: nets are worked out from the copper alone - strips,
-cuts, links - and then read against a library of **51 chips** that knows what each pin
+cuts, links - and then read against a library of **47 chips** that knows what each pin
 is for. **15 rules** run on every edit. Two pins of one chip on a strip with no supply
 on it. A CMOS input connected to nothing. A DIP straddling strips nothing has cut. Two
 leads in one hole. A strip with one thing on it. A part shorted end to end. A chip on a
