@@ -3187,6 +3187,41 @@ console.log('-- off the board: the v1.3.0 kinds --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- off the board: a transformer, v1.7.2 --');
+{
+  /* The Tube Meter's T1, Sept 24 2026: a mains transformer bolted to the box,
+     run backwards, its four leads to four pads. Before this kind existed it
+     was drawn ON the board as an xfmr with its pins spread down one column,
+     which is a part no one can buy. The taps are optional lugs. */
+  const raw = {version:2, name:'xfmr', board:{rows:6, cols:8}, cuts:[], ics:[], parts:[],
+    pads:[
+      {id:'a', label:'AC_A', at:[3,0], parts:[{id:'T1', kind:'xfmr', lug:'P1', value:'120 V : 12 V'}]},
+      {id:'b', label:'AC_B', at:[4,0], parts:[{id:'T1', kind:'xfmr', lug:'P2'}]},
+      {id:'c', label:'HVAC', at:[0,7], parts:[{id:'T1', kind:'xfmr', lug:'S1'}, {id:'T1', kind:'xfmr', lug:'S3'}]},
+      {id:'d', label:'GND',  at:[5,7], parts:[{id:'T1', kind:'xfmr', lug:'S2'}]},
+      {id:'e', label:'MID',  at:[2,7], parts:[{id:'T2', kind:'xfmr', lug:'SCT', value:'230-0-230'}]},
+    ]};
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  const byL = l => up.pads.find(d => d.label === l);
+  ok(byL('AC_A').parts.length === 1 && byL('AC_A').parts[0].kind === 'xfmr' && byL('AC_A').parts[0].lug === 'P1',
+     'a transformer entry with a P1 lug is kept');
+  ok(byL('HVAC').parts.length === 1 && byL('HVAC').parts[0].lug === 'S1', 'S1 is a lug; S3 is not and is dropped');
+  ok(byL('MID').parts.length === 1 && byL('MID').parts[0].lug === 'SCT', 'a center tap is a lug');
+  S = up; computeNets();
+  const q = offboardParts().find(p => p.id === 'T1');
+  ok(q && q.kind === 'xfmr' && ['P1', 'P2', 'S1', 'S2'].every(l => q.lugs.has(l)), 'T1 is one part with four lugs on four pads');
+  const rows = bom();
+  ok(rows.some(r => r.kind === 'ob:xfmr' && r.offboard === true && r.what === '120 V : 12 V'),
+     'the BOM has the transformer, flagged off-board, with its value');
+  const wt = walkthrough();
+  ok(/T1 - transformer 120 V : 12 V, on the panel/.test(wt) && /Lug S1 to pad HVAC/.test(wt) && /Lug P2 to pad AC_B/.test(wt),
+     'the walkthrough wires the transformer winding by winding');
+  ok(!/Lug PCT stays empty/.test(wt) && !/Lug SCT stays empty/.test(wt), 'an unwired tap is not called empty - most transformers have none');
+  ok(/^#.*1 x 120 V : 12 V transformer/m.test(partsListFromBoard()), 'the written parts list carries it as a comment');
+  ok(OFFBOARD_ORDER.xfmr > OFFBOARD_ORDER.tube, 'it lists after the tube socket');
+}
+S = demoProject(); computeNets();
+
 console.log('-- off the board: a part no pad names --');
 {
   /* the Clean Boost's DPDT, Sept 15 2026: the near pole lands on pads, the far

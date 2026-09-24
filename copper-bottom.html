@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.1';
+const APP_VERSION = 'v1.7.2';
 
 const K = (r,c) => r + ',' + c;
 
@@ -3438,8 +3438,15 @@ const OFFBOARD_LIB = {
   res:    {name:'resistor, off the board', prefix:'R', lugs:['1','2']},     // a bend's series resistor, hung between two panel parts
   module: {name:'module',           prefix:'MOD', lugs:['+','-','IN','OUT']}, // a bought board: a recorder, a boost, another layout
   tube:   {name:'tube socket',      prefix:'V',   lugs:['1','2','3','4','5','6','7','8','9']}, // noval, numbered as the socket is
+  /* v1.7.2: a transformer bolted to the box with its leads to the board - a
+     mains part run backwards for a tube supply, or a center-tapped one run the
+     right way. The Tube Meter's T1 used to be an on-board xfmr with its pins
+     spread down one column, which drew a part nobody could buy. Same winding
+     names as the on-board kinds; the taps are drawn only when wired, like a
+     module's IN and OUT, because most small transformers have none. */
+  xfmr:   {name:'transformer',      prefix:'T',   lugs:['P1','PCT','P2','S1','SCT','S2']},
 };
-const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13};
+const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13, xfmr:14};
 const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
 
 function boardPitch(){
@@ -9513,6 +9520,18 @@ function classicSVG(opts){
         const mslots = {'+':-15, '-':-5, IN:5, OUT:15};
         for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + mslots[nm], nm === '+' || nm === '-' || used(nm));
         top = cy - 28; bot = cy + 28;
+      }else if(q.kind === 'xfmr'){
+        /* a laminated block: the core down the middle, the P winding's lugs on the
+           upper half of the board-facing edge and the S winding's on the lower,
+           with a rule between them so the two windings read as two */
+        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 28) + '" width="44" height="56" rx="3" fill="#E6E2EE" stroke="#4A3F63" stroke-width="1.5"/>' +
+                 '<rect x="' + (cx - 5) + '" y="' + (cy - 24) + '" width="10" height="48" fill="#B9B1CB" stroke="#4A3F63" stroke-width="1"/>' +
+                 '<line x1="' + (cx + f * 5) + '" y1="' + cy + '" x2="' + (cx + f * 22) + '" y2="' + cy + '" stroke="#4A3F63" stroke-width="1.2"/>');
+        txt(cx - f * 13, cy - 10, 'P', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+        txt(cx - f * 13, cy + 16, 'S', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+        const xslots = {P1:-22, PCT:-15, P2:-8, S1:8, SCT:15, S2:22};
+        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + xslots[nm], nm !== 'PCT' && nm !== 'SCT' || used(nm));
+        top = cy - 34; bot = cy + 34;
       }else if(q.kind === 'tube'){
         /* a noval socket seen from its wiring side: nine pins on a circle, a gap of two
            pitches between 9 and 1, the gap turned away from the board */

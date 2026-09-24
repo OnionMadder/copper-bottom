@@ -106,7 +106,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | custom pin-count DIPs, for reverb bricks and odd modules | done |
 | flying leads and bent legs - a part that lives off the board | done |
 | off-board switches, panel pots, trimpots | done |
-| the panel parts drawn beside the board - pots, switches, jacks, LEDs, DC, speakers, photocells, vactrols, buttons, batteries, modules, tube sockets - with a wire to every hole | done |
+| the panel parts drawn beside the board - pots, switches, jacks, LEDs, DC, speakers, photocells, vactrols, buttons, batteries, modules, tube sockets, transformers - with a wire to every hole | done |
 | a panel part that touches no pad at all - the far pole of a DPDT, a jack wired only to a switch | done |
 | axial parts stood on end, on the board and on the sheet | done |
 | light and dark, following whatever the machine already asks for | done |
