@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.3';
+const APP_VERSION = 'v1.7.4';
 
 const K = (r,c) => r + ',' + c;
 
@@ -11539,6 +11539,13 @@ async function openShareLink(){
     return false;
   }
 }
+
+/* A guide's "open in Copper Bottom" link lands in whichever tab holds the
+   editor. When that tab already has it open, the browser treats the next link
+   as a fragment change on the same page and reloads nothing, so the board on
+   screen stayed whatever was opened first - the Cicada, while the URL said
+   Spider (27 Sept 2026). The fragment IS the layout, so watch it. */
+window.addEventListener('hashchange', () => { openShareLink(); });
 
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
