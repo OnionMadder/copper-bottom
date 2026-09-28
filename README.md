@@ -650,7 +650,7 @@ additions beyond the original plan:
 ## The chip library
 
 Around forty parts: the CMOS 4000 series a noise box reaches for (hex inverters and
-buffers, the quad gate family, 4013, 4017, 4040, 4046, 4051, 4066), the op-amps a pedal
+buffers, the quad gate family, 4013, 4017, 4040, 4046, 4051, 4066, 4094), the op-amps a pedal
 reaches for (TL07x/TL08x singles, duals and quads, 4558, 4580, 5532, 5534, LM358, LM324,
 LM833, OPA134/2134), the NE555, and the odd-shaped ones - LM386, LM13700, PT2399, LT1054.
 

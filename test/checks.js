@@ -169,6 +169,27 @@ const naked = drcOf(s => { s.cuts = []; });
 ok(has(naked, 'ic-nocuts'),  'uncut DIP trips ic-nocuts');
 ok(!has(naked, 'pin-short'), 'pin-short stays out of it - every facing pair reads as a cascade or rides a rail, and ic-nocuts owns the uncut fault');
 
+/* A row whose two facing pins ride a RAIL has nothing to cut: a 4070's VSS
+   (pin 7) faces the tied-off inputs of its unused gate (pin 8), and the
+   strip IS the ground. Found 27 Sept 2026 on the XOR Cross-Mod and the
+   Rungler, both of which warned on exactly that row. The supply pad is what
+   makes it a rail - take it away and the warning is right to come back. */
+console.log('-- ic-nocuts leaves a rail row alone --');
+const railRow = (withPad) => {
+  S = {version:2, name:'rr', board:{rows:8, cols:8}, parts:[],
+       cuts:['0,3','1,3','2,3','3,3','4,3','5,3'],
+       pads: withPad ? [{id:'g', label:'GND', at:[6,0]}] : [],
+       ics:[{id:'u', ref:'IC1', part:'CD4070', pins:14, pin1:[0,2], span:3, autoCuts:[]}]};
+  computeNets(); return runDRC();
+};
+ok(!has(railRow(true), 'ic-nocuts'),
+   'pin 7 facing pin 8 on the ground strip with no cut is not a fault - the strip is the rail');
+ok(!has(railRow(true), 'pin-short'), 'and pin-short agrees, by the same supply-pad test');
+ok(has(railRow(false), 'ic-nocuts'),
+   'the SAME row with its supply pad gone trips ic-nocuts - the pad is what makes it a rail');
+ok(has(railRow(false), 'pin-short'), 'and pin-short comes back with it');
+S = demoProject(); computeNets();
+
 
 console.log('-- resistor value parsing --');
 ok(ohms('10k')  === 10000, '10k   -> 10000');
@@ -1265,8 +1286,36 @@ for(const c of ['NE555','CD4093','CD40106','TL072','LM13700','PT2399','LM386','C
   ok(!!IC_LIB[c], c + ' is in the library');
 }
 ok(Object.keys(IC_LIB).length >= 40, 'the library holds at least 40 parts');
-ok(IC_LIB.LM13700.roles[8] === 'vee' && IC_LIB.LM13700.roles[16] === 'vdd',
-   'LM13700 rails are 8 and 16, not the 7/14 an op-amp habit would guess');
+/* TI SNOSBW2F pin functions: V- is 6, V+ is 11. This file said 8 and 16 until
+   27 Sept 2026 - the corners a 16-pin CMOS habit expects - and so did the
+   test, which is how a wrong pinout stays green. Read off the datasheet. */
+ok(IC_LIB.LM13700.roles[6] === 'vee' && IC_LIB.LM13700.roles[11] === 'vdd',
+   'LM13700 rails are 6 and 11 - not the 8/16 corners, not an op-amp 4/8');
+ok(IC_LIB.LM13700.roles[8] !== 'vee' && IC_LIB.LM13700.roles[16] !== 'vdd',
+   'and the corners are NOT rails (pin 8 is BUF OUT A, pin 16 is IABC B)');
+ok(IC_LIB.LM13700.pinInfo[5].n === 'OUT A' && IC_LIB.LM13700.pinInfo[7].n === 'BUF IN A' &&
+   IC_LIB.LM13700.pinInfo[12].n === 'OUT B' && IC_LIB.LM13700.pinInfo[10].n === 'BUF IN B',
+   'each OTA output sits two pins from its own buffer input, 5/7 and 12/10');
+ok(IC_LIB.LM13700.pinInfo[16].n === 'IABC B' && IC_LIB.LM13700.pinInfo[1].n === 'IABC A',
+   'the two bias inputs are the two corner pins, 1 and 16');
+ok(IC_LIB.LM13700.roles[2] === 'opt' && IC_LIB.LM13700.roles[15] === 'opt',
+   'the diode bias pins are optional inputs, so leaving them open is not an orphan');
+ok(IC_LIB.PT2399.roles[7] === 'opt' && IC_LIB.PT2399.roles[8] === 'opt',
+   'so are the PT2399 clock-cap pins, which its own comment says to leave open');
+
+console.log('-- CD4094: the shift register a Rungler is built on --');
+ok(!!IC_LIB.CD4094 && IC_LIB.CD4094.pins === 16, 'CD4094 is in the library, 16 pins');
+ok(IC_LIB.CD4094.roles[8] === 'gnd' && IC_LIB.CD4094.roles[16] === 'vdd', 'rails on 8 and 16');
+ok(IC_LIB.CD4094.pinInfo[1].n === 'STROBE' && IC_LIB.CD4094.pinInfo[15].n === 'OE',
+   'STROBE is 1 and OUTPUT ENABLE is 15 - TI SCHS063B fig. 1');
+ok(IC_LIB.CD4094.pinInfo[11].n === 'Q8' && IC_LIB.CD4094.pinInfo[14].n === 'Q5' &&
+   IC_LIB.CD4094.pinInfo[4].n === 'Q1' && IC_LIB.CD4094.pinInfo[7].n === 'Q4',
+   'Q1-Q4 run down 4-7 and Q5-Q8 run back UP 14-11');
+ok(IC_LIB.CD4094.pinInfo[9].n === 'QS' && IC_LIB.CD4094.roles[9] === 'out' && IC_LIB.CD4094.roles[10] === 'out',
+   'the two serial outputs are 9 and 10, and they are outputs');
+ok([1,2,3,15].every(n => IC_LIB.CD4094.roles[n] === 'in') &&
+   [4,5,6,7,9,10,11,12,13,14].every(n => IC_LIB.CD4094.roles[n] === 'out'),
+   'every pin has a role, so the idiom block runs on it');
 
 /* The LT1054 is sold as pin-compatible with the LTC1044 and the 7660, and on
    both of those pin 6 is LV - the low-voltage pin you tie to ground. On an
@@ -1535,7 +1584,7 @@ ok(decoupling('TL072').indexOf('pins 8 and 4') >= 0, 'a dual op-amp across 8 and
 ok(decoupling('TL074').indexOf('pins 4 and 11') >= 0, 'a quad across 4 and 11 — different pins entirely');
 ok(decoupling('CD4049').indexOf('pins 1 and 8') >= 0,
    "the 4049's odd rails come out right, which is the point of deriving it");
-ok(decoupling('LM13700').indexOf('pins 16 and 8') >= 0, 'and the OTA across 16 and 8');
+ok(decoupling('LM13700').indexOf('pins 11 and 6') >= 0, 'and the OTA across 11 and 6 - derived, so it moved with the fix');
 ok(decoupling('DIP-14') === null, 'a package with no known rails gets no advice');
 ok(decoupling('NE555').indexOf('current spike') >= 0,
    'a part with something extra to say gets it appended');

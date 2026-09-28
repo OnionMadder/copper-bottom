@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.2';
+const APP_VERSION = 'v1.7.3';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1680,6 +1680,25 @@ const PINS_CD4066 = {
   14:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD4094B, read off TI SCHS063B (July 2003), fig. 1 terminal assignment.
+   The three control pins sit at the corners: STROBE is 1, OUTPUT ENABLE 15,
+   and the rails are the usual 8 and 16. Q1-Q4 run down the left, Q5-Q8 back
+   UP the right from 14 to 11, so Q8 is pin 11 and Q5 is pin 14. The two
+   serial outputs are 9 and 10. A Rungler's shift register. */
+const q4094 = n => ({n:'Q' + n, d:'parallel output ' + n + ', the ' + ['first','second','third','fourth','fifth','sixth','seventh','eighth'][n - 1] + ' bit in from DATA'});
+const PINS_CD4094 = {
+  1:{n:'STROBE', d:'high lets the shift register through to the outputs; tie it to V+ to make the register transparent'},
+  2:{n:'DATA', d:'the serial input - one bit is read here on every rising clock edge'},
+  3:{n:'CLOCK', d:'shifts everything one place on each rising edge'},
+  4:q4094(1), 5:q4094(2), 6:q4094(3), 7:q4094(4),
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  9:{n:'QS', d:'serial out, the eighth bit on the rising clock edge - for feeding the next 4094, or back into DATA'},
+  10:{n:'Q\u2032S', d:'serial out on the FALLING clock edge - the same bit, half a clock later'},
+  11:q4094(8), 12:q4094(7), 13:q4094(6), 14:q4094(5),
+  15:{n:'OE', d:'output enable; low floats all eight outputs. Tie it to V+ unless you want that'},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -1689,17 +1708,27 @@ const PINS_LM386 = {
   7:{n:'BYPASS', d:'internal reference; 10u to ground quietens it, or leave it open'},
   8:{n:'GAIN', d:'the other end of the gain network - see pin 1'},
 };
+/* LM13700, read off TI SNOSBW2F (Nov 2015), pin functions table: the rails
+   are 6 and 11, NOT the 8 and 16 corners a 16-pin CMOS habit expects, and the
+   second half runs backwards from 16. Until 27 Sept 2026 this table had the
+   corners, with everything from pin 6 up shifted to suit; nothing on the
+   shelf used it, so nothing shipped wrong, but anyone else would have wired
+   V+ to the B side's bias input. */
 const PINS_LM13700 = {
   1:{n:'IABC A', d:'amplifier bias current for A - this is the control input; the chip does what this current tells it'},
-  2:{n:'DIODE A'}, 3:{n:'IN+ A'}, 4:{n:'IN\u2212 A'},
+  2:{n:'DIODE A', d:'linearizing diode bias; a small current in here lets the input take a bigger signal cleanly. Left open on most builds'},
+  3:{n:'IN+ A'}, 4:{n:'IN\u2212 A'},
   5:{n:'OUT A', d:'a current output, not a voltage - it wants a resistor to ground to become a signal'},
-  6:{n:'BUF IN A'}, 7:{n:'BUF OUT A'},
-  8:{n:'V\u2212', d:'the negative supply'},
-  9:{n:'BUF OUT B'}, 10:{n:'BUF IN B'},
-  11:{n:'OUT B', d:'a current output, not a voltage - see pin 5'},
-  12:{n:'IN\u2212 B'}, 13:{n:'IN+ B'}, 14:{n:'DIODE B'},
-  15:{n:'IABC B', d:'amplifier bias current for B - the control input for the second half'},
-  16:{n:'V+', d:'the positive supply'},
+  6:{n:'V\u2212', d:'the negative supply - ground on a single-rail build'},
+  7:{n:'BUF IN A', d:'the Darlington buffer for A; feed it from OUT A and take a voltage off BUF OUT A'},
+  8:{n:'BUF OUT A'},
+  9:{n:'BUF OUT B'},
+  10:{n:'BUF IN B', d:'the buffer for B - see pin 7'},
+  11:{n:'V+', d:'the positive supply'},
+  12:{n:'OUT B', d:'a current output, not a voltage - see pin 5'},
+  13:{n:'IN\u2212 B'}, 14:{n:'IN+ B'},
+  15:{n:'DIODE B', d:'linearizing diode bias for B - see pin 2'},
+  16:{n:'IABC B', d:'amplifier bias current for B - the control input for the second half'},
 };
 const PINS_PT2399 = {
   1:{n:'VCC', d:'5V only - this chip does not take 9V, so it needs its own regulator'},
@@ -1744,7 +1773,13 @@ const PINS_LT1054 = {
    That was pedal thinking. Eurorack is +-12V, and on a +-12V module a TL072's
    pin 4 goes to -12V, not to ground - calling it ground would have been wrong on
    34 chips at once. CMOS logic keeps 'gnd', because its VSS really does sit at
-   0V on the racks and the pedals alike. */
+   0V on the racks and the pedals alike.
+
+   'opt' is an INPUT the datasheet says may be left open - the LM13700's diode
+   bias pins, the PT2399's clock-cap pins. It is not 'nc': the pin is real and
+   does something when wired. The orphan rule leaves an open one alone, like
+   an unused output, and every other rule treats it as the unknown it is, so
+   two of them sharing a strip with anything still reads as a short. */
 const OPAMP_DUAL   = {1:'out',2:'in',3:'in',4:'vee',5:'in',6:'in',7:'out',8:'vdd'};
 const OPAMP_SINGLE = {2:'in',3:'in',4:'vee',6:'out',7:'vdd'};   // 1,5 offset null; 8 nc
 const OPAMP_QUAD   = {1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',
@@ -2063,6 +2098,9 @@ const IC_LIB = {
     roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
   CD4066 :{pins:14, about:"four switches you open and close with logic instead of your fingers - voltage-controlled routing", name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},
+  CD4094 :{pins:16, about:"an eight-bit shift register with a latch on every output. Clock a bit in at DATA and it walks along Q1 to Q8 - feed one of those back into DATA through an XOR and it is a Rungler", name:'8-stage shift-and-store register', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4094,
+    roles:{1:'in',2:'in',3:'in',4:'out',5:'out',6:'out',7:'out',8:'gnd',
+           9:'out',10:'out',11:'out',12:'out',13:'out',14:'out',15:'in',16:'vdd'}},
 
   /* ---- timers ---- */
   /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties
@@ -2146,14 +2184,14 @@ const IC_LIB = {
     roles:{1:'in',2:'out',3:'gnd',4:'out',5:'out',6:'out',7:'in',8:'vdd'}, pinInfo:PINS_LT1054},
   LM13700:{pins:16, about:"two OTAs - amplifiers whose gain is set by a current rather than a resistor. This is the chip a voltage-controlled filter or amplifier is built around", name:'dual OTA', cmos:false,
     volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
-    roles:{1:'in',2:'in',3:'in',4:'in',5:'out',6:'in',7:'out',8:'vee',
-           9:'out',10:'in',11:'out',12:'in',13:'in',14:'in',15:'in',16:'vdd'}, pinInfo:PINS_LM13700},
+    roles:{1:'in',2:'opt',3:'in',4:'in',5:'out',6:'vee',7:'in',8:'out',
+           9:'out',10:'in',11:'vdd',12:'out',13:'in',14:'in',15:'opt',16:'in'}, pinInfo:PINS_LM13700},
   /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
      open on most delay builds, and the floating-input rule would cry wolf on
      every one of them. That rule is aimed at unbuffered logic inputs. */
   PT2399 :{pins:16, about:"an entire delay line on one chip. Good from about 30ms to 600ms; past that it turns to mud, which some people want", name:'echo processor', cmos:false,
     volts:{min:4.5, max:5.5, note:'5V only - it needs its own regulator on a 9V pedal or a 12V rack'},
-    roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'in',8:'in',
+    roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'opt',8:'opt',
            9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
 
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
@@ -3183,14 +3221,21 @@ function runDRC(){
         clash.a + ' and ' + clash.b + ' bodies overlap - ' + clash.why,
         clash.at);
 
-  /* --- DIP straddling an uncut strip --- */
+  /* --- DIP straddling an uncut strip ---
+     A row whose two pins ride a RAIL is left alone: a 4070's ground pin faces
+     the tied-off inputs of its unused gate, a 4094's STROBE faces VDD, and on
+     both the strip IS the rail, so there is nothing to cut. Same test the
+     pin-short rule uses - a supply pad on the net is what makes it a rail. */
   for(const ic of S.ics){
     if(hasFootprint(ic)) continue;   // no "between the pin rows" to speak of
     const half = ic.pins / 2, bad = [];
     for(let i = 0; i < half; i++){
       const r = ic.pin1[0] + i, cL = ic.pin1[1], cR = cL + ic.span;
       const a = NET.segAt(r, cL), b = NET.segAt(r, cR);
-      if(a !== null && b !== null && a === b) bad.push(r);
+      if(a === null || b === null || a !== b) continue;
+      const net = NET.netAt(r, cL);
+      if(net && padsOnNet(net).some(d => powerClass(d.label))) continue;   // it's a rail
+      bad.push(r);
     }
     if(bad.length)
       add('warn', 'ic-nocuts',
@@ -3232,14 +3277,15 @@ function runDRC(){
 
   /* --- a net with a single connection ---
      Generalises the plan's orphan rule. An unused IC *output* left open is
-     correct practice, so a lone output does not warn; a lone passive lead,
-     input or pad does. */
+     correct practice, so a lone output does not warn, and nor does an 'opt'
+     input the datasheet says to leave open; a lone passive lead, any other
+     input or a pad does. */
   for(const net of NET.nets){
     if(floatingNets.has(net.id)) continue;
     const cs = byNet.get(net.id) || [];
     if(cs.length !== 1) continue;
     const only = cs[0];
-    if(only.kind === 'pin' && (only.role === 'out' || only.role === 'nc')) continue;
+    if(only.kind === 'pin' && (only.role === 'out' || only.role === 'nc' || only.role === 'opt')) continue;
     add('warn', 'orphan', only.label + ' is the only thing on its net - connects nowhere', only.at, net.id);
   }
 
