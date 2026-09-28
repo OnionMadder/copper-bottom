@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.4';
+const APP_VERSION = 'v1.7.5';
 
 const K = (r,c) => r + ',' + c;
 
@@ -5104,6 +5104,34 @@ const holesMM = n => (n * HOLE_MM).toFixed(1).replace(/.0$/, '') + 'mm';
    its position as fixed, because there is nowhere useful to slide it to. */
 const PINNED_SLACK = 0.6;
 
+/* A DIP is longer than its row of pins. Two chips end to end on neighboring
+   strips were passed as clear when their bodies overlap by more than a
+   millimeter, because the only box a chip had stopped a quarter hole past its
+   end pins.
+
+   The lengths are the MAXIMUM overall length D from the JEDEC MS-001 plastic
+   DIP outline, read off Microchip's P-package drawings (C04-018, C04-005,
+   C04-017, C04-007, C04-019), mold flash not included. The pins span
+   (pins/2 - 1) holes, so each end sticks out by half of what is left over.
+   The 14 and the 16 share ONE 19.3mm body: a 14-pin chip overhangs its end
+   pins by 0.8 of a hole and a 16-pin chip by only 0.3, so a single allowance
+   for every DIP would be wrong for one of them. The molded body is 6.6mm
+   wide at most, NARROWER than the 7.62mm between the pin rows - only the legs
+   reach out that far, and only at the pins.
+
+   A pin count not in this table, a module, a reshaped footprint or a wide
+   package gets no molded body: guessing bigger invents clashes. */
+const DIP_BODY_MM = {8:9.78, 14:19.30, 16:19.30, 18:22.99, 20:26.42};
+const DIP_BODY_WIDE_MM = 6.60;
+function icMoldBody(ic){
+  const def = IC_LIB[ic.part] || {};
+  const D = DIP_BODY_MM[ic.pins];
+  if(!D || def.module || hasFootprint(ic) || ic.span !== 3) return null;
+  const ex = icExtent(ic);
+  return {shape:'box', ang:0, cx:(ex.c0 + ex.c1) / 2, cy:(ex.r0 + ex.r1) / 2,
+          len:DIP_BODY_WIDE_MM / HOLE_MM, wid:D / HOLE_MM};
+}
+
 /* Every occupied body on the board, in hole units. Angles are radians, with
    x running along columns and y down rows. */
 function bodies(){
@@ -5152,7 +5180,7 @@ function bodies(){
     const ex = icExtent(ic);
     out.push({shape:'box', ref:ic.ref, kind:'ic', ic:ic, ang:0, pinned:true,
       cx:(ex.c0 + ex.c1) / 2, cy:(ex.r0 + ex.r1) / 2,
-      len:(ex.c1 - ex.c0) + 0.7, wid:(ex.r1 - ex.r0) + 0.5});
+      len:(ex.c1 - ex.c0) + 0.7, wid:(ex.r1 - ex.r0) + 0.5, mold:icMoldBody(ic)});
   }
   return out;
 }
@@ -5205,10 +5233,17 @@ function checkBodies(){
     for(let j = i + 1; j < bs.length; j++){
       const A = bs[i], B = bs[j];
       if(!A.pinned || !B.pinned) continue;
-      if(!bodiesOverlap(A, B)) continue;
+      /* Two chips also meet at their molded ends. A leaded part beside a chip
+         end is still tested against the lead frame only: its legs can lean it
+         a millimeter clear, and that is how compact boards get built. A chip
+         cannot lean - its pins are its position. */
+      const molds = A.mold && B.mold && bodiesOverlap(A.mold, B.mold);
+      if(!molds && !bodiesOverlap(A, B)) continue;
       out.push({a:A.ref, b:B.ref,
         at:[Math.round(A.cy), Math.round(A.cx)],
-        why:A.kind === 'ic' || B.kind === 'ic'
+        why:A.kind === 'ic' && B.kind === 'ic'
+          ? 'the two chip bodies run into each other, and a DIP is longer than its row of pins'
+          : A.kind === 'ic' || B.kind === 'ic'
           ? 'a part body is sitting on the chip'
           : 'neither has room to slide clear'});
     }

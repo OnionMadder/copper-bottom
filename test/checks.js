@@ -981,6 +981,61 @@ ok(bdC.some(c => (c.a === 'IC1' || c.b === 'IC1') && (c.a === 'CZ' || c.b === 'C
    'a can planted in the middle of the DIP clashes with it');
 ok(bdC[0].why.indexOf('chip') >= 0, 'and says so plainly');
 
+console.log('-- bodies: a DIP is longer than its row of pins --');
+/* Sept 28 2026: the XOR Cross-Mod's first drawing had a CD40106 and a CD4070
+   end to end on neighboring strips and passed clean. MS-001 puts a 14-pin
+   body at up to 19.3mm over 15.24mm of pins, so each end sticks out 0.8 of a
+   hole and the two bodies overlap by more than a millimeter. */
+const dipBoard = ics => migrate({version:2, name:'dips', board:{rows:24, cols:12},
+  cuts:[], parts:[], pads:[],
+  ics:ics.map((c, i) => ({id:'d' + i, ref:'U' + (i + 1), part:c[0], pins:c[1],
+                          pin1:c[2], span:3, autoCuts:[]}))});
+const dipClash = () => checkBodies().filter(c => c.a[0] === 'U' && c.b[0] === 'U');
+ok(Math.abs(icMoldBody({part:'CD40106', pins:14, pin1:[0,0], span:3}).wid - 7.598) < 0.001,
+   'a 14-pin body is 19.3mm, 7.6 holes over 6 holes of pins');
+ok(Math.abs(icMoldBody({part:'CD4017', pins:16, pin1:[0,0], span:3}).wid - 7.598) < 0.001,
+   'and a 16-pin body is the SAME 19.3mm, over 7 holes of pins');
+ok(Math.abs(icMoldBody({part:'NE555', pins:8, pin1:[0,0], span:3}).wid - 3.850) < 0.001,
+   'an 8-pin body is 9.78mm');
+ok(icMoldBody({part:'CD40106', pins:14, pin1:[0,0], span:3}).len < 3,
+   'the molded body is narrower than the 3 holes between the pin rows');
+ok(icMoldBody({part:'EURO-16', pins:16, pin1:[0,0], span:1}) === null,
+   'a module is not a DIP and gets no molded body');
+ok(icMoldBody({part:'DIP-N', pins:14, pin1:[0,0], span:3,
+               pinMap:defaultPinMap({pins:14, span:3})}) === null,
+   'nor does a reshaped footprint, whatever its pin count');
+ok(icMoldBody({part:'DIP-N', pins:24, pin1:[0,0], span:3}) === null,
+   'nor a pin count the table does not know - guessing bigger invents clashes');
+
+S = dipBoard([['CD40106', 14, [0,4]], ['CD4070', 14, [7,4]]]); computeNets();
+let dipC = dipClash();
+ok(dipC.length === 1, 'two 14-pin chips end to end on neighboring strips clash (the XOR Cross-Mod)');
+ok(dipC.length === 1 && dipC[0].why.indexOf('longer than its row of pins') >= 0,
+   'and the reason says why the gap between the pins is not enough');
+ok(runDRC().some(f => f.rule === 'body-clash' && f.msg.indexOf('U1 and U2') === 0),
+   'it reaches the DRC');
+S = dipBoard([['CD40106', 14, [0,4]], ['CD4070', 14, [8,4]]]); computeNets();
+ok(dipClash().length === 0, 'one empty strip between them clears it - the redraw that shipped');
+S = dipBoard([['CD4017', 16, [0,4]], ['CD4040', 16, [8,4]]]); computeNets();
+ok(dipClash().length === 0, 'two 16-pin chips end to end DO fit - 0.3 of a hole each end');
+S = dipBoard([['CD40106', 14, [0,4]], ['CD4017', 16, [7,4]]]); computeNets();
+ok(dipClash().length === 1, 'a 14-pin end against a 16-pin end does not');
+S = dipBoard([['NE555', 8, [0,4]], ['TL071', 8, [4,4]]]); computeNets();
+ok(dipClash().length === 0, 'two 8-pin chips end to end fit - 0.43 of a hole each end');
+S = dipBoard([['CD40106', 14, [0,0]], ['CD4070', 14, [7,4]]]); computeNets();
+ok(dipClash().length === 0, 'end to end but a column clear of each other is fine');
+S = dipBoard([['CD40106', 14, [0,4]]]);
+S.parts.push({id:'fr', kind:'res', ref:'RF', value:'10k', pins:[[7,3],[7,6]]});
+computeNets();
+ok(bodies().find(b => b.ref === 'RF').pinned, 'a resistor with no room to slide (the control)');
+ok(checkBodies().length === 0,
+   'lying flat on the strip past a 14-pin chip end, it is not a clash - its legs lean it clear');
+S = dipBoard([['CD40106', 14, [2,4]]]);
+S.parts.push({id:'fq', kind:'trans', ref:'QF', value:'2N3904', pins:[[2,8],[1,8],[0,8]]});
+computeNets();
+ok(checkBodies().length === 0,
+   'a TO-92 off the pin-1 corner is not a clash either (the CMOS Ladder Filter’s Q1)');
+
 console.log('-- bodies: the drawing and the check use one table --');
 ok(FOOTPRINT.res.len === 2.48 && FOOTPRINT.res.wid === 0.94, 'a 1/4W resistor is 6.3 x 2.4 mm');
 ok(FOOTPRINT.ecap.dia === 1.8, 'a radial can is 4.5 mm');
