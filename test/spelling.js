@@ -19,7 +19,7 @@ const BRITICISMS = [
   'centre', 'centred', 'colour', 'colours', 'coloured', 'grey', 'labelled',
   'moulded', 'recognise', 'recognised', 'behaviour', 'neighbour', 'maths',
   'travelling', 'pyjamas', 'aluminium', 'maximise', 'minimise', 'organise',
-  'organised', 'favourite', 'litre', 'metre',
+  'organised', 'favourite', 'litre', 'metre', 'way round',
 ];
 
 const B = String.fromCharCode(92);                 // a backslash, built not typed
@@ -42,6 +42,7 @@ function selfTest(){
   if(miss.length) return 'flags its own exemptions: ' + miss.map(m => m.word).join(', ');
   const hit = findBriticisms('/* the colour of the centre strip is grey */');
   if(hit.length !== 3) return 'missed a plain Briticism - it would pass forever';
+  if(findBriticisms('it goes in either way round').length !== 1) return 'missed a two-word phrase';
   return null;
 }
 

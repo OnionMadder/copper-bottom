@@ -389,7 +389,7 @@ S = demoProject(); computeNets();
 console.log('-- regions: geometry --');
 S = demoProject(); computeNets();
 const rgBox = normRegion([9,4], [3,1]);
-ok(rgBox.r0 === 3 && rgBox.r1 === 9 && rgBox.c0 === 1 && rgBox.c1 === 4, 'corners normalise whichever way round you click');
+ok(rgBox.r0 === 3 && rgBox.r1 === 9 && rgBox.c0 === 1 && rgBox.c1 === 4, 'corners normalise whichever way around you click');
 ok(inRegion(rgBox, 3, 1) && inRegion(rgBox, 9, 4), 'both corners are inside');
 ok(!inRegion(rgBox, 2, 1) && !inRegion(rgBox, 3, 5), 'just outside is outside');
 ok(regionFits({r0:0,c0:0,r1:2,c1:2}, 10, 17), 'an offset that lands on the board fits');
@@ -398,7 +398,7 @@ ok(!regionFits({r0:0,c0:0,r1:2,c1:2}, 0, 18), 'nor off the right edge');
 ok(!regionFits({r0:5,c0:5,r1:6,c1:6}, -6, 0), 'nor off the top');
 
 console.log('-- regions: only whole things count --');
-/* voice 1 of the fixture: C1 spans rows 3..12, so a box round rows 0-6 must
+/* voice 1 of the fixture: C1 spans rows 3..12, so a box around rows 0-6 must
    NOT claim it -- half a part is not a part */
 const rgHalf = {r0:0, c0:0, r1:6, c1:6};
 const rgHc = regionContents(rgHalf);
@@ -406,11 +406,11 @@ ok(!rgHc.parts.some(p => p.ref === 'C1'), 'C1 straddles the edge, so it is left 
 ok(rgHc.parts.every(p => p.pins.every(q => q[0] <= 6 && q[1] <= 6)), 'everything claimed is wholly inside');
 const rgWhole = {r0:0, c0:0, r1:12, c1:19};
 const rgWc = regionContents(rgWhole);
-ok(rgWc.parts.length === S.parts.length, 'a box round the whole board claims every part');
+ok(rgWc.parts.length === S.parts.length, 'a box around the whole board claims every part');
 ok(rgWc.ics.length === 1 && rgWc.cuts.length === 7 && rgWc.pads.length === 8, 'and its IC, cuts and pads');
 ok(regionCount(rgWhole) === S.parts.length + 1 + 7 + 8, 'regionCount adds up');
 const rgIcBox = {r0:3, c0:7, r1:9, c1:10};
-ok(regionContents(rgIcBox).ics.length === 1, 'a box round just the DIP claims it');
+ok(regionContents(rgIcBox).ics.length === 1, 'a box around just the DIP claims it');
 ok(regionContents({r0:3, c0:7, r1:8, c1:10}).ics.length === 0, 'one hole short and it does not');
 
 console.log('-- regions: duplicate --');
@@ -619,7 +619,7 @@ S = demoProject(); computeNets();
 const rtShort = S.parts.find(p => p.ref === 'R3');       // [10,6] -> [12,6], two holes tall
 ok(rotatePart(rtShort, 1).ok, 'a quarter turn clockwise succeeds');
 ok(String(rtShort.pins[0]) === '10,6', 'leg one is the pivot and does not move');
-ok(String(rtShort.pins[1]) === '10,4', 'the far leg swung a quarter turn round onto row 10');
+ok(String(rtShort.pins[1]) === '10,4', 'the far leg swung a quarter turn around onto row 10');
 
 /* R1 runs eight holes down column 4, so clockwise puts its far leg at column
    -4. The refusal is the whole point: a turn is not free just because there is
@@ -808,7 +808,7 @@ ok(noteFor('C3') === 'NP / bipolar', 'flagged NP, the parts list asks for an NP 
 ok(bom().filter(r => r.refs.indexOf('C3') >= 0 || r.refs.indexOf('C4') >= 0).length === 2,
    'and it splits off its own BOM line - an NP can is a different drawer trip');
 ok(npWalk().indexOf('C3 (10u): C9 to B2') >= 0, 'the walkthrough stops naming legs C3 does not have');
-ok(npWalk().indexOf('either way round') >= 0, 'and says it goes in either way round');
+ok(npWalk().indexOf('either way around') >= 0, 'and says it goes in either way around');
 ok(npWalk().indexOf('C4 (10u): + leg into') >= 0, 'while C4, still polarised, keeps its legs named');
 
 npCap.polarized = true; computeNets();
@@ -1263,7 +1263,7 @@ ok(IC_LIB.TLC556.volts.min === 2 && IC_LIB.NE556.volts.min === 4.5,
   /* Settled Sept 8 2026 from TI SCHS030D: pin 1 is the clock, pin 2 is
      reset - the disagreement that kept the chip out was resolved by reading
      the terminal assignment rather than by remembering it. Her Grub Divider
-     layout was drawn that way round all along. */
+     layout was drawn that way around all along. */
   const d = IC_LIB.CD4024;
   ok(d && d.pins === 14 && d.roles[7] === 'gnd' && d.roles[14] === 'vdd', 'CD4024: DIP-14, VSS 7, VDD 14');
   ok(d.roles[1] === 'in' && d.pinInfo[1].n === 'CLK' && d.roles[2] === 'in' && d.pinInfo[2].n === 'RESET',
@@ -1908,7 +1908,7 @@ let rt = overlayImageAt(T, fwd[0], fwd[1]);
 ok(nearPt(rt, 137, 219, 1e-6), 'an arbitrary pixel survives the round trip');
 
 console.log('-- overlay: a turned photo is a turned photo --');
-/* the photo was shot a quarter turn round: going right across the picture
+/* the photo was shot a quarter turn around: going right across the picture
    goes DOWN the board */
 let ROT = overlayFrom([0,0], [0,0], [400,0], [10,0]);
 ok(!ROT.why, 'a quarter-turned picture fits');

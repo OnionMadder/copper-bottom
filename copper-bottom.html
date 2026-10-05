@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.5';
+const APP_VERSION = 'v1.7.6';
 
 const K = (r,c) => r + ',' + c;
 
@@ -3823,12 +3823,12 @@ function explainHole(r, c){
     if(oc.type === 'ic'){
       const def = IC_LIB[oc.ic.part] || {};
       /* Said once per chip rather than on all sixteen pins. Pin 1 is where you
-         look to work out which way round the chip goes, so it is where the
+         look to work out which way around the chip goes, so it is where the
          description belongs; the decoupling note belongs on the supply pins,
          which is where the cap actually lands. */
       /* `about` is what the part is for, `note` is how it works. Both are
          about the whole chip rather than this pin, so both are said once, on
-         pin 1 - the pin you look at anyway to work out which way round it goes.
+         pin 1 - the pin you look at anyway to work out which way around it goes.
          Repeating them on all sixteen pins buried the line that was actually
          about the pin under the cursor. */
       if(oc.pin === 1){
@@ -3987,12 +3987,12 @@ const WALK_NOTES = {
   xfmrct:'Six clicks, primary first: P1, the primary center tap, P2, then S1, the secondary center tap, S2. A diode ring modulator needs both taps.',
   xfmrsp:'Seven clicks: P1, the primary center tap, P2, then the two secondaries walking down the pin row - start of A, start of B, finish of A, finish of B. A and B do not touch inside the part. Series them for the full ratio, parallel them for half the turns.',
   /* The regulator had no note at all until Sept 2026, which is backwards: it
-     is the part where getting the legs round the wrong way does visible
+     is the part where getting the legs around the wrong way does visible
      damage. Kellye fitted a 78L05 backwards on the first rack module she
      built - no sound, and the regulator hot enough to notice. The note is
      written to be true of BOTH packages, because a 78L05 and a 7805 carry
      their legs in opposite order and knowing that is the whole lesson. */
-  reg:   'The clicks go in leg order, so watch the letters the panel puts on them. A regulator does not tell you which way round it is: check the letters against your own part, not against another regulator - a TO-92 78L05 is OUT GND IN and a TO-220 7805 is IN GND OUT, and backwards they get hot.',
+  reg:   'The clicks go in leg order, so watch the letters the panel puts on them. A regulator does not tell you which way around it is: check the letters against your own part, not against another regulator - a TO-92 78L05 is OUT GND IN and a TO-220 7805 is IN GND OUT, and backwards they get hot.',
   res:   null, cap: null, trim: null,
 };
 
@@ -4972,7 +4972,7 @@ function checkNetlist(text){
   }
   /* One finding per set of declared names, not one per strip.
 
-     A part fitted the wrong way round puts each of its legs on the other leg's
+     A part fitted the wrong way around puts each of its legs on the other leg's
      strip, so the same pair of names collides twice. Reported per strip that
      reads as a stutter, and worse, it buries the useful part: both sightings
      name the same component, which is what tells you the part is reversed
@@ -5916,7 +5916,7 @@ function breadboardText(planArg){
            flyNote(p, row.targets), bentNote(p)]);
       else if(p.kind === 'ecap')
         step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') + ': ' + h.join(' to ') + '.',
-          [once('npcap', 'An NP or bipolar can has no plus leg and no stripe. It goes in either way round, which is the whole reason to use one where the signal swings both ways.'),
+          [once('npcap', 'An NP or bipolar can has no plus leg and no stripe. It goes in either way around, which is the whole reason to use one where the signal swings both ways.'),
            flyNote(p, row.targets), bentNote(p)]);
       else
         step(head + ' ' + p.ref + (val(p) ? ' (' + val(p) + ')' : '') + ': ' + h.join(' to ') + '.',
@@ -10573,7 +10573,7 @@ function renderCtx(){
         o.push('<label>POLARITY</label>');
         o.push('<label class="chk"><input type="checkbox" id="edNP"' +
                (p.polarized === false ? ' checked' : '') + '> non-polarized (NP / bipolar)</label>');
-        o.push('<div class="hint">a bipolar can has no plus leg and no stripe, so it goes in either way round - which is what you want wherever the signal swings both ways, like a coupling cap between two stages. tick it and the board stops drawing a +, the walkthrough stops naming legs, and the parts list asks for an NP part, because it is a different drawer trip.</div>');
+        o.push('<div class="hint">a bipolar can has no plus leg and no stripe, so it goes in either way around - which is what you want wherever the signal swings both ways, like a coupling cap between two stages. tick it and the board stops drawing a +, the walkthrough stops naming legs, and the parts list asks for an NP part, because it is a different drawer trip.</div>');
       }
     }else if(pd){
       o.push('<label>PAD LABEL</label><input id="edPadLabel" value="' + esc(pd.label) + '">');

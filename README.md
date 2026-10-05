@@ -329,7 +329,7 @@ It reports two kinds of disagreement, which are the two ways a layout goes wrong
   it lists which members ended up in which piece
 - **declared apart, actually together** - two of your nets that ended up sharing copper.
   Reported once per pair of names, however many strips it happens on: a part fitted the wrong
-  way round collides on two strips at once, and both sightings naming the same component is
+  way around collides on two strips at once, and both sightings naming the same component is
   the clue that the part is reversed rather than the wiring wrong
 
 Anything on the board the netlist never mentions is listed but not flagged; you are often
