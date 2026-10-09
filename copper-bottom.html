@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.6';
+const APP_VERSION = 'v1.7.7';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1699,6 +1699,25 @@ const PINS_CD4094 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD4015B, read off TI SCHS025D (Oct 2003), terminal diagram. Two four-stage
+   registers in one package, each with its own CLOCK, DATA and RESET. The
+   outputs are NOT in order along either side: Q4B is pin 2, then Q3A, Q2A,
+   Q1A down to pin 5; Q4A is pin 10, then Q3B, Q2B, Q1B up to pin 13. RESET is
+   active HIGH - tie it to VSS to let the register run. The Grassi's chip. */
+const q4015 = (s, n) => ({n:'Q' + n + s, d:'register ' + s + ', stage ' + n + ' - the bit read at DATA ' + s + ' ' + ['one','two','three','four'][n - 1] + ' clock' + (n > 1 ? 's' : '') + ' ago'});
+const PINS_CD4015 = {
+  1:{n:'CLOCK B', d:'register B shifts one place on each rising edge'},
+  2:q4015('B', 4), 3:q4015('A', 3), 4:q4015('A', 2), 5:q4015('A', 1),
+  6:{n:'RESET A', d:'high clears register A; tie it to VSS to let it run'},
+  7:{n:'DATA A', d:'register A reads one bit here on each rising CLOCK A edge'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  9:{n:'CLOCK A', d:'register A shifts one place on each rising edge'},
+  10:q4015('A', 4), 11:q4015('B', 3), 12:q4015('B', 2), 13:q4015('B', 1),
+  14:{n:'RESET B', d:'high clears register B; tie it to VSS to let it run'},
+  15:{n:'DATA B', d:'register B reads one bit here on each rising CLOCK B edge'},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -2101,6 +2120,9 @@ const IC_LIB = {
   CD4094 :{pins:16, about:"an eight-bit shift register with a latch on every output. Clock a bit in at DATA and it walks along Q1 to Q8 - feed one of those back into DATA through an XOR and it is a Rungler", name:'8-stage shift-and-store register', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4094,
     roles:{1:'in',2:'in',3:'in',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'out',11:'out',12:'out',13:'out',14:'out',15:'in',16:'vdd'}},
+  CD4015 :{pins:16, about:"two four-bit shift registers, each with its own clock and data in. Clock a bit in at DATA and it walks along Q1 to Q4 - the Grassi's chip", name:'dual 4-stage shift register', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4015,
+    roles:{1:'in',2:'out',3:'out',4:'out',5:'out',6:'in',7:'in',8:'gnd',
+           9:'in',10:'out',11:'out',12:'out',13:'out',14:'in',15:'in',16:'vdd'}},
 
   /* ---- timers ---- */
   /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties

@@ -1358,6 +1358,21 @@ ok(IC_LIB.LM13700.roles[2] === 'opt' && IC_LIB.LM13700.roles[15] === 'opt',
 ok(IC_LIB.PT2399.roles[7] === 'opt' && IC_LIB.PT2399.roles[8] === 'opt',
    'so are the PT2399 clock-cap pins, which its own comment says to leave open');
 
+console.log("-- CD4015: the Grassi's dual shift register, read off TI SCHS025D --");
+ok(!!IC_LIB.CD4015 && IC_LIB.CD4015.pins === 16, 'CD4015 is in the library, 16 pins');
+ok(IC_LIB.CD4015.roles[8] === 'gnd' && IC_LIB.CD4015.roles[16] === 'vdd', 'rails on 8 and 16');
+ok(IC_LIB.CD4015.pinInfo[1].n === 'CLOCK B' && IC_LIB.CD4015.pinInfo[9].n === 'CLOCK A' &&
+   IC_LIB.CD4015.pinInfo[7].n === 'DATA A' && IC_LIB.CD4015.pinInfo[15].n === 'DATA B',
+   'clocks on 1 (B) and 9 (A), data on 7 (A) and 15 (B)');
+ok(IC_LIB.CD4015.pinInfo[2].n === 'Q4B' && IC_LIB.CD4015.pinInfo[5].n === 'Q1A' &&
+   IC_LIB.CD4015.pinInfo[10].n === 'Q4A' && IC_LIB.CD4015.pinInfo[13].n === 'Q1B',
+   'the outputs are out of order: Q4B on 2, Q1A on 5, Q4A on 10, Q1B on 13');
+ok([1,6,7,9,14,15].every(n => IC_LIB.CD4015.roles[n] === 'in') &&
+   [2,3,4,5,10,11,12,13].every(n => IC_LIB.CD4015.roles[n] === 'out'),
+   'six inputs (two clocks, two data, two resets) and eight outputs');
+ok(/RESET/.test(IC_LIB.CD4015.pinInfo[6].n) && /VSS/.test(IC_LIB.CD4015.pinInfo[6].d),
+   'reset A says to tie it to VSS: it is active high');
+
 console.log('-- CD4094: the shift register a Rungler is built on --');
 ok(!!IC_LIB.CD4094 && IC_LIB.CD4094.pins === 16, 'CD4094 is in the library, 16 pins');
 ok(IC_LIB.CD4094.roles[8] === 'gnd' && IC_LIB.CD4094.roles[16] === 'vdd', 'rails on 8 and 16');
