@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.7';
+const APP_VERSION = 'v1.7.8';
 
 const K = (r,c) => r + ',' + c;
 
@@ -2091,7 +2091,12 @@ const IC_LIB = {
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
   CD4017 :{pins:16, about:"counts 0 to 9 with one output high at a time. The basis of nearly every simple step sequencer", name:'decade counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4017,
-    roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in'}},
+    /* the ten count outputs and CARRY are outputs: without the role, a 4017
+       counting short (Q8 wired to its own RESET, the datasheet's way to loop at
+       eight) read as a pin-short, because the DRC could not see one output
+       driving an input. Found on the Spider Sequencer, 9 Oct 2026. */
+    roles:{8:'gnd',16:'vdd',13:'in',14:'in',15:'in',
+           1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',9:'out',10:'out',11:'out',12:'out'}},
   CD4024 :{pins:14, about:"seven flip-flops in a chain. Feed it a square wave and Q1 to Q7 are one to seven octaves down, on the pins the datasheet puts them - 8, 10 and 13 are empty", name:'7-stage binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4024,
     /* 8, 10, 13 are NC on the package, so they get the nc role and the orphan
        rule leaves them alone rather than flagging three correct empties */

@@ -1543,6 +1543,24 @@ ok(nm('CD4017', 14) === 'CLK' && nm('CD4017', 15) === 'RESET' && nm('CD4017', 13
    'clock 14, reset 15, inhibit 13');
 let seen4017 = [1,2,3,4,5,6,7,9,10,11].map(n => nm('CD4017', n)).sort();
 ok(new Set(seen4017).size === 10, 'all ten outputs are present exactly once');
+ok([1,2,3,4,5,6,7,9,10,11,12].every(n => IC_LIB.CD4017.roles[n] === 'out'),
+   'the ten count outputs and CARRY are outputs, so the DRC idioms can see them');
+/* The Spider Sequencer, 9 Oct 2026: Q8 tied to its own RESET is how a 4017
+   loops at eight, straight off the datasheet, and it read as a pin-short
+   because the outputs had no role. One output driving an input is wiring. */
+const counter = (a, b) => {
+  const c = [2,3,4,5,6,7,8,9].map(r => K(r,8));
+  S = {version:2, name:'4017', board:{rows:12, cols:14}, cuts:c.slice(),
+       parts:[{id:'zcl', kind:'link', ref:'JA', pins:[a, b]}],
+       ics:[{id:'zci', ref:'IC1', part:'CD4017', pins:16, pin1:[2,7], span:3, autoCuts:c.slice()}],
+       pads:[{id:'zc1', label:'+9V', at:[2,13]}, {id:'zc2', label:'GND', at:[9,0]}]};
+  computeNets(); return runDRC();
+};
+ok(!has(counter([3,9], [9,9]), 'pin-short'),
+   'Q8 (pin 9) on RESET (pin 15), a link under the body, is clean');
+ok(has(counter([8,9], [9,9]), 'pin-short'),
+   'two OUTPUTS on one net (Q4 on pin 10 with Q8 on pin 9) still trips: they would fight');
+S = demoProject(); computeNets();
 
 console.log('-- counters: the 4040 says what each output divides by --');
 ok(nm('CD4040', 9) === 'Q1' && IC_LIB.CD4040.pinInfo[9].d.indexOf('divided by 2') >= 0,
