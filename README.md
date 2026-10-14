@@ -685,7 +685,7 @@ without any migration:
 
 ## License
 
-Copyright © 2026 Kellye Strickland. Released under the
+Copyright © 2026 Kellye Sundar. Released under the
 [GNU General Public License v3.0](LICENSE).
 
 Use it, study it, change it, share it. The one condition is that anything you build on
