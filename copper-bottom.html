@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.8';
+const APP_VERSION = 'v1.7.9';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1496,6 +1496,14 @@ const PINS_GATE_QUAD2 = {
   11:gOut(4,12,13), 12:gIn(4,'A',13,11), 13:gIn(4,'B',12,11),
   14:{n:'VDD', d:'the positive supply'},
 };
+const PINS_GATE_QUAD2_74 = {
+  1:gIn(1,'A',2,3), 2:gIn(1,'B',1,3), 3:gOut(1,1,2),
+  4:gIn(2,'A',5,6), 5:gIn(2,'B',4,6), 6:gOut(2,4,5),
+  7:{n:'GND', d:'ground'},
+  8:gOut(3,9,10),    9:gIn(3,'A',10,8), 10:gIn(3,'B',9,8),
+  11:gOut(4,12,13), 12:gIn(4,'A',13,11), 13:gIn(4,'B',12,11),
+  14:{n:'VCC', d:'the positive supply, 5V'},
+};
 const PINS_BUF_HEX = {
   1:{n:'VDD', d:'the positive supply - note it is pin 1 here, not the usual top corner'},
   2:{n:'1Y'}, 3:{n:'1A'}, 4:{n:'2Y'}, 5:{n:'2A'}, 6:{n:'3Y'}, 7:{n:'3A'},
@@ -1805,6 +1813,12 @@ const OPAMP_QUAD   = {1:'out',2:'in',3:'in',4:'vdd',5:'in',6:'in',7:'out',
                       8:'out',9:'in',10:'in',11:'vee',12:'in',13:'in',14:'out'};
 const GATE_QUAD2   = {1:'in',2:'in',3:'out',4:'out',5:'in',6:'in',7:'gnd',
                       8:'in',9:'in',10:'out',11:'out',12:'in',13:'in',14:'vdd'};
+/* The 74-series quad 2-input gate (7400, 7486 and their HC/HCT kin): gate 2's
+   inputs are 4 and 5 and its output 6, and gate 3's output is 8. A CD4070 has
+   outputs on 4 and 10 instead, so the two families can never share a table -
+   swapping them would call an output an input on four pins. TI SCLS100F. */
+const GATE_QUAD2_74 = {1:'in',2:'in',3:'out',4:'in',5:'in',6:'out',7:'gnd',
+                      8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'};
 const INV_HEX      = {1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',
                       8:'out',9:'in',10:'out',11:'in',12:'out',13:'in',14:'vdd'};
 const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gnd',
@@ -1828,6 +1842,10 @@ const V_TL0XX   = {min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across bo
 const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
 const V_TLC227X = {min:4.4, max:16, note:'single rail 4.4-16V, and the output reaches both rails'};
 const V_TLV237X = {min:2.7, max:16, note:'single rail 2.7-16V, rail to rail in and out'};
+/* 74HC: TI SCLS100F, recommended 2-6V, 7V absolute. 74HCT: Diodes DS35335 Rev 3,
+   4.5-5.5V, 7V absolute. Either one on a 9V rail is past its absolute maximum. */
+const V_74HC  = {min:2,   max:6,   note:'2-6V, with 7V the absolute maximum - a 9V pedal needs a 5V regulator for it'};
+const V_74HCT = {min:4.5, max:5.5, note:'4.5-5.5V, with 7V the absolute maximum - a 9V pedal needs a 5V regulator for it'};
 
 /* Two-lead parts that come in visibly different bodies.
 
@@ -2087,6 +2105,12 @@ const IC_LIB = {
   CD4070 :{pins:14, name:'quad XOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4077 :{pins:14, name:'quad XNOR',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
+  /* ---- 74-series high-speed CMOS: 5V parts, fast enough for a crystal clock ---- */
+  '74HC86' :{pins:14, about:"four XOR gates in the fast 74HC family. Feed two crystal oscillators into one gate and the average of its output is the difference between them - a beat you can hear. A CD4070 is far too slow for that", name:'quad XOR (74HC)', cmos:true, volts:V_74HC, roles:GATE_QUAD2_74, pinInfo:PINS_GATE_QUAD2_74,
+    note:'The 74-series pinout, not the CD4070 one: gate 2 is pins 4, 5 in and 6 out, gate 3 is 9, 10 in and 8 out.'},
+  '74HCT86':{pins:14, about:"four XOR gates in the 74HCT family - the same pins as a 74HC86, with TTL input levels and a strict 5V supply. Fast enough to mix two crystal oscillators into a beat", name:'quad XOR (74HCT)', cmos:true, volts:V_74HCT, roles:GATE_QUAD2_74, pinInfo:PINS_GATE_QUAD2_74,
+    note:'The 74-series pinout, not the CD4070 one: gate 2 is pins 4, 5 in and 6 out, gate 3 is 9, 10 in and 8 out.'},
+
   CD4013 :{pins:14, about:"two flip-flops. Wire D back to /Q and each one halves the clock, which is how you get sub-octaves", name:'dual D flip-flop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4013,
     roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',
            8:'in',9:'in',10:'in',11:'in',12:'out',13:'out',14:'vdd'}},
@@ -2221,6 +2245,27 @@ const IC_LIB = {
     roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'opt',8:'opt',
            9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
 
+  /* A half-size crystal oscillator can: an 8-pin DIP outline with only the
+     four corner legs, 1, 4, 5 and 8, on a 0.3in square. Abracon ACH series
+     (rev 11.15.2016): pin 1 tri-state or NC, "1" or open oscillates; 4
+     ground and case; 5 output; 8 Vdd; body 12.7mm square at most, which is
+     one hole past the legs on every side. Four legs, so the file numbers them
+     1-4 inside and PRINTS the can's own numbers everywhere a person reads one.
+     No `volts`: 5V and 3.3V cans look alike, and saying nothing is honest.
+     Pins 1 and 8 share a strip the way it drops, which holds the enable
+     high - the datasheet's "1" - so the pair is a declared tie; 4 and 5
+     share one too, and that strip gets its own cut. */
+  'OSC-HALF':{pins:4, name:'half-size crystal oscillator can', cmos:false,
+    about:"a crystal and its oscillator sealed in one square metal can, 12.7mm across. Power it and pin 5 puts out a square wave at the frequency printed on top. The dot or the one square corner is pin 1. Most are 5V parts; check yours",
+    pinNumbers:[1, 4, 5, 8], span:3,
+    pinMap:[[0,0],[3,0],[3,3],[0,3]],
+    bodyPad:1, cuts:[[3,1]],
+    roles:{1:'opt', 2:'gnd', 3:'out', 4:'vdd'},
+    ties:[[1,4]],
+    pinInfo:{1:{n:'E/D', d:'pin 1: enable on most cans, not connected on the rest - left open or held high it runs; low it stops. Here it rides the strip with pin 8'},
+             2:{n:'GND', d:'pin 4: ground, and the metal case'},
+             3:{n:'OUT', d:'pin 5: the output, a square wave at the frequency printed on the can'},
+             4:{n:'VDD', d:'pin 8: the supply - 5V on most cans'}}},
   'DIP-8' :{pins:8,  name:'generic 8-pin',  cmos:false, roles:{}},
   'DIP-14':{pins:14, name:'generic 14-pin', cmos:false, roles:{}},
   'DIP-16':{pins:16, name:'generic 16-pin', cmos:false, roles:{}},
@@ -2336,7 +2381,31 @@ function hasFootprint(ic){ return !!(ic && ic.pinMap && ic.pinMap.length === ic.
    a module's pads carry the names its silkscreen does. */
 function icPinName(ic, i){
   const def = IC_LIB[ic.part];
-  return (def && def.padNames && def.padNames[i - 1]) || String(i);
+  return (def && def.padNames && def.padNames[i - 1]) || String(icPinNo(ic, i));
+}
+/* The number a pin is printed as. A part with fewer legs than its package has
+   places for (the oscillator can: legs 1, 4, 5, 8) is numbered 1..n inside the
+   file, but a person reading OSC1.3 would look for a pin 3 that is not there -
+   so every netlist, label and listing goes through this. */
+function icPinNo(ic, i){
+  const def = IC_LIB[ic.part];
+  return (def && def.pinNumbers && def.pinNumbers[i - 1]) || i;
+}
+/* How far a chip's body reaches past its outermost legs, in holes, when the
+   library knows (a 12.7mm can over a 0.3in leg square: one hole). Zero means
+   the drawings keep their usual DIP margins. One number for the collision
+   box and every drawing, so a body is never tested at a size it is not drawn. */
+function icBodyPad(ic){
+  return +((IC_LIB[ic.part] || {}).bodyPad) || 0;
+}
+/* Cuts a library footprint brings with it, as hole keys - only while the part
+   still wears the library's own shape; a reshaped one manages its own cuts. */
+function libCutKeys(ic){
+  const def = IC_LIB[ic.part] || {};
+  if(noCuts() || !Array.isArray(def.cuts) || !hasFootprint(ic) || !Array.isArray(def.pinMap)) return [];
+  const same = def.pinMap.length === ic.pinMap.length &&
+    def.pinMap.every((d, i) => d[0] === ic.pinMap[i][0] && d[1] === ic.pinMap[i][1]);
+  return same ? def.cuts.map(o => K(ic.pin1[0] + o[0], ic.pin1[1] + o[1])) : [];
 }
 
 /* What a chip is called where a person reads it: a saved user module wears
@@ -2424,7 +2493,11 @@ function resetFootprint(ic){
 function refreshAutoCuts(ic){
   const had = new Set(ic.autoCuts || []);
   S.cuts = S.cuts.filter(k => !had.has(k));
-  if(hasFootprint(ic)){ ic.autoCuts = []; return ic.autoCuts; }
+  if(hasFootprint(ic)){
+    ic.autoCuts = libCutKeys(ic).filter(k => S.cuts.indexOf(k) < 0);
+    S.cuts = S.cuts.concat(ic.autoCuts);
+    return ic.autoCuts;
+  }
   ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins, icCutOff(ic), icCutSkip(ic))
                   .filter(k => S.cuts.indexOf(k) < 0);
   S.cuts = S.cuts.concat(ic.autoCuts);
@@ -2883,7 +2956,7 @@ function connections(){
   }
   for(const ic of S.ics)
     for(let i = 1; i <= ic.pins; i++)
-      list.push({label:ic.ref + '.' + i, at:pinPos(ic, i), kind:'pin', ic:ic, pin:i,
+      list.push({label:ic.ref + '.' + icPinNo(ic, i), at:pinPos(ic, i), kind:'pin', ic:ic, pin:i,
                  role:(IC_LIB[ic.part] && IC_LIB[ic.part].roles[i]) || ''});
   for(const d of S.pads) list.push({label:d.label, at:d.at, kind:'pad', pad:d});
   return list;
@@ -2971,7 +3044,7 @@ function runDRC(){
     });
   }
   for(const ic of S.ics)
-    for(let i = 1; i <= ic.pins; i++) sites.push({who:ic.ref + ' pin ' + i, at:pinPos(ic, i)});
+    for(let i = 1; i <= ic.pins; i++) sites.push({who:ic.ref + ' pin ' + icPinNo(ic, i), at:pinPos(ic, i)});
   for(const d of S.pads) sites.push({who:'pad ' + d.label, at:d.at});
 
   for(const s of sites){
@@ -3060,7 +3133,7 @@ function runDRC(){
       }
       }
       add('error', 'pin-short',
-          ic.ref + ' pins ' + pins.join(', ') + ' are all on one net',
+          ic.ref + ' pins ' + pins.map(n => icPinNo(ic, n)).join(', ') + ' are all on one net',
           pinPos(ic, pins[0]), id);
     }
   }
@@ -3296,7 +3369,7 @@ function runDRC(){
       if(others.length === 0){
         floatingNets.add(net.id);
         add('warn', 'floating',
-            ic.ref + ' pin ' + i + ' is a CMOS input connected to nothing - tie it to a rail',
+            ic.ref + ' pin ' + icPinNo(ic, i) + ' is a CMOS input connected to nothing - tie it to a rail',
             p, net.id);
       }
     }
@@ -3774,7 +3847,7 @@ function pinInfoOf(ic, pin){
 /* "IC1 pin 3 (OUT)" - the shortest phrase that is still unambiguous */
 function pinPhrase(ic, pin){
   const info = pinInfoOf(ic, pin);
-  return ic.ref + ' pin ' + pin + (info ? ' (' + info.n + ')' : '');
+  return ic.ref + ' pin ' + icPinNo(ic, pin) + (info ? ' (' + info.n + ')' : '');
 }
 
 function explainCut(r, c){
@@ -3795,7 +3868,7 @@ function explainNet(net, self){
      the line above already said what this pin is, and a panel that repeats
      itself reads as though it has nothing to add. */
   const here = new Set(self || []);
-  const other = q => !here.has(q.ic.ref + '.' + q.pin);
+  const other = q => !here.has(q.ic.ref + '.' + icPinNo(q.ic, q.pin));
   const pads = padsOnNet(net);
   const pins = pinsOnNet(net);
   const legs = connections().filter(x => x.kind === 'lead' &&
@@ -3869,11 +3942,11 @@ function explainHole(r, c){
       }
       const info = pinInfoOf(oc.ic, oc.pin);
       if(info)
-        lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is ' + info.n +
+        lines.push(oc.ic.ref + ' pin ' + icPinNo(oc.ic, oc.pin) + ' is ' + info.n +
                    (info.d ? ' - ' + info.d : '') + '.');
       else {
         const role = pinRoleOf(oc.ic, oc.pin);
-        if(role) lines.push(oc.ic.ref + ' pin ' + oc.pin + ' is an ' + role + ' pin.');
+        if(role) lines.push(oc.ic.ref + ' pin ' + icPinNo(oc.ic, oc.pin) + ' is an ' + role + ' pin.');
       }
     }
     if(oc.type === 'pad' && oc.pad.to)
@@ -3890,7 +3963,7 @@ function explainHole(r, c){
   }
 
   const selfPins = occupants(r, c).filter(oc => oc.type === 'ic')
-        .map(oc => oc.ic.ref + '.' + oc.pin);
+        .map(oc => oc.ic.ref + '.' + icPinNo(oc.ic, oc.pin));
   const net = explainNet(NET.netAt(r, c), selfPins);
   if(net) lines.push(net);
 
@@ -3957,7 +4030,7 @@ function bom(){
   }
   for(const ic of S.ics){
     const r = add('ic', (IC_LIB[ic.part] && IC_LIB[ic.part].module) || ic.alias ? 'module' : 'IC',
-                  icShown(ic), ic.pins + '-pin DIP');
+                  icShown(ic), (IC_LIB[ic.part] || {}).pinNumbers ? ic.pins + '-leg can' : ic.pins + '-pin DIP');
     r.qty++; r.refs.push(ic.ref);
   }
   /* Off the board: grouped by the id the pads share, so a pot is one part
@@ -4075,7 +4148,9 @@ function walkthrough(){
     const half = ic.pins / 2;
     step('U - chip ' + ic.ref + '. PART ' + icShown(ic) + (ic.alias ? ' (DIP-N)' : '') +
          ', SPAN ' + ic.span + '. Click ' + at(ic.pin1) + '.',
-      [def.padNames ? 'A module, wired by its pads. In pin order: ' + def.padNames.join(', ') + '.' : null,
+      [def.padNames ? 'A module, wired by its pads. In pin order: ' + def.padNames.join(', ') + '.' :
+       def.pinNumbers ? 'It has legs only at pins ' + def.pinNumbers.join(', ') +
+         ' of its package, and those are the numbers used everywhere here.' : null,
        hasFootprint(ic)
          ? 'This one wears a custom footprint - pin 1 goes at ' + at(ic.pin1) +
            ', then check every pin against the component-side drawing rather than assuming two straight rows.'
@@ -4217,7 +4292,7 @@ function netName(net){
 function netMembers(net){
   const out = [];
   for(const d of padsOnNet(net)) out.push('@' + d.label);
-  for(const q of pinsOnNet(net)) out.push(q.ic.ref + '.' + q.pin);
+  for(const q of pinsOnNet(net)) out.push(q.ic.ref + '.' + icPinNo(q.ic, q.pin));
   for(const c of connections()){
     if(c.kind !== 'lead') continue;
     const n = NET.netAt(c.at[0], c.at[1]);
@@ -4744,7 +4819,11 @@ function lineEdit(axis, at, delta){
 
   S.cuts = cuts.map(p => K(p[0], p[1]));
   for(const ic of S.ics){
-    if(hasFootprint(ic)){ ic.autoCuts = []; continue; }
+    if(hasFootprint(ic)){
+      ic.autoCuts = libCutKeys(ic).filter(k => S.cuts.indexOf(k) < 0);
+      S.cuts = S.cuts.concat(ic.autoCuts);
+      continue;
+    }
     ic.autoCuts = icCutKeys(ic.pin1, ic.span, ic.pins, icCutOff(ic), icCutSkip(ic))
                     .filter(k => S.cuts.indexOf(k) < 0);
     S.cuts = S.cuts.concat(ic.autoCuts);
@@ -4916,6 +4995,9 @@ function resolveMember(token){
   const ic = S.ics.find(x => (x.ref || '').toUpperCase() === ref.toUpperCase());
   if(ic){
     let num = +leg;
+    /* a part numbered by its printed pins answers to those: OSC1.5, never OSC1.3 */
+    const pnums = (IC_LIB[ic.part] || {}).pinNumbers;
+    if(pnums && num){ const j = pnums.indexOf(num); num = j >= 0 ? j + 1 : -1; }
     /* a module's pads answer to their names - IC1.VCC, IC1.OUT1 */
     if(!num){
       const pn = (IC_LIB[ic.part] || {}).padNames;
@@ -4923,6 +5005,7 @@ function resolveMember(token){
     }
     if(!num || num < 1 || num > ic.pins)
       return {ok:false, why:ic.ref + ' has no pin ' + leg +
+              (pnums ? ' (its legs are ' + pnums.join('/') + ')' : '') +
               ((IC_LIB[ic.part] || {}).padNames ? ' (its pads are ' + IC_LIB[ic.part].padNames.join('/') + ')' : '')};
     return {ok:true, at:pinPos(ic, num)};
   }
@@ -5207,7 +5290,8 @@ function bodies(){
     const ex = icExtent(ic);
     out.push({shape:'box', ref:ic.ref, kind:'ic', ic:ic, ang:0, pinned:true,
       cx:(ex.c0 + ex.c1) / 2, cy:(ex.r0 + ex.r1) / 2,
-      len:(ex.c1 - ex.c0) + 0.7, wid:(ex.r1 - ex.r0) + 0.5, mold:icMoldBody(ic)});
+      len:(ex.c1 - ex.c0) + (icBodyPad(ic) ? 2 * icBodyPad(ic) : 0.7),
+      wid:(ex.r1 - ex.r0) + (icBodyPad(ic) ? 2 * icBodyPad(ic) : 0.5), mold:icMoldBody(ic)});
   }
   return out;
 }
@@ -5591,8 +5675,8 @@ function bbAttempt(cols, rails){
       if(nid === null) continue;                 // a pin on a cut hole is a DRC error upstream
       bbClaimCol(st, bank, col, nid);
       const row = bank === 0 ? 'E' : 'F';
-      st.use[bank][col].rows[row] = ic.ref + '.' + pin;
-      st.landings.push({label:ic.ref + '.' + pin, at:{bank:bank, row:row, col:col}});
+      st.use[bank][col].rows[row] = ic.ref + '.' + icPinNo(ic, pin);
+      st.landings.push({label:ic.ref + '.' + icPinNo(ic, pin), at:{bank:bank, row:row, col:col}});
       holes[pin] = row + col;
     }
     plan.ics.push({ic:ic, col:icCol, holes:holes});
@@ -7293,9 +7377,9 @@ function render(){
 
   /* --- ICs --- */
   for(const ic of S.ics){
-    const ex = icExtent(ic), custom = hasFootprint(ic);
-    const x0 = X(ex.c0) - 9, x1 = X(ex.c1) + 9;
-    const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
+    const ex = icExtent(ic), custom = hasFootprint(ic), bp = icBodyPad(ic) * PITCH;
+    const x0 = X(ex.c0) - (bp || 9), x1 = X(ex.c1) + (bp || 9);
+    const y0 = Y(ex.r0) - (bp || 12), y1 = Y(ex.r1) + (bp || 12);
     if(SEL && SEL.type === 'ic' && SEL.id === ic.id)
       o.push('<rect x="' + (x0-5) + '" y="' + (y0-5) + '" width="' + (x1-x0+10) + '" height="' + (y1-y0+10) +
              '" rx="8" fill="' + C('accent') + '" fill-opacity="0.16" stroke="' + C('accent') + '" stroke-width="1.6"/>');
@@ -7879,10 +7963,10 @@ function render(){
       o.push('<circle class="phit" data-pad="' + d.id + '" cx="' + X(d.at[1]) +
              '" cy="' + Y(d.at[0]) + '" r="' + (PITCH*0.4) + '" fill="transparent"/>');
     for(const ic of S.ics)
-      { const ex = icExtent(ic);
-        o.push('<rect class="phit" data-ic="' + ic.id + '" x="' + (X(ex.c0) - 9) +
-               '" y="' + (Y(ex.r0) - 12) + '" width="' + (X(ex.c1) - X(ex.c0) + 18) +
-               '" height="' + (Y(ex.r1) - Y(ex.r0) + 24) + '" fill="transparent"/>'); }
+      { const ex = icExtent(ic), bp = icBodyPad(ic) * PITCH;
+        o.push('<rect class="phit" data-ic="' + ic.id + '" x="' + (X(ex.c0) - (bp || 9)) +
+               '" y="' + (Y(ex.r0) - (bp || 12)) + '" width="' + (X(ex.c1) - X(ex.c0) + 2 * (bp || 9)) +
+               '" height="' + (Y(ex.r1) - Y(ex.r0) + 2 * (bp || 12)) + '" fill="transparent"/>'); }
   }
 
   /* --- alignment marks: each pick, and the pair it makes. Drawn last and
@@ -8026,8 +8110,9 @@ function renderSolderView(hl){
   for(const ic of S.ics){
     const ex = icExtent(ic);
     const xa = mX(ex.c0), xb = mX(ex.c1);
-    const x0 = Math.min(xa, xb) - 9, x1 = Math.max(xa, xb) + 9;
-    const y0 = Y(ex.r0) - 12, y1 = Y(ex.r1) + 12;
+    const bp = icBodyPad(ic) * PITCH;
+    const x0 = Math.min(xa, xb) - (bp || 9), x1 = Math.max(xa, xb) + (bp || 9);
+    const y0 = Y(ex.r0) - (bp || 12), y1 = Y(ex.r1) + (bp || 12);
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
            '" rx="4" fill="none" stroke="' + C('ghost') + '" stroke-width="1.2" stroke-dasharray="5 4"/>');
     const p1 = pinPos(ic, 1);
@@ -8088,7 +8173,7 @@ function renderNets(hl){
   const o = [];
   for(const net of NET.nets){
     const pads = padsOnNet(net).map(d => d.label);
-    const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + p.pin);
+    const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + icPinNo(p.ic, p.pin));
     const name = pads.length ? pads.join(' / ') : (pins.length ? pins.join(' ') : 'net ' + net.id);
     o.push('<div class="net' + (net.id === hl ? ' on' : '') + '" data-net="' + net.id +
            '" style="color:' + net.color + '"><span class="sw" style="background:' + net.color +
@@ -8140,7 +8225,7 @@ function renderReadout(){
     }
     if(net){
       const pads = padsOnNet(net).map(d => d.label);
-      const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + p.pin);
+      const pins = pinsOnNet(net).map(p => p.ic.ref + '.' + icPinNo(p.ic, p.pin));
       if(pads.length) o.push('<div class="row">pads: <b>' + esc(pads.join(', ')) + '</b></div>');
       if(pins.length) o.push('<div class="row">pins: <b>' + esc(pins.join(', ')) + '</b></div>');
     }
@@ -8794,8 +8879,9 @@ function exportSVG(side, fit){
   for(const ic of S.ics){
     const ex = icExtent(ic);
     const cL = x(ex.c0), cR = x(ex.c1);
-    const x0 = Math.min(cL, cR) - 0.9, x1 = Math.max(cL, cR) + 0.9;
-    const y0 = y(ex.r0) - 1.2, y1 = y(ex.r1) + 1.2;
+    const bp = icBodyPad(ic) * MM;
+    const x0 = Math.min(cL, cR) - (bp || 0.9), x1 = Math.max(cL, cR) + (bp || 0.9);
+    const y0 = y(ex.r0) - (bp || 1.2), y1 = y(ex.r1) + (bp || 1.2);
     /* On the component side the body is OPAQUE white, the way the real chip
        covers the strips - it used to be transparent, and everything under it
        printed straight through its name. Its own pin holes come back on top,
@@ -9507,11 +9593,13 @@ function classicSVG(opts){
   /* ---- chips ---- */
   for(const ic of S.ics){
     const ex = icExtent(ic);
-    const x0 = Math.min(x(ex.c0), x(ex.c1)) - 6, x1 = Math.max(x(ex.c0), x(ex.c1)) + 6;
-    const y0 = Math.min(y(ex.r0), y(ex.r1)) - 6, y1 = Math.max(y(ex.r0), y(ex.r1)) + 6;
+    const bp = icBodyPad(ic) * CP;
+    const x0 = Math.min(x(ex.c0), x(ex.c1)) - (bp || 6), x1 = Math.max(x(ex.c0), x(ex.c1)) + (bp || 6);
+    const y0 = Math.min(y(ex.r0), y(ex.r1)) - (bp || 6), y1 = Math.max(y(ex.r0), y(ex.r1)) + (bp || 6);
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) + '" height="' + (y1 - y0) +
            '" rx="3" fill="#F5F5F0" stroke="#333" stroke-width="1.6"/>');
-    o.push('<path d="M' + ((x0 + x1) / 2 - 5) + ' ' + y0 + 'a5 5 0 0 0 10 0" fill="#fff" stroke="#333" stroke-width="1.2"/>');
+    if(!hasFootprint(ic))
+      o.push('<path d="M' + ((x0 + x1) / 2 - 5) + ' ' + y0 + 'a5 5 0 0 0 10 0" fill="#fff" stroke="#333" stroke-width="1.2"/>');
     for(let i = 1; i <= ic.pins; i++){
       const q = pinPos(ic, i);
       o.push('<circle cx="' + x(q[1]) + '" cy="' + y(q[0]) + '" r="2.4" fill="#333"/>');
@@ -9753,8 +9841,9 @@ function classicSVG(opts){
     }
     for(const ic of S.ics){
       const ex = icExtent(ic);
-      const x0 = Math.min(xm(ex.c0), xm(ex.c1)) - 6, x1 = Math.max(xm(ex.c0), xm(ex.c1)) + 6;
-      const y0 = Math.min(yb(ex.r0), yb(ex.r1)) - 6, y1 = Math.max(yb(ex.r0), yb(ex.r1)) + 6;
+      const bp = icBodyPad(ic) * CP;
+      const x0 = Math.min(xm(ex.c0), xm(ex.c1)) - (bp || 6), x1 = Math.max(xm(ex.c0), xm(ex.c1)) + (bp || 6);
+      const y0 = Math.min(yb(ex.r0), yb(ex.r1)) - (bp || 6), y1 = Math.max(yb(ex.r0), yb(ex.r1)) + (bp || 6);
       o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1 - x0) + '" height="' + (y1 - y0) +
              '" rx="3" fill="none" stroke="#666" stroke-width="1.2" stroke-dasharray="5 4"/>');
       for(let i = 1; i <= ic.pins; i++){
@@ -11015,6 +11104,10 @@ function renderCtx(){
     const nd = IC_LIB[ic.part];
     if(!nd.custom) ic.pins = nd.pins;  // a fixed chip has a fixed count; a custom one keeps its own
     delete ic.pinMap;                 // a different chip is a different shape
+    if(Array.isArray(nd.pinMap) && nd.pinMap.length === ic.pins){   // ...and may bring its own
+      ic.pinMap = nd.pinMap.map(d => [d[0], d[1]]);
+      if(nd.span) ic.span = nd.span;
+    }
     refreshAutoCuts(ic);
   }));
 }
@@ -11195,8 +11288,10 @@ function onHole(r, c){
       if(r + Math.max.apply(null, rs) >= S.board.rows ||
          c + Math.max.apply(null, cs) >= S.board.cols){ flash('that part would run off the board'); return; }
       pushUndo();
-      S.ics.push({id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:[r,c],
-                  span:def.span || 1, autoCuts:[], pinMap:def.pinMap.map(d => [d[0], d[1]])});
+      const placed = {id:uid(), ref:nextIcRef(), part:IC_PART, pins:pinCount, pin1:[r,c],
+                      span:def.span || 1, autoCuts:[], pinMap:def.pinMap.map(d => [d[0], d[1]])};
+      S.ics.push(placed);
+      refreshAutoCuts(placed);   // a can's own cut, if the library gives it one
       commit(); return;
     }
     if(r + half - 1 >= S.board.rows || c + IC_SPAN >= S.board.cols){ flash('IC would run off the board'); return; }

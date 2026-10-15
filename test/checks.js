@@ -3523,6 +3523,71 @@ console.log('-- the schematic, derived from the board --');
   }
   ok(!crossed, 'no shunt crosses a body on its way to a rail' + (crossed ? ' (' + crossed + ')' : ''));
 }
+
+console.log('-- v1.7.9: the 74-series XOR, read off TI SCLS100F and Diodes DS35335 --');
+{
+  const want = {1:'in',2:'in',3:'out',4:'in',5:'in',6:'out',7:'gnd',
+                8:'out',9:'in',10:'in',11:'out',12:'in',13:'in',14:'vdd'};
+  for(const nm of ['74HC86', '74HCT86']){
+    const r = IC_LIB[nm].roles;
+    ok(Object.keys(r).length === 14 && Object.keys(want).every(k => r[k] === want[k]),
+       nm + ' carries the datasheet pinout: outputs 3, 6, 8, 11');
+    ok(IC_LIB[nm].cmos === true, nm + ' is CMOS, so a floating input on it is flagged');
+  }
+  ok(IC_LIB.CD4070.roles[4] === 'out' && IC_LIB['74HC86'].roles[4] === 'in' &&
+     IC_LIB.CD4070.roles[8] === 'in' && IC_LIB['74HC86'].roles[8] === 'out',
+     'and it is NOT the CD4070 table - pins 4 and 8 swap jobs between the two families');
+  ok(sev1(onRails('74HCT86', '+9V', 'GND')) === 'error', 'a 74HCT86 on a 9V rail is an error: 7V is its absolute maximum');
+  ok(sev1(onRails('74HCT86', '+5V', 'GND')) === 'none', 'on 5V it is happy');
+  ok(sev1(onRails('74HC86', '+9V', 'GND')) === 'error', 'a 74HC86 on 9V is an error too');
+  ok(sev1(onRails('74HC86', '+5V', 'GND')) === 'none', 'and fine on 5V');
+  ok(onRails('74HCT86', '+9V', 'GND')[0].msg.indexOf('regulator') >= 0, 'the finding says what to do about it');
+}
+
+console.log('-- v1.7.9: the half-size oscillator can, read off Abracon ACH --');
+{
+  const d = IC_LIB['OSC-HALF'];
+  const can = (withCut) => {
+    S = {name:'t', board:{rows:10, cols:10}, cuts:[], parts:[], pads:[],
+         ics:[{id:'x', ref:'X1', part:'OSC-HALF', pins:4, pin1:[2,2], span:3, autoCuts:[],
+               pinMap:d.pinMap.map(q => q.slice())}]};
+    if(withCut) refreshAutoCuts(S.ics[0]);
+    computeNets();
+    return S.ics[0];
+  };
+  let x = can(true);
+  ok([1, 2, 3, 4].map(i => pinPos(x, i).join(',')).join(' ') === '2,2 5,2 5,5 2,5',
+     'four legs on a 0.3in square, numbered 1, 4, 5, 8 going around');
+  ok([1, 2, 3, 4].map(i => icPinName(x, i)).join(' ') === '1 4 5 8',
+     'every leg is shown with the number printed on the can');
+  ok(x.autoCuts.length === 1 && x.autoCuts[0] === K(5, 3) && S.cuts.indexOf(K(5, 3)) >= 0,
+     'it brings its own cut, between ground (4) and the output (5)');
+  ok(shorts().length === 0, 'cut, it raises no pin-short - and pins 1 and 8 on one strip is a declared tie');
+  const members = netMembers(NET.netAt(5, 5));
+  ok(members.indexOf('X1.5') >= 0 && members.indexOf('X1.3') < 0,
+     'the netlist writes the output as X1.5 - never X1.3, a pin the can does not have');
+  ok(resolveMember('X1.5').ok && resolveMember('X1.5').at.join(',') === '5,5',
+     'and reads X1.5 back as the output leg');
+  ok(!resolveMember('X1.3').ok && resolveMember('X1.3').why.indexOf('1/4/5/8') >= 0,
+     'X1.3 is refused, naming the legs it does have');
+  const b = bodies().find(q => q.ref === 'X1');
+  ok(b && Math.abs(b.len - 5) < 1e-9 && Math.abs(b.wid - 5) < 1e-9,
+     'its body is the 12.7mm can - one hole past the legs every way');
+
+  x = can(false);
+  ok(shorts().some(f => f.msg === 'X1 pins 4, 5 are all on one net'),
+     'without the cut, ground and output share a strip, and the finding names them 4 and 5');
+
+  can(true);
+  S.parts.push({id:'r1', kind:'res', ref:'R1', value:'10K', pins:[[3,1],[3,0]]});
+  computeNets();
+  ok(clashes() > 0, 'a resistor standing in the hole beside a leg is under the can');
+  S.parts[0].pins = [[3,0],[1,0]];
+  S.parts[0].pins = [[0,0],[0,1]];
+  computeNets();
+  ok(clashes() === 0, 'two holes clear of the legs, it fits');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

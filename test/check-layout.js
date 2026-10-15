@@ -53,7 +53,7 @@ out.netTable = NET.nets.map(n => ({
   holes: n.holes.length,
   segs: n.segs.length,
   pads: padsOnNet(n).map(d => d.label),
-  pins: pinsOnNet(n).map(p => p.ic.ref + '.' + p.pin +
+  pins: pinsOnNet(n).map(p => p.ic.ref + '.' + icPinNo(p.ic, p.pin) +
         (IC_LIB[p.ic.part] && IC_LIB[p.ic.part].roles[p.pin] ? '(' + IC_LIB[p.ic.part].roles[p.pin] + ')' : '')),
   parts: connections().filter(c => c.kind === 'lead' && NET.netAt(c.at[0], c.at[1]) &&
          NET.netAt(c.at[0], c.at[1]).id === n.id).map(c => c.label),
