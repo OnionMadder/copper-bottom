@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.9';
+const APP_VERSION = 'v1.7.10';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1735,6 +1735,23 @@ const PINS_LM386 = {
   7:{n:'BYPASS', d:'internal reference; 10u to ground quietens it, or leave it open'},
   8:{n:'GAIN', d:'the other end of the gain network - see pin 1'},
 };
+/* LM3914, read off TI SNVS761B: LED1 is pin 1 and the other nine run back UP
+   the far side, LED2 on 18 down to LED10 on 10. The outputs are current
+   sinks, so each LED's anode goes to V+ and its cathode to the pin. */
+const PINS_LM3914 = {
+  1:{n:'LED1', d:'the lowest LED: its cathode, anode to V+'},
+  2:{n:'V−', d:'the negative supply, ground on a single rail'},
+  3:{n:'V+', d:'the positive supply, 3V to 25V'},
+  4:{n:'RLO', d:'the bottom of the divider: the input that lights nothing, usually ground'},
+  5:{n:'SIG', d:'the signal in: the voltage the bar shows'},
+  6:{n:'RHI', d:'the top of the divider: the input that lights LED10, usually tied to REF OUT'},
+  7:{n:'REF OUT', d:'1.25V above REF ADJ; the resistor from here to ground sets the LED current, about 10x what it draws'},
+  8:{n:'REF ADJ', d:'raise it off ground with a second resistor to lift the reference'},
+  9:{n:'MODE', d:'tied to V+ it shows a bar; left open it shows one dot'},
+  10:{n:'LED10', d:'the top LED: its cathode, anode to V+'},
+  11:{n:'LED9'}, 12:{n:'LED8'}, 13:{n:'LED7'}, 14:{n:'LED6'},
+  15:{n:'LED5'}, 16:{n:'LED4'}, 17:{n:'LED3'}, 18:{n:'LED2'},
+};
 /* LM13700, read off TI SNOSBW2F (Nov 2015), pin functions table: the rails
    are 6 and 11, NOT the 8 and 16 corners a 16-pin CMOS habit expects, and the
    second half runs backwards from 16. Until 27 Sept 2026 this table had the
@@ -2218,6 +2235,13 @@ const IC_LIB = {
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
+  /* TI SNVS761B. MODE is 'opt': dot mode is the pin left open, so a switch
+     that only ever pulls it to V+ is the datasheet's own circuit. REF OUT is
+     an output, so RHI tied to it is one output feeding an input. */
+  LM3914 :{pins:18, about:"drives a row of ten LEDs as a bar or a dot from one voltage, in ten equal steps. The bargraph in nearly every meter-style build", name:'LED bargraph driver', cmos:false,
+    volts:{min:3, max:25, note:'single rail, 3V to 25V'},
+    roles:{1:'out',2:'gnd',3:'vdd',4:'in',5:'in',6:'in',7:'out',8:'in',9:'opt',
+           10:'out',11:'out',12:'out',13:'out',14:'out',15:'out',16:'out',17:'out',18:'out'}, pinInfo:PINS_LM3914},
   /* The chip that makes a negative rail out of a positive one, for a board
      that has only a single wall wart and needs -12V for its op-amps. Added
      Sept 2026 for the Eurorack bus board.

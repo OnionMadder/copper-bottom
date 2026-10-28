@@ -1373,6 +1373,16 @@ ok([1,6,7,9,14,15].every(n => IC_LIB.CD4015.roles[n] === 'in') &&
 ok(/RESET/.test(IC_LIB.CD4015.pinInfo[6].n) && /VSS/.test(IC_LIB.CD4015.pinInfo[6].d),
    'reset A says to tie it to VSS: it is active high');
 
+console.log("-- LM3914: the Haunt Sniffer's bargraph, read off TI SNVS761B --");
+ok(!!IC_LIB.LM3914 && IC_LIB.LM3914.pins === 18, 'LM3914 is in the library, 18 pins');
+ok(IC_LIB.LM3914.roles[2] === 'gnd' && IC_LIB.LM3914.roles[3] === 'vdd', 'V- on 2 and V+ on 3, not the corners');
+ok(IC_LIB.LM3914.pinInfo[1].n === 'LED1' && IC_LIB.LM3914.pinInfo[18].n === 'LED2' &&
+   IC_LIB.LM3914.pinInfo[10].n === 'LED10', 'LED1 on 1, then LED2 on 18 running back up to LED10 on 10');
+ok([1,10,11,12,13,14,15,16,17,18].every(n => IC_LIB.LM3914.roles[n] === 'out'),
+   'all ten LED pins are outputs');
+ok(IC_LIB.LM3914.roles[7] === 'out' && IC_LIB.LM3914.roles[6] === 'in' && IC_LIB.LM3914.roles[9] === 'opt',
+   'REF OUT drives, RHI listens, and MODE may be left open for dot mode');
+
 console.log('-- CD4094: the shift register a Rungler is built on --');
 ok(!!IC_LIB.CD4094 && IC_LIB.CD4094.pins === 16, 'CD4094 is in the library, 16 pins');
 ok(IC_LIB.CD4094.roles[8] === 'gnd' && IC_LIB.CD4094.roles[16] === 'vdd', 'rails on 8 and 16');
