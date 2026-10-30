@@ -1373,6 +1373,20 @@ ok([1,6,7,9,14,15].every(n => IC_LIB.CD4015.roles[n] === 'in') &&
 ok(/RESET/.test(IC_LIB.CD4015.pinInfo[6].n) && /VSS/.test(IC_LIB.CD4015.pinInfo[6].d),
    'reset A says to tie it to VSS: it is active high');
 
+console.log("-- CD40193: the Mantis's up/down counter, read off TI SCHS106B --");
+ok(!!IC_LIB.CD40193 && IC_LIB.CD40193.pins === 16, 'CD40193 is in the library, 16 pins');
+ok(IC_LIB.CD40193.roles[8] === 'gnd' && IC_LIB.CD40193.roles[16] === 'vdd', 'rails on 8 and 16');
+ok(IC_LIB.CD40193.pinInfo[5].n === 'CLOCK UP' && IC_LIB.CD40193.pinInfo[4].n === 'CLOCK DOWN',
+   'CLOCK UP on 5, CLOCK DOWN on 4');
+ok(IC_LIB.CD40193.pinInfo[3].n === 'Q1' && IC_LIB.CD40193.pinInfo[2].n === 'Q2' &&
+   IC_LIB.CD40193.pinInfo[6].n === 'Q3' && IC_LIB.CD40193.pinInfo[7].n === 'Q4',
+   'outputs out of order: Q1 on 3, Q2 on 2, Q3 on 6, Q4 on 7');
+ok([2,3,6,7,12,13].every(n => IC_LIB.CD40193.roles[n] === 'out') &&
+   [1,4,5,9,10,11,14,15].every(n => IC_LIB.CD40193.roles[n] === 'in'),
+   'six outputs (four counts, carry, borrow) and eight inputs');
+ok(/high/.test(IC_LIB.CD40193.pinInfo[11].d) && /VSS/.test(IC_LIB.CD40193.pinInfo[14].d),
+   'preset enable says to tie it high, reset says to tie it to VSS');
+
 console.log("-- LM3914: the Haunt Sniffer's bargraph, read off TI SNVS761B --");
 ok(!!IC_LIB.LM3914 && IC_LIB.LM3914.pins === 18, 'LM3914 is in the library, 18 pins');
 ok(IC_LIB.LM3914.roles[2] === 'gnd' && IC_LIB.LM3914.roles[3] === 'vdd', 'V- on 2 and V+ on 3, not the corners');

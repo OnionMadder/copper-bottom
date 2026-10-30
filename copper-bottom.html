@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.10';
+const APP_VERSION = 'v1.7.11';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1726,6 +1726,29 @@ const PINS_CD4015 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD40193B, read off TI SCHS106B (Revised July 2003), terminal assignment. A
+   four-bit binary up/down counter with a separate clock for each direction:
+   it counts up on a rising edge at CLOCK UP while CLOCK DOWN is high, and down
+   on a rising edge at CLOCK DOWN while CLOCK UP is high. The jam inputs load
+   only while PRESET ENABLE is low, so tie it high to let it count; RESET is
+   active high. The Mantis sequencer's chip. */
+const PINS_CD40193 = {
+  1:{n:'J2', d:'jam input 2 - loaded into Q2 while PRESET ENABLE is low; tie it either way if unused'},
+  2:{n:'Q2', d:'count output, worth 2'}, 3:{n:'Q1', d:'count output, worth 1'},
+  4:{n:'CLOCK DOWN', d:'counts down one on a rising edge while CLOCK UP is high'},
+  5:{n:'CLOCK UP', d:'counts up one on a rising edge while CLOCK DOWN is high'},
+  6:{n:'Q3', d:'count output, worth 4'}, 7:{n:'Q4', d:'count output, worth 8'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  9:{n:'J4', d:'jam input 4 - tie it either way if unused'},
+  10:{n:'J3', d:'jam input 3 - tie it either way if unused'},
+  11:{n:'PRESET ENABLE', d:'active low: low loads the jam inputs, so tie it high to let the counter count'},
+  12:{n:'CARRY', d:'goes low for half a clock after the count passes 15 counting up'},
+  13:{n:'BORROW', d:'goes low for half a clock after the count passes 0 counting down'},
+  14:{n:'RESET', d:'active high: high clears the count to 0, so tie it to VSS to let it run'},
+  15:{n:'J1', d:'jam input 1 - tie it either way if unused'},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -2169,6 +2192,9 @@ const IC_LIB = {
   CD4015 :{pins:16, about:"two four-bit shift registers, each with its own clock and data in. Clock a bit in at DATA and it walks along Q1 to Q4 - the Grassi's chip", name:'dual 4-stage shift register', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4015,
     roles:{1:'in',2:'out',3:'out',4:'out',5:'out',6:'in',7:'in',8:'gnd',
            9:'in',10:'out',11:'out',12:'out',13:'out',14:'in',15:'in',16:'vdd'}},
+  CD40193:{pins:16, about:"a four-bit counter that counts up on one clock pin and down on the other. Feed its outputs to a 4051's select pins and it walks a sequencer either way - the Mantis's chip", name:'up/down binary counter', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD40193,
+    roles:{1:'in',2:'out',3:'out',4:'in',5:'in',6:'out',7:'out',8:'gnd',
+           9:'in',10:'in',11:'in',12:'out',13:'out',14:'in',15:'in',16:'vdd'}},
 
   /* ---- timers ---- */
   /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties
