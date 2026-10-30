@@ -1387,6 +1387,16 @@ ok([2,3,6,7,12,13].every(n => IC_LIB.CD40193.roles[n] === 'out') &&
 ok(/high/.test(IC_LIB.CD40193.pinInfo[11].d) && /VSS/.test(IC_LIB.CD40193.pinInfo[14].d),
    'preset enable says to tie it high, reset says to tie it to VSS');
 
+console.log("-- MN3207: the Moth's delay line, read off Panasonic's MN3200 Series sheet --");
+ok(!!IC_LIB.MN3207 && IC_LIB.MN3207.pins === 8, 'MN3207 is in the library, 8 pins');
+ok(IC_LIB.MN3207.roles[1] === 'gnd' && IC_LIB.MN3207.roles[5] === 'vdd', 'GND on 1 and VDD on 5, not the corners');
+ok(IC_LIB.MN3207.pinInfo[2].n === 'CP1' && IC_LIB.MN3207.pinInfo[6].n === 'CP2', 'the two clock phases on 2 and 6');
+ok(IC_LIB.MN3207.pinInfo[3].n === 'IN' && IC_LIB.MN3207.pinInfo[4].n === 'VGG', 'IN on 3 and VGG on 4');
+ok(IC_LIB.MN3207.roles[7] === 'out' && IC_LIB.MN3207.roles[8] === 'out' &&
+   IC_LIB.MN3207.pinInfo[7].n === 'OUT1' && IC_LIB.MN3207.pinInfo[8].n === 'OUT2', 'OUT1 on 7 and OUT2 on 8, both outputs');
+ok(IC_LIB.CD4046.roles[15] === 'opt', 'the CD4046 zener (15) may be left open without an orphan warning');
+ok(IC_LIB.MN3207.volts.max === 10 && /14\/15/.test(IC_LIB.MN3207.pinInfo[4].d), 'VDD up to 10 V, VGG at 14/15 of it');
+
 console.log("-- LM3914: the Haunt Sniffer's bargraph, read off TI SNVS761B --");
 ok(!!IC_LIB.LM3914 && IC_LIB.LM3914.pins === 18, 'LM3914 is in the library, 18 pins');
 ok(IC_LIB.LM3914.roles[2] === 'gnd' && IC_LIB.LM3914.roles[3] === 'vdd', 'V- on 2 and V+ on 3, not the corners');

@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.11';
+const APP_VERSION = 'v1.7.12';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1749,6 +1749,23 @@ const PINS_CD40193 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* MN3207, read off Panasonic's MN3200 Series data sheet (pages 80-84), the
+   Terminal Assignments drawing, top view: GND 1, CP1 2, IN 3, VGG 4, VDD 5,
+   CP2 6, OUT1 7, OUT2 8. A 1024-stage bucket brigade: the delay is 512 clock
+   periods, 2.56 ms at 200 kHz to 51.2 ms at 10 kHz. VDD 4 to 10 V; VGG wants
+   14/15 of VDD; the two clocks swing rail to rail in antiphase, normally from
+   an MN3102, or from a 4013's Q and /Q when there is none. The Moth's chip. */
+const PINS_MN3207 = {
+  1:{n:'GND', d:'ground'},
+  2:{n:'CP1', d:'clock phase 1 - a rail-to-rail square, the opposite of CP2'},
+  3:{n:'IN', d:'the audio in, riding on a DC bias of roughly half the supply or a little over; the bias sets the distortion, so it is worth trimming'},
+  4:{n:'VGG', d:'gate bias: 14/15 of VDD, from a divider'},
+  5:{n:'VDD', d:'the positive supply, 4 to 10 V'},
+  6:{n:'CP2', d:'clock phase 2 - the opposite of CP1'},
+  7:{n:'OUT1', d:'delayed audio, with the clock riding on it; summed with OUT2 through resistors the clock mostly cancels'},
+  8:{n:'OUT2', d:'the same delayed audio half a clock later; sum it with OUT1'},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -2176,9 +2193,11 @@ const IC_LIB = {
     roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',
            9:'out',10:'out',11:'in',12:'in',13:'out',14:'out',15:'out',16:'vdd'}},
   CD4046 :{pins:16, about:"a VCO with a phase comparator attached. Most synth builds use only the VCO half and ignore the rest", name:'phase-locked loop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4046,
-    /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals */
+    /* 6,7 are the VCO timing cap and 11,12 its resistors -- not signals.
+       15 is the internal zener, 'opt' since v1.7.12: left open in most builds,
+       and every 4046 on the shelf drew an orphan warning for doing so */
     roles:{1:'out',2:'out',3:'in',4:'out',5:'in',8:'gnd',9:'in',10:'out',
-           13:'out',14:'in',16:'vdd'}},
+           13:'out',14:'in',15:'opt',16:'vdd'}},
 
   /* Analog switches: the switched pins carry signal either way, so the tool
      claims a direction only for the control pins and the rails. */
@@ -2287,6 +2306,11 @@ const IC_LIB = {
     volts:{min:10, max:36, note:'+-5V to +-18V; below 10V total it will not bias properly'},
     roles:{1:'in',2:'opt',3:'in',4:'in',5:'out',6:'vee',7:'in',8:'out',
            9:'out',10:'in',11:'vdd',12:'out',13:'in',14:'in',15:'opt',16:'in'}, pinInfo:PINS_LM13700},
+  /* cmos:false: the clock pins are driven rail to rail and the floating-input
+     rule is aimed at logic inputs, not a delay line. */
+  MN3207 :{pins:8, about:"a bucket-brigade delay line: 1024 steps, 2.5 to 51 ms depending on its clock. Chorus, flanger and vibrato territory. It needs a two-phase clock - the Moth's chip", name:'BBD delay line', cmos:false,
+    volts:{min:4, max:10, note:'4 to 10 V; every pin is rated to 11 V at most'},
+    roles:{1:'gnd',2:'in',3:'in',4:'in',5:'vdd',6:'in',7:'out',8:'out'}, pinInfo:PINS_MN3207},
   /* cmos:false on purpose. It is CMOS silicon, but CC0/CC1 are meant to be left
      open on most delay builds, and the floating-input rule would cry wolf on
      every one of them. That rule is aimed at unbuffered logic inputs. */
