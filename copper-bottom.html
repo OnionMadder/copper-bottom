@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.12';
+const APP_VERSION = 'v1.7.13';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1766,6 +1766,33 @@ const PINS_MN3207 = {
   8:{n:'OUT2', d:'the same delayed audio half a clock later; sum it with OUT1'},
 };
 
+/* NE571, on the pinout of onsemi's NE570/D (Rev. 4), its sibling with the
+   same pins: channel 1 on 1-3 and 5-8, channel 2 on 9-12 and 14-16, mirrored,
+   GND 4 and VCC 13. Supply 6 to 24 V. Each channel is a full-wave rectifier, a
+   gain cell and an op-amp whose other input sits at the chip's own 1.8 V
+   reference. The THD trims are 'opt': the sheet lists untrimmed figures and
+   gives the trim as an extra network. Nothing in the sheet says an unused
+   channel may be left open, so its inputs keep the input role and warn when
+   open. The Beetle's chip. */
+const PINS_NE571 = {
+  1:{n:'RECT CAP 1', d:"the rectifier's averaging cap to ground; it sets how fast the gain follows the level"},
+  2:{n:'RECT IN 1', d:"the rectifier input, through an internal 10K; tied to pin 3 or to the output for a compressor"},
+  3:{n:'G CELL IN 1', d:"the gain cell input, through an internal 20K"},
+  4:{n:'GND', d:"ground"},
+  5:{n:'INV IN 1', d:"the op-amp's inverting input; its other input is the chip's 1.8 V reference"},
+  6:{n:'RES R3 1', d:"the far end of an internal 20K into pin 5 - the signal input in the compressor hook-up"},
+  7:{n:'OUTPUT 1', d:"the op-amp output, sitting at a DC bias set by the feedback; it needs a coupling cap"},
+  8:{n:'THD TRIM 1', d:"distortion trim; optional, left open untrimmed"},
+  9:{n:'THD TRIM 2', d:"distortion trim; optional, left open untrimmed"},
+  10:{n:'OUTPUT 2', d:"the op-amp output of channel 2"},
+  11:{n:'RES R3 2', d:"the far end of an internal 20K into pin 12"},
+  12:{n:'INV IN 2', d:"the op-amp's inverting input, channel 2"},
+  13:{n:'VCC', d:"the positive supply, 6 to 24 V"},
+  14:{n:'G CELL IN 2', d:"the gain cell input, channel 2"},
+  15:{n:'RECT IN 2', d:"the rectifier input, channel 2"},
+  16:{n:'RECT CAP 2', d:"the rectifier's averaging cap to ground, channel 2"},
+};
+
 const PINS_LM386 = {
   1:{n:'GAIN', d:'gain set; leave 1 and 8 open for x20, bridge them with 10u for x200'},
   2:{n:'IN\u2212'}, 3:{n:'IN+'},
@@ -2280,6 +2307,11 @@ const IC_LIB = {
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
     /* 1 and 8 set the gain, 7 is the bypass -- all three normally left open */
     roles:{1:'in',2:'in',3:'in',4:'gnd',5:'out',6:'vdd',7:'in',8:'in'}, pinInfo:PINS_LM386},
+  /* RECT CAP has no role: a cap pin is neither a driver nor a listener */
+  NE571  :{pins:16, about:"a two-channel compander: each half is a level detector, a gain cell and an op-amp. One half wired as a compressor is the Beetle", name:'compandor', cmos:false,
+    volts:{min:6, max:24, note:'6 to 24 V, from the NE570 sheet'},
+    roles:{2:'in',3:'in',4:'gnd',5:'in',6:'in',7:'out',8:'opt',
+           9:'opt',10:'out',11:'in',12:'in',13:'vdd',14:'in',15:'in'}, pinInfo:PINS_NE571},
   /* TI SNVS761B. MODE is 'opt': dot mode is the pin left open, so a switch
      that only ever pulls it to V+ is the datasheet's own circuit. REF OUT is
      an output, so RHI tied to it is one output feeding an input. */

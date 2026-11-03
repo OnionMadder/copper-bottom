@@ -1397,6 +1397,16 @@ ok(IC_LIB.MN3207.roles[7] === 'out' && IC_LIB.MN3207.roles[8] === 'out' &&
 ok(IC_LIB.CD4046.roles[15] === 'opt', 'the CD4046 zener (15) may be left open without an orphan warning');
 ok(IC_LIB.MN3207.volts.max === 10 && /14\/15/.test(IC_LIB.MN3207.pinInfo[4].d), 'VDD up to 10 V, VGG at 14/15 of it');
 
+console.log("-- NE571: the Beetle's compander, on the NE570/D pinout --");
+ok(!!IC_LIB.NE571 && IC_LIB.NE571.pins === 16, 'NE571 is in the library, 16 pins');
+ok(IC_LIB.NE571.roles[4] === 'gnd' && IC_LIB.NE571.roles[13] === 'vdd', 'GND on 4 and VCC on 13, not the corners');
+ok(IC_LIB.NE571.roles[7] === 'out' && IC_LIB.NE571.roles[10] === 'out', 'the outputs on 7 and 10');
+ok(IC_LIB.NE571.pinInfo[2].n === 'RECT IN 1' && IC_LIB.NE571.pinInfo[3].n === 'G CELL IN 1' &&
+   IC_LIB.NE571.pinInfo[15].n === 'RECT IN 2' && IC_LIB.NE571.pinInfo[14].n === 'G CELL IN 2', 'channel 2 mirrors channel 1');
+ok(IC_LIB.NE571.roles[8] === 'opt' && IC_LIB.NE571.roles[9] === 'opt', 'the THD trims may be left open');
+ok(IC_LIB.NE571.roles[1] === undefined && IC_LIB.NE571.roles[16] === undefined, 'the rectifier cap pins claim no direction');
+ok(IC_LIB.NE571.roles[12] === 'in' && IC_LIB.NE571.roles[14] === 'in', 'an unused channel is not excused');
+
 console.log("-- LM3914: the Haunt Sniffer's bargraph, read off TI SNVS761B --");
 ok(!!IC_LIB.LM3914 && IC_LIB.LM3914.pins === 18, 'LM3914 is in the library, 18 pins');
 ok(IC_LIB.LM3914.roles[2] === 'gnd' && IC_LIB.LM3914.roles[3] === 'vdd', 'V- on 2 and V+ on 3, not the corners');
