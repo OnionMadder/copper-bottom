@@ -3368,6 +3368,40 @@ console.log('-- off the board: the v1.3.0 kinds --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- off the board: a diode, v1.7.14 --');
+{
+  /* The polarity diode in a DC jack's + lead, 3 Nov 2026: it protects a built
+     board without changing its copper. A is the plain end, K the band. */
+  const raw = {version:2, name:'diode', board:{rows:4, cols:6}, cuts:[], ics:[],
+    parts:[{id:'p1', kind:'diode', ref:'D1', value:'1N4148', pins:[[0,1],[0,4]]}],
+    pads:[
+      {id:'a', label:'SUPPLY', at:[1,0], parts:[{id:'DC1', kind:'dc', lug:'+'}]},
+      {id:'b', label:'V+', at:[2,0], parts:[{id:'D2', kind:'diode', lug:'K', value:'1N5817'}]},
+      {id:'c', label:'GND', at:[3,0], parts:[{id:'DC1', kind:'dc', lug:'-'}, {id:'D3', kind:'diode', lug:'B'}]},
+    ],
+    offboard:['DC1.+ - D2.A']};
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  const byL = l => up.pads.find(d => d.label === l);
+  ok(byL('V+').parts[0].kind === 'diode' && byL('V+').parts[0].lug === 'K', 'a diode entry with a K lug is kept');
+  ok(byL('GND').parts.length === 1 && byL('GND').parts[0].id === 'DC1', 'a diode has no lug B, and that entry is dropped');
+  S = up; computeNets();
+  ok(offboardParts().map(q => q.id).join(' ') === 'DC1 D2', 'the diode lists right after the DC jack it hangs off');
+  const w = offboardWires();
+  ok(w.length === 1 && w[0].b === 'D2' && w[0].bl === 'A', 'the DC jack + to the diode plain end resolves');
+  ok(bom().some(r => r.kind === 'ob:diode' && r.offboard === true && r.what === '1N5817'),
+     'the BOM has the diode, flagged off-board, with its value');
+  const wt = walkthrough();
+  ok(/D2 - diode 1N5817, on the panel, off the board/.test(wt) && /The banded end \(K\) to pad V\+/.test(wt) &&
+     /The plain end \(A\) to DC1 lug \+/.test(wt),
+     'the walkthrough says which end is the band, by looking, not by letter alone');
+  ok(nextOffboardId('diode') === 'D3', 'a new off-board diode numbers past the on-board D1 and the off-board D2');
+  S.parts = [];
+  ok(nextOffboardId('diode') === 'D1' && nextOffboardId('led') === 'LED1', 'with no board diode, D1 is free again: the board ref was what pushed it');
+  ok(offboardLines().some(l => l.id === 'D2' && l.legs.join(' ') === 'A > DC1.+ K > V+'),
+     'the leg block reads A then K');
+}
+S = demoProject(); computeNets();
+
 console.log('-- off the board: a transformer, v1.7.2 --');
 {
   /* The Tube Meter's T1, Sept 24 2026: a mains transformer bolted to the box,

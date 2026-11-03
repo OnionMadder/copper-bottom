@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.13';
+const APP_VERSION = 'v1.7.14';
 
 const K = (r,c) => r + ',' + c;
 
@@ -3697,8 +3697,14 @@ const OFFBOARD_LIB = {
      names as the on-board kinds; the taps are drawn only when wired, like a
      module's IN and OUT, because most small transformers have none. */
   xfmr:   {name:'transformer',      prefix:'T',   lugs:['P1','PCT','P2','S1','SCT','S2']},
+  /* v1.7.14: a diode hung in a wire off the board - the polarity diode in a DC
+     jack's + lead, which protects a built board without changing its copper.
+     Her ask, 3 Nov 2026, after the Grubworks protection pass showed the site
+     had no way to draw one. A is the plain end, K the banded end, same as the
+     on-board diode, and the drawing puts the band at K. */
+  diode:  {name:'diode',            prefix:'D',   lugs:['A','K']},
 };
-const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13, xfmr:14};
+const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, diode:6.5, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13, xfmr:14};
 const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
 
 function boardPitch(){
@@ -3839,6 +3845,10 @@ function saveProject(){
    so two new parts never both come up POT1 */
 function nextOffboardId(kind){
   const used = new Set(offboardParts().map(q => q.id));
+  /* and past the board's own refs: an off-board diode beside an on-board D1
+     must not come up D1 as well, or the parts list names two parts one name */
+  for(const p of S.parts) if(p.ref) used.add(String(p.ref).trim().toUpperCase());
+  for(const ic of S.ics) if(ic.ref) used.add(String(ic.ref).trim().toUpperCase());
   const pre = OFFBOARD_LIB[kind].prefix;
   let n = 1;
   while(used.has(pre + n)) n++;
@@ -4328,7 +4338,8 @@ function walkthrough(){
       const ties = obw.filter(w => (w.a === q.id && w.al === lug) || (w.b === q.id && w.bl === lug))
                       .map(w => w.a === q.id && w.al === lug ? w.b + ' lug ' + w.bl : w.a + ' lug ' + w.al);
       const to = pads.concat(ties);
-      if(to.length) body.push('Lug ' + lug + ' to ' + to.join(' and ') + '.');
+      const lugName = q.kind === 'diode' ? (lug === 'K' ? 'The banded end (K)' : 'The plain end (A)') : 'Lug ' + lug;
+      if(to.length) body.push(lugName + ' to ' + to.join(' and ') + '.');
       else if(q.kind === 'pot' || q.kind === 'toggle') body.push('Lug ' + lug + ' stays empty.');
     }
     step(q.id + ' - ' + lib.name + (q.value ? ' ' + q.value : '') + ', on the panel, off the board.', body);
@@ -9848,6 +9859,16 @@ function classicSVG(opts){
           txt(cx + 31 * Math.cos(a), cy + 31 * Math.sin(a) + 3, nm, 7, 'fill="#444" text-anchor="middle"');
         });
         top = cy - 34; bot = cy + 34;
+      }else if(q.kind === 'diode'){
+        /* a black axial body standing on end, A at the top and K at the bottom,
+           the silver band drawn at the K end so it reads the way the part does */
+        obB.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="3" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>' +
+                 '<rect x="' + (cx - 6) + '" y="' + (cy + 6) + '" width="12" height="5" fill="#D8D8D8"/>');
+        [-14, 14].forEach((dy, i) => {
+          obB.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
+          lug(lib.lugs[i], cx + f * 14, cy + dy, true);
+        });
+        top = cy - 20; bot = cy + 20;
       }else{                                         // dc
         obB.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
         txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
