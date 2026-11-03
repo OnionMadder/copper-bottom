@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.14';
+const APP_VERSION = 'v1.7.15';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1674,6 +1674,31 @@ const PINS_CD4051 = {
   16:{n:'VDD', d:'the positive supply'},
 };
 
+/* CD4053B, read off TI SCHS047's terminal assignment: three single-pole
+   double-throw switches. Each has two throws, x and y, and a common; its
+   select pin low joins x to the common, high joins y. A is 12/13 into 14,
+   B is 2/1 into 15, C is 5/3 into 4. INH 6 opens all three while high.
+   VEE 7 is the signal's negative supply, ground on a single rail. The
+   Firefly Notebox's sample-and-hold switch. */
+const th4053 = (s, xy) =>
+  ({n:s + xy.toUpperCase(), d:'switch ' + s + "'s " + xy + ' throw - joined to its common while ' + s + ' reads ' + (xy === 'x' ? 'low' : 'high')});
+const PINS_CD4053 = {
+  1:th4053('B', 'y'), 2:th4053('B', 'x'),
+  3:th4053('C', 'y'),
+  4:{n:'C COM', d:"switch C's common; CX or CY joins here, and signal flows either way"},
+  5:th4053('C', 'x'),
+  6:{n:'INH', d:'opens all three switches while high; tie it to ground when unused'},
+  7:{n:'VEE', d:'the negative supply for the signal itself - tie it to ground on a single-rail build'},
+  8:{n:'VSS', d:'the negative supply - ground on a single-rail build'},
+  9:{n:'C', d:'selects switch C: low joins CX (5), high joins CY (3), to pin 4'},
+  10:{n:'B', d:'selects switch B: low joins BX (2), high joins BY (1), to pin 15'},
+  11:{n:'A', d:'selects switch A: low joins AX (12), high joins AY (13), to pin 14'},
+  12:th4053('A', 'x'), 13:th4053('A', 'y'),
+  14:{n:'A COM', d:"switch A's common; AX or AY joins here, and signal flows either way"},
+  15:{n:'B COM', d:"switch B's common; BX or BY joins here, and signal flows either way"},
+  16:{n:'VDD', d:'the positive supply'},
+};
+
 const sw = (letter, other) =>
   ({n:'SW' + letter, d:'one end of switch ' + letter + '; it conducts both ways, so either end can be the input'});
 const ctl = (letter, a, b) =>
@@ -2229,6 +2254,8 @@ const IC_LIB = {
   /* Analog switches: the switched pins carry signal either way, so the tool
      claims a direction only for the control pins and the rails. */
   CD4051 :{pins:16, about:"passes one of eight signals through to a common pin, chosen by three logic inputs. The switch at the heart of a sequencer", name:'8-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4051,
+    roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
+  CD4053 :{pins:16, about:"three switches that each flip a common pin between two others, chosen by a logic input. One of them closed for an instant on a clock edge is a sample-and-hold", name:'triple 2-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4053,
     roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',11:'in',16:'vdd'}},
   CD4066 :{pins:14, about:"four switches you open and close with logic instead of your fingers - voltage-controlled routing", name:'quad bilateral switch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4066,
     roles:{5:'in',6:'in',7:'gnd',12:'in',13:'in',14:'vdd'}},

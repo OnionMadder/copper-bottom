@@ -1397,6 +1397,18 @@ ok(IC_LIB.MN3207.roles[7] === 'out' && IC_LIB.MN3207.roles[8] === 'out' &&
 ok(IC_LIB.CD4046.roles[15] === 'opt', 'the CD4046 zener (15) may be left open without an orphan warning');
 ok(IC_LIB.MN3207.volts.max === 10 && /14\/15/.test(IC_LIB.MN3207.pinInfo[4].d), 'VDD up to 10 V, VGG at 14/15 of it');
 
+console.log("-- CD4053: the Firefly Notebox's switch, read off TI SCHS047 --");
+ok(!!IC_LIB.CD4053 && IC_LIB.CD4053.pins === 16, 'CD4053 is in the library, 16 pins');
+ok(IC_LIB.CD4053.roles[7] === 'vee' && IC_LIB.CD4053.roles[8] === 'gnd' && IC_LIB.CD4053.roles[16] === 'vdd', 'VEE 7, VSS 8, VDD 16');
+ok(IC_LIB.CD4053.roles[6] === 'in' && IC_LIB.CD4053.roles[9] === 'in' && IC_LIB.CD4053.roles[10] === 'in' &&
+   IC_LIB.CD4053.roles[11] === 'in', 'INH and the three selects are inputs');
+ok([1,2,3,4,5,12,13,14,15].every(p => IC_LIB.CD4053.roles[p] === undefined), 'the switch pins claim no direction');
+ok(IC_LIB.CD4053.pinInfo[12].n === 'AX' && IC_LIB.CD4053.pinInfo[13].n === 'AY' && IC_LIB.CD4053.pinInfo[14].n === 'A COM' &&
+   IC_LIB.CD4053.pinInfo[2].n === 'BX' && IC_LIB.CD4053.pinInfo[1].n === 'BY' && IC_LIB.CD4053.pinInfo[15].n === 'B COM' &&
+   IC_LIB.CD4053.pinInfo[5].n === 'CX' && IC_LIB.CD4053.pinInfo[3].n === 'CY' && IC_LIB.CD4053.pinInfo[4].n === 'C COM',
+   'each switch: x, y and common where SCHS047 puts them');
+ok(/low joins AX \(12\)/.test(IC_LIB.CD4053.pinInfo[11].d), 'select A low joins AX');
+
 console.log("-- NE571: the Beetle's compander, on the NE570/D pinout --");
 ok(!!IC_LIB.NE571 && IC_LIB.NE571.pins === 16, 'NE571 is in the library, 16 pins');
 ok(IC_LIB.NE571.roles[4] === 'gnd' && IC_LIB.NE571.roles[13] === 'vdd', 'GND on 4 and VCC on 13, not the corners');
