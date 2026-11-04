@@ -2221,10 +2221,10 @@ const PINS_LF411 = {
    A chip with no `volts` entry is one whose range has not been checked against a
    datasheet yet. It produces no finding at all rather than a guessed one. */
 const V_CD4000B = {min:3,  max:18, note:'3-18V, with 20V the absolute maximum'};
-const V_TL0XX   = {min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across both rails'};
-const V_LM358   = {min:3,  max:32, note:'runs from a single rail as low as 3V'};
-const V_TLC227X = {min:4.4, max:16, note:'single rail 4.4-16V, and the output reaches both rails'};
-const V_TLV237X = {min:2.7, max:16, note:'single rail 2.7-16V, rail to rail in and out'};
+const V_TL0XX   = {belowMinOk:true, min:7,  max:36, note:'+-3.5V to +-18V, so 7V to 36V across both rails'};
+const V_LM358   = {belowMinOk:true, min:3,  max:32, note:'runs from a single rail as low as 3V'};
+const V_TLC227X = {belowMinOk:true, min:4.4, max:16, note:'single rail 4.4-16V, and the output reaches both rails'};
+const V_TLV237X = {belowMinOk:true, min:2.7, max:16, note:'single rail 2.7-16V, rail to rail in and out'};
 /* 74HC: TI SCLS100F, recommended 2-6V, 7V absolute. 74HCT: Diodes DS35335 Rev 3,
    4.5-5.5V, 7V absolute. Either one on a 9V rail is past its absolute maximum. */
 const V_74HC  = {min:2,   max:6,   note:'2-6V, with 7V the absolute maximum - a 9V pedal needs a 5V regulator for it'};
@@ -2628,19 +2628,19 @@ const IC_LIB = {
   /* ---- op-amps ---- */
   TL071  :{pins:8,  about:"the single version of the TL072: one JFET-input op-amp, with two offset-null pins most audio builds leave open", name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
   TL081  :{pins:8,  about:"one JFET-input op-amp, the general-purpose sibling of the lower-noise TL071 on the same pins", name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  LM741  :{pins:8,  name:'op-amp',                cmos:false, volts:{min:20, max:36, note:'+-10V to +-18V for the LM741C, so 20-36V across both rails (TI SNOSC25D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  NE5534 :{pins:8,  about:"one low-noise op-amp from studio and mixing-desk gear, the single version of the NE5532", name:'low-noise op-amp',      cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 44V the absolute maximum (TI SLOS070D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  OPA134 :{pins:8,  about:"one audio op-amp built for very low distortion", name:'FET audio op-amp',      cmos:false, volts:{min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  LM741  :{pins:8,  name:'op-amp',                cmos:false, volts:{belowMinOk:true, min:20, max:36, note:'+-10V to +-18V for the LM741C, so 20-36V across both rails (TI SNOSC25D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  NE5534 :{pins:8,  about:"one low-noise op-amp from studio and mixing-desk gear, the single version of the NE5532", name:'low-noise op-amp',      cmos:false, volts:{belowMinOk:true, min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 44V the absolute maximum (TI SLOS070D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  OPA134 :{pins:8,  about:"one audio op-amp built for very low distortion", name:'FET audio op-amp',      cmos:false, volts:{belowMinOk:true, min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
   TL072  :{pins:8, about:"the default audio op-amp - quiet, cheap, and in more pedals than any other part",  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL082  :{pins:8,  about:"two JFET-input op-amps on the TL072's pins, the general-purpose sibling of the lower-noise TL072", name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TL062  :{pins:8,  about:"two low-power JFET-input op-amps. They draw a fraction of a TL072's current, which suits a battery build", name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, volts:{min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (Nisshinbo NJM4558)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  JRC4580:{pins:8,  about:"two low-noise op-amps on the standard dual pinout, often swapped in for a 4558", name:'dual audio op-amp',     cmos:false, volts:{min:4, max:36, note:'+-2V to +-18V, so 4-36V across both rails (Nisshinbo NJM4580)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  NE5532 :{pins:8,  about:"two low-noise op-amps from studio and mixing-desk gear", name:'dual low-noise op-amp', cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS075K)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, volts:{belowMinOk:true, min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (Nisshinbo NJM4558)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4580:{pins:8,  about:"two low-noise op-amps on the standard dual pinout, often swapped in for a 4558", name:'dual audio op-amp',     cmos:false, volts:{belowMinOk:true, min:4, max:36, note:'+-2V to +-18V, so 4-36V across both rails (Nisshinbo NJM4580)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  NE5532 :{pins:8,  about:"two low-noise op-amps from studio and mixing-desk gear", name:'dual low-noise op-amp', cmos:false, volts:{belowMinOk:true, min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS075K)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   LM358  :{pins:8,  about:"two op-amps that run from a single low supply, with inputs that work right down to ground. Not hi-fi, but they work where others will not", name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  LM833  :{pins:8,  about:"two low-noise audio op-amps on the standard dual pinout", name:'dual audio op-amp',     cmos:false, volts:{min:10, max:36, note:'+-5V to +-18V, so 10-36V across both rails (TI SLOS481B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  OPA2134:{pins:8,  about:"two audio op-amps built for very low distortion, the dual OPA134", name:'dual FET audio op-amp', cmos:false, volts:{min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM833  :{pins:8,  about:"two low-noise audio op-amps on the standard dual pinout", name:'dual audio op-amp',     cmos:false, volts:{belowMinOk:true, min:10, max:36, note:'+-5V to +-18V, so 10-36V across both rails (TI SLOS481B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  OPA2134:{pins:8,  about:"two audio op-amps built for very low distortion, the dual OPA134", name:'dual FET audio op-amp', cmos:false, volts:{belowMinOk:true, min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
   /* Rail-to-rail, and single supply. A TL072 cannot get its output within a
      volt or two of either rail, which is fine in a pedal biased at half the
@@ -2654,21 +2654,21 @@ const IC_LIB = {
   TL084  :{pins:14, about:"four JFET-input op-amps, the general-purpose sibling of the TL074 on the same pins", name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   TL064  :{pins:14, about:"four low-power JFET-input op-amps, the quad TL062", name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   LM324  :{pins:14, about:"four op-amps in one package, and it will run from a single low rail - handy when board space matters more than noise", name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  LM348  :{pins:14, about:"four 741-style op-amps in one package", name:'quad op-amp',           cmos:false, volts:{min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (TI SLOS058C)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM348  :{pins:14, about:"four 741-style op-amps in one package", name:'quad op-amp',           cmos:false, volts:{belowMinOk:true, min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (TI SLOS058C)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
 
   /* v1.7.16, from her bins, each off its own sheet. The standard dual and
      quad op-amp pinouts were confirmed pin for pin before sharing the tables. */
   LF411  :{pins:8, about:"a single JFET-input op-amp, a common upgrade for the 741 on the same core pins", name:'FET op-amp', cmos:false, volts:V_TL0XX, roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'out',7:'vdd',8:'nc'}, pinInfo:PINS_LF411},
-  MC1458 :{pins:8, about:"two 741-style op-amps in one package", name:'dual op-amp', cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS069C)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  MC1458 :{pins:8, about:"two 741-style op-amps in one package", name:'dual op-amp', cmos:false, volts:{belowMinOk:true, min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS069C)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   TLC2262:{pins:8, about:"two CMOS op-amps whose outputs reach both rails, the lower-power sibling of the TLC2272", name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLC227X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  LMC6482:{pins:8, about:"two CMOS op-amps that swing rail to rail in and out and run from 3V", name:'dual rail-to-rail op-amp', cmos:false, volts:{min:3, max:15.5, note:'3-15.5V, with 16V the absolute maximum (TI SNOS674J)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LMC6482:{pins:8, about:"two CMOS op-amps that swing rail to rail in and out and run from 3V", name:'dual rail-to-rail op-amp', cmos:false, volts:{belowMinOk:true, min:3, max:15.5, note:'3-15.5V, with 16V the absolute maximum (TI SNOS674J)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
   /* CA3130, Renesas FN817: not the usual single. 1, 5 and 8 are offset and
      compensation, 'opt' because most builds leave 5 open and 1-8 needs a cap
      only at low gain. 16V total is also its absolute maximum. */
-  CA3130 :{pins:8, about:"a CMOS-input op-amp whose output swings to within millivolts of both rails. Pin 8 is not a spare: it takes a compensation cap from pin 1", name:'CMOS-input op-amp', cmos:false, volts:{min:5, max:16, note:'5-16V across both rails, and 16V is also the absolute maximum - do not run it on 18V'}, roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'out',7:'vdd',8:'opt'}, pinInfo:PINS_CA3130},
+  CA3130 :{pins:8, about:"a CMOS-input op-amp whose output swings to within millivolts of both rails. Pin 8 is not a spare: it takes a compensation cap from pin 1", name:'CMOS-input op-amp', cmos:false, volts:{belowMinOk:true, min:5, max:16, note:'5-16V across both rails, and 16V is also the absolute maximum - do not run it on 18V'}, roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'out',7:'vdd',8:'opt'}, pinInfo:PINS_CA3130},
   LF444  :{pins:14, about:"four low-power JFET-input op-amps on the standard quad pinout", name:'quad low-power FET op-amp', cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  TLE2074:{pins:14, about:"four fast, low-noise JFET-input op-amps on the standard quad pinout", name:'quad FET op-amp', cmos:false, volts:{min:4.5, max:38, note:'+-2.25V to +-19V, so 4.5-38V across both rails (TI SLOS181D)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TLE2074:{pins:14, about:"four fast, low-noise JFET-input op-amps on the standard quad pinout", name:'quad FET op-amp', cmos:false, volts:{belowMinOk:true, min:4.5, max:38, note:'+-2.25V to +-19V, so 4.5-38V across both rails (TI SLOS181D)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
   /* ---- comparators: open-collector outputs that need a pull-up ---- */
   LM393  :{pins:8, about:"two comparators: each output switches according to which input is higher. Open collector, so each output needs a pull-up resistor", name:'dual comparator', cmos:false, volts:{min:2, max:30, note:'2-30V from one rail, with 36V the absolute maximum (TI SLCS005AH)'}, roles:OPAMP_DUAL, pinInfo:PINS_LM393},
@@ -3760,7 +3760,8 @@ function runDRC(){
   /* --- a chip on the wrong supply ---
      The one mistake here that costs you the part rather than an evening. Over
      the maximum is an error: a PT2399 on 9V is a dead PT2399. Under the minimum
-     is a warning, because the board simply will not work and nothing burns.
+     is a warning, because the board simply will not work and nothing burns -
+     except on an op-amp, see `belowMinOk` below.
 
      Only fires where both rails resolve to a stated voltage, so a rail labeled
      "VIN" or fed from an on-board regulator is left alone rather than guessed at. */
@@ -3773,7 +3774,13 @@ function runDRC(){
     const runs = ic.ref + ' (' + ic.part + ') wants ' + def.volts.min + '-' + def.volts.max +
                  'V and this board gives it ' + sup.total + 'V';
     if(sup.total > def.volts.max)      add('error', 'supply-range', runs + tail, pinPos(ic, 1));
-    else if(sup.total < def.volts.min) add('warn',  'supply-range', runs + tail, pinPos(ic, 1));
+    /* `belowMinOk`: an op-amp's datasheet minimum is where its specs are
+       guaranteed, not where it stops working - her Dual-Wave LFO runs an
+       NE5532 on 9V against a 10V minimum, built and heard. So for op-amps
+       only the maximum is a finding (hers, 4 Nov 2026). Chips whose minimum
+       is a real floor, an LM384 or a PT2399, keep the warning. */
+    else if(sup.total < def.volts.min && !def.volts.belowMinOk)
+      add('warn', 'supply-range', runs + tail, pinPos(ic, 1));
   }
 
   /* --- a split-supply chip's negative pin tied to ground ---

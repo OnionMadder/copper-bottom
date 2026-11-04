@@ -1764,6 +1764,16 @@ function onRails(part, posLabel, negLabel){
 }
 const sev1 = f => f.length ? f[0].sev : 'none';
 
+console.log('-- supply: an op-amp below its datasheet minimum is not a finding (hers) --');
+ok(sev1(onRails('NE5532', '+9V', 'GND')) === 'none', 'NE5532 on 9V, under its 10V minimum: no finding (her Dual-Wave LFO runs one)');
+ok(sev1(onRails('LM741', '+9V', 'GND')) === 'none', 'LM741 on 9V, under its 20V minimum: no finding');
+ok(sev1(onRails('NE5532', '+36V', 'GND')) === 'error', 'NE5532 on 36V, over its 30V maximum: still an error');
+ok(sev1(onRails('LM384', '+9V', 'GND')) === 'warn', 'LM384 on 9V keeps its warning: 12V is a real floor, and it is no op-amp');
+ok(sev1(onRails('LM393', '+1.5V', 'GND')) === 'warn', 'a comparator under its minimum still warns');
+ok(Object.entries(IC_LIB).filter(([k, d]) => d.volts && d.volts.belowMinOk && [OPAMP_SINGLE, OPAMP_DUAL, OPAMP_QUAD].indexOf(d.roles) < 0)
+     .map(([k]) => k).sort().join(',') === 'CA3130,LF411',
+   'belowMinOk is on op-amps only: every carrier shares an op-amp table but the two odd-pinned ones');
+ok(!IC_LIB.LM393.volts.belowMinOk && !IC_LIB.LM339.volts.belowMinOk, 'the comparators do not carry it');
 console.log('-- supply: over the maximum costs you the part --');
 ok(sev1(onRails('PT2399', '+12V', 'GND')) === 'error',
    'a PT2399 on a 12V rack rail is an error — it is a 5V part');
@@ -1775,7 +1785,7 @@ ok(onRails('PT2399', '+9V', 'GND')[0].msg.indexOf('regulator') >= 0,
 console.log('-- supply: under the minimum only wastes an evening --');
 ok(sev1(onRails('LM13700', '+9V', 'GND')) === 'warn',
    'an OTA on 9V is a warning, not an error — nothing burns, it just will not bias');
-ok(sev1(onRails('TL072', '+5V', 'GND')) === 'warn', 'same for a TL072 on 5V');
+ok(sev1(onRails('TL072', '+5V', 'GND')) === 'none', 'a TL072 on 5V says nothing since v1.7.16: below an op-amp minimum is not a finding (hers)');
 
 console.log('-- supply: a rack runs both rails, and total is what matters --');
 ok(sev1(onRails('TL072', '+12V', '-12V')) === 'none',
