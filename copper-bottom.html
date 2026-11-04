@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.15';
+const APP_VERSION = 'v1.7.16';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1933,6 +1933,280 @@ const INV_HEX      = {1:'in',2:'out',3:'in',4:'out',5:'in',6:'out',7:'gnd',
 const BUF_HEX      = {1:'vdd',2:'out',3:'in',4:'out',5:'in',6:'out',7:'in',8:'gnd',
                       9:'in',10:'out',11:'in',12:'out',14:'out',15:'in'};  // 13,16 nc
 
+/* --- v1.7.16: the drawers (4 Nov 2026) ---
+   Her bins (NOTES/parts-library.md on the site) held chips this file could
+   only draw as anonymous DIPs, and two published layouts used two of them -
+   the One Shot's TLC555 and the Sound Fuckulator's LM567 - with no pin names
+   and no checks. Every table below was read off the manufacturer's sheet
+   named beside it, never recalled. */
+const VSS_ = {n:'VSS', d:'the negative supply - ground on a single-rail build'};
+const VDD_ = {n:'VDD', d:'the positive supply'};
+const NC_  = {n:'NC', d:'not connected inside the chip; nothing you do to this pin matters'};
+
+/* LM567, TI SNOSBQ4F (Figure 6-1 and Table 6-1 agree). Rev F corrected the
+   Rev E table, which had 5 and 6 the other way around: the timing RESISTOR is
+   pin 5 and the timing CAPACITOR pin 6. */
+const PINS_LM567 = {
+  1:{n:'OF CAP', d:'output filter capacitor, to ground; it smooths the detector so the output does not chatter'},
+  2:{n:'LF CAP', d:'loop filter capacitor, to ground; it sets how wide a band of frequencies counts as the tone'},
+  3:{n:'IN', d:'the signal input, through a coupling capacitor'},
+  4:{n:'VCC', d:'the positive supply - 3.5V to 8.5V, so a 9V build needs it dropped'},
+  5:{n:'T RES', d:'the timing resistor, between this pin and pin 6; with the cap on 6 it sets the frequency it listens for'},
+  6:{n:'T CAP', d:'the timing capacitor, to ground'},
+  7:{n:'GND', d:'ground'},
+  8:{n:'OUT', d:'pulls low while it hears its tone; open collector, so it needs a pull-up resistor to do anything'},
+};
+/* ICL8038, Renesas (Intersil) FN2864 Rev.4.00, the PDIP top-view drawing. */
+const PINS_ICL8038 = {
+  1:{n:'SINE ADJ', d:'sine distortion trim; works with pin 12, and the sine is rougher left open'},
+  2:{n:'SINE OUT', d:'the sine wave output'},
+  3:{n:'TRI OUT', d:'the triangle wave output'},
+  4:{n:'RA', d:'timing resistor RA, to V+; with RB on pin 5 it sets frequency and duty cycle together'},
+  5:{n:'RB', d:'timing resistor RB, to V+; tie 4 and 5 together through one resistor for a plain 50% square'},
+  6:{n:'V+', d:'the positive supply, 10V to 30V'},
+  7:{n:'FM BIAS', d:'an internal bias tap; tie it to pin 8 for a fixed frequency'},
+  8:{n:'FM SWEEP', d:'frequency control voltage, measured down from V+; tie to pin 7, or feed it a CV, but never leave it open'},
+  9:{n:'SQ OUT', d:'the square wave output; open collector, so it needs a load resistor to V+'},
+  10:{n:'TIMING CAP', d:'the timing capacitor, to V- or ground'},
+  11:{n:'V−/GND', d:'the negative supply, or ground on a single-supply build'},
+  12:{n:'SINE ADJ', d:'the second sine trim, usually a resistor to V- (82K in the datasheet circuit)'},
+  13:NC_, 14:NC_,
+};
+/* LM384, TI SNAS547C, Figure 12 (14-pin PDIP). 3-5 and 10-12 are the heatsink
+   pins, joined by the lead frame; 7 is a separate signal ground. */
+const lmHs = {n:'GND', d:'ground, and one of six heatsink pins - give them copper area to carry the heat away'};
+const PINS_LM384 = {
+  1:{n:'BYPASS', d:'supply ripple bypass capacitor, to ground'},
+  2:{n:'IN+', d:'the non-inverting input; it sits at ground, so it can take a signal through a volume pot'},
+  3:lmHs, 4:lmHs, 5:lmHs,
+  6:{n:'IN−', d:'the inverting input; ground it when the signal goes into pin 2'},
+  7:{n:'GND', d:'the signal ground - separate from the heatsink pins, and it still has to be connected'},
+  8:{n:'OUT', d:'the output, sitting at half the supply, so it reaches the speaker through a big capacitor'},
+  9:NC_,
+  10:lmHs, 11:lmHs, 12:lmHs,
+  13:NC_,
+  14:{n:'V+ (VS)', d:'the positive supply, 12V to 26V'},
+};
+/* TL494, TI SLVS074J, Table 4-1. Rev J draws the output switches as MOSFETs
+   (drain and source); the pin names C1, E1, E2, C2 are the old collector and
+   emitter ones and did not move. */
+const PINS_TL494 = {
+  1:{n:'1IN+', d:'error amplifier 1, non-inverting input'},
+  2:{n:'1IN−', d:'error amplifier 1, inverting input'},
+  3:{n:'FEEDBACK', d:'the error amplifiers\' shared output, where the loop compensation goes'},
+  4:{n:'DTC', d:'dead-time control: a voltage here sets the shortest off-time; ground it for the default'},
+  5:{n:'CT', d:'the oscillator\'s timing capacitor, to ground'},
+  6:{n:'RT', d:'the oscillator\'s timing resistor, to ground'},
+  7:{n:'GND', d:'ground'},
+  8:{n:'C1', d:'output switch 1, the top end - to a load or to VCC'},
+  9:{n:'E1', d:'output switch 1, the bottom end - to ground or to a load'},
+  10:{n:'E2', d:'output switch 2, the bottom end'},
+  11:{n:'C2', d:'output switch 2, the top end'},
+  12:{n:'VCC', d:'the positive supply, 7V to 40V'},
+  13:{n:'OUT CTRL', d:'ground it for both outputs together, tie it to REF (14) for push-pull'},
+  14:{n:'REF', d:'a 5V reference output'},
+  15:{n:'2IN−', d:'error amplifier 2, inverting input'},
+  16:{n:'2IN+', d:'error amplifier 2, non-inverting input - note 2IN+ is pin 16 while 1IN+ is pin 1'},
+};
+/* ULN2003A, TI SLRS027T, Table 4-1. ULN2803A, TI SLRS049C. Channel n's input
+   is pin n and its output counts back down from the far end. */
+const ulnIn  = (ch, out) => ({n:ch + 'B', d:'channel ' + ch + ' input; its output is pin ' + out});
+const ulnOut = (ch, inp) => ({n:ch + 'C', d:'channel ' + ch + ' output, open collector - it sinks current to ground while pin ' + inp + ' is high'});
+const PINS_ULN2003A = {
+  1:ulnIn(1,16), 2:ulnIn(2,15), 3:ulnIn(3,14), 4:ulnIn(4,13), 5:ulnIn(5,12), 6:ulnIn(6,11), 7:ulnIn(7,10),
+  8:{n:'GND (E)', d:'the common emitter for all seven channels - ground'},
+  9:{n:'COM', d:'the flyback diodes\' common: to the load supply for relays and motors, open for LEDs and resistors'},
+  10:ulnOut(7,7), 11:ulnOut(6,6), 12:ulnOut(5,5), 13:ulnOut(4,4), 14:ulnOut(3,3), 15:ulnOut(2,2), 16:ulnOut(1,1),
+};
+const PINS_ULN2803A = {
+  1:ulnIn(1,18), 2:ulnIn(2,17), 3:ulnIn(3,16), 4:ulnIn(4,15), 5:ulnIn(5,14), 6:ulnIn(6,13), 7:ulnIn(7,12), 8:ulnIn(8,11),
+  9:{n:'GND', d:'the common emitter for all eight channels - ground. Pin 9 here, not pin 8 as on a ULN2003A'},
+  10:{n:'COM', d:'the flyback diodes\' common: to the load supply for relays and motors, open for LEDs and resistors'},
+  11:ulnOut(8,8), 12:ulnOut(7,7), 13:ulnOut(6,6), 14:ulnOut(5,5), 15:ulnOut(4,4), 16:ulnOut(3,3), 17:ulnOut(2,2), 18:ulnOut(1,1),
+};
+/* CA3130, Renesas (Intersil) FN817 Rev.6.00, the PDIP top view and circuit
+   description. Not the usual single op-amp: 8 is strobe and compensation. */
+const PINS_CA3130 = {
+  1:{n:'OFFSET/COMP', d:'offset null (a 100K pot across 1 and 5, wiper to pin 4), and one end of the compensation cap to pin 8'},
+  2:{n:'IN−'}, 3:{n:'IN+'},
+  4:{n:'V−', d:'the negative supply - ground on a single-rail build'},
+  5:{n:'OFFSET', d:'the other end of the offset-null pot; left open on most builds'},
+  6:{n:'OUT', d:'the output, which swings to within a few millivolts of both rails'},
+  7:{n:'V+', d:'the positive supply - 16V total at most, less than a TL072 takes'},
+  8:{n:'STROBE/COMP', d:'not a spare pin: a cap from 1 to 8 compensates it (47pF at unity gain), and tying 8 to pin 4 switches the output off'},
+};
+
+/* CMOS, TI's CD4000B sheets, terminal diagrams read as drawn. */
+const PINS_CD4006 = {
+  1:{n:'D1', d:'data in, section 1 (four stages)'},
+  2:{n:"D1+4'", d:"section 1's fourth stage again, through a latch, half a clock later - for chaining"},
+  3:{n:'CLOCK', d:'shifts every section on the FALLING edge'},
+  4:{n:'D2', d:'data in, section 2 (four stages and a fifth)'},
+  5:{n:'D3', d:'data in, section 3 (four stages)'},
+  6:{n:'D4', d:'data in, section 4 (four stages and a fifth)'},
+  7:VSS_,
+  8:{n:'D4+4', d:"section 4's fourth stage"}, 9:{n:'D4+5', d:"section 4's fifth stage - the end of the full 18-stage chain"},
+  10:{n:'D3+4', d:"section 3's output"},
+  11:{n:'D2+4', d:"section 2's fourth stage"}, 12:{n:'D2+5', d:"section 2's fifth stage"},
+  13:{n:'D1+4', d:"section 1's output"},
+  14:VDD_,
+};
+const PINS_CD4012 = {
+  1:{n:'1Y', d:'gate 1 output, low only while pins 2, 3, 4 and 5 are all high'},
+  2:{n:'1A'}, 3:{n:'1B'}, 4:{n:'1C'}, 5:{n:'1D'},
+  6:NC_, 7:VSS_, 8:NC_,
+  9:{n:'2A'}, 10:{n:'2B'}, 11:{n:'2C'}, 12:{n:'2D'},
+  13:{n:'2Y', d:'gate 2 output, low only while pins 9 to 12 are all high'},
+  14:VDD_,
+};
+const PINS_CD4019 = {
+  1:{n:'B4', d:'channel B, bit 4'}, 2:{n:'A3', d:'channel A, bit 3'}, 3:{n:'B3', d:'channel B, bit 3'},
+  4:{n:'A2', d:'channel A, bit 2'}, 5:{n:'B2', d:'channel B, bit 2'}, 6:{n:'A1', d:'channel A, bit 1'},
+  7:{n:'B1', d:'channel B, bit 1'},
+  8:VSS_,
+  9:{n:'KA', d:'high passes the A inputs; KA and KB both high gives A OR B, both low holds every output low'},
+  10:{n:'D1', d:'output 1: A1 while KA is high, B1 while KB is high'},
+  11:{n:'D2'}, 12:{n:'D3'}, 13:{n:'D4'},
+  14:{n:'KB', d:'high passes the B inputs'},
+  15:{n:'A4', d:'channel A, bit 4'},
+  16:VDD_,
+};
+const PINS_CD4021 = {
+  1:{n:'PI-8', d:'parallel input, bit 8'}, 2:{n:'Q6', d:'stage 6'}, 3:{n:'Q8', d:'stage 8, the serial output'},
+  4:{n:'PI-4'}, 5:{n:'PI-3'}, 6:{n:'PI-2'}, 7:{n:'PI-1'},
+  8:VSS_,
+  9:{n:'P/S', d:'high loads the eight PI pins at once, low lets the clock shift'},
+  10:{n:'CLOCK', d:'shifts on the rising edge while P/S is low'},
+  11:{n:'SER', d:'serial data in, to stage 1'},
+  12:{n:'Q7', d:'stage 7'},
+  13:{n:'PI-5'}, 14:{n:'PI-6'}, 15:{n:'PI-7'},
+  16:VDD_,
+};
+const PINS_CD4025 = {
+  1:{n:'1A', d:'gate 1, with pins 2 and 8; its output is pin 9'}, 2:{n:'1B'},
+  3:{n:'2A', d:'gate 2, with pins 4 and 5; its output is pin 6'}, 4:{n:'2B'}, 5:{n:'2C'},
+  6:{n:'2Y', d:'gate 2 output'},
+  7:VSS_,
+  8:{n:'1C', d:"gate 1's third input, away from the other two"},
+  9:{n:'1Y', d:'gate 1 output'},
+  10:{n:'3Y', d:'gate 3 output, from pins 11, 12 and 13'},
+  11:{n:'3C'}, 12:{n:'3B'}, 13:{n:'3A'},
+  14:VDD_,
+};
+const PINS_CD4026 = {
+  1:{n:'CLOCK', d:'counts on the rising edge; a Schmitt input'},
+  2:{n:'CLK INH', d:'high stops the count - tie it low'},
+  3:{n:'DISP EN IN', d:'high lets the segments light - tie it high or they stay blank'},
+  4:{n:'DISP EN OUT', d:'passes the display enable on to the next digit'},
+  5:{n:'CARRY', d:'one cycle every ten clocks, to clock the next digit'},
+  6:{n:'f'}, 7:{n:'g'},
+  8:VSS_,
+  9:{n:'d'}, 10:{n:'a'}, 11:{n:'e'}, 12:{n:'b'}, 13:{n:'c'},
+  14:{n:'c UNGATED', d:'segment c, ignoring the display enable'},
+  15:{n:'RESET', d:'high clears the count to zero'},
+  16:VDD_,
+};
+const PINS_CD4027 = {
+  1:{n:'Q2', d:'flip-flop 2 output'}, 2:{n:'/Q2', d:'flip-flop 2 inverted output'},
+  3:{n:'CLK2', d:'flip-flop 2 clock, rising edge'},
+  4:{n:'R2', d:'flip-flop 2 reset, active high - ground it or the flip-flop never toggles'},
+  5:{n:'K2'}, 6:{n:'J2'},
+  7:{n:'S2', d:'flip-flop 2 set, active high - ground it when unused'},
+  8:VSS_,
+  9:{n:'S1', d:'flip-flop 1 set, active high - ground it when unused'},
+  10:{n:'J1'}, 11:{n:'K1'},
+  12:{n:'R1', d:'flip-flop 1 reset, active high - ground it when unused'},
+  13:{n:'CLK1', d:'flip-flop 1 clock, rising edge'},
+  14:{n:'/Q1', d:'flip-flop 1 inverted output'}, 15:{n:'Q1', d:'flip-flop 1 output'},
+  16:VDD_,
+};
+const dec = k => ({n:'Q' + k, d:'high while the input code is ' + k});
+const PINS_CD4028 = {
+  1:dec(4), 2:dec(2), 3:dec(0), 4:dec(7), 5:dec(9), 6:dec(5), 7:dec(6),
+  8:VSS_,
+  9:dec(8),
+  10:{n:'A', d:'code bit 1, the lowest'}, 11:{n:'D', d:'code bit 8, the highest - ground it for a 1-of-8 decoder'},
+  12:{n:'C', d:'code bit 4'}, 13:{n:'B', d:'code bit 2'},
+  14:dec(1), 15:dec(3),
+  16:VDD_,
+};
+const PINS_CD4044 = {
+  1:{n:'Q4', d:'latch 4 output'}, 2:NC_,
+  3:{n:'/S1', d:'latch 1 set, active LOW - hold it high when idle'}, 4:{n:'/R1', d:'latch 1 reset, active LOW'},
+  5:{n:'ENABLE', d:'high drives all four outputs, low lets them float - tie it high'},
+  6:{n:'/R2', d:'latch 2 reset, active LOW'}, 7:{n:'/S2', d:'latch 2 set, active LOW'},
+  8:VSS_,
+  9:{n:'Q2', d:'latch 2 output'}, 10:{n:'Q3', d:'latch 3 output'},
+  11:{n:'/S3', d:'latch 3 set, active LOW'}, 12:{n:'/R3', d:'latch 3 reset, active LOW'},
+  13:{n:'Q1', d:'latch 1 output'},
+  14:{n:'/R4', d:'latch 4 reset, active LOW'}, 15:{n:'/S4', d:'latch 4 set, active LOW'},
+  16:VDD_,
+};
+const mx = (ch, side) => ({n:side + ch, d:side + ' channel ' + ch + '; joined to ' + side + ' COM while the selects read ' + ch + ', and signal flows either way'});
+const PINS_CD4052 = {
+  1:mx(0,'Y'), 2:mx(2,'Y'),
+  3:{n:'Y COM', d:"the Y side's common; one Y channel joins here at a time"},
+  4:mx(3,'Y'), 5:mx(1,'Y'),
+  6:{n:'INH', d:'high opens every channel - tie it to ground when unused'},
+  7:{n:'VEE', d:'the negative supply for the signal itself - tie it to ground on a single-rail build'},
+  8:VSS_,
+  9:{n:'B', d:'select bit B, the higher one: BA picks channel 0 to 3 on both sides at once'},
+  10:{n:'A', d:'select bit A, the lower one'},
+  11:mx(3,'X'), 12:mx(0,'X'),
+  13:{n:'X COM', d:"the X side's common; one X channel joins here at a time"},
+  14:mx(1,'X'), 15:mx(2,'X'),
+  16:VDD_,
+};
+const PINS_CD4068 = {
+  1:{n:'AND', d:'high only while all eight inputs are high'},
+  2:{n:'A'}, 3:{n:'B'}, 4:{n:'C'}, 5:{n:'D'},
+  6:NC_, 7:VSS_, 8:NC_,
+  9:{n:'E'}, 10:{n:'F'}, 11:{n:'G'}, 12:{n:'H'},
+  13:{n:'NAND', d:'low only while all eight inputs are high'},
+  14:VDD_,
+};
+
+/* Comparators, TI SLCS005AH (LM393), SLCS006Z (LM339 and LM2901, one table),
+   SLCS007K (LM311). Every output is open collector: it can only pull down,
+   so it does nothing without a pull-up resistor. */
+const cmpOut = (ch, a, b) => ({n:'OUT ' + ch, d:'comparator ' + ch + ' output, decided by pins ' + a + ' and ' + b + '; open collector, so it needs a pull-up resistor'});
+const PINS_LM393 = {
+  1:cmpOut('A',2,3), 2:{n:'IN- A'}, 3:{n:'IN+ A'},
+  4:{n:'GND', d:'ground, or the negative rail on a split supply'},
+  5:{n:'IN+ B'}, 6:{n:'IN- B'}, 7:cmpOut('B',5,6),
+  8:{n:'VCC', d:'the positive supply'},
+};
+const PINS_LM339 = {
+  1:cmpOut(1,6,7), 2:cmpOut(2,4,5),
+  3:{n:'VCC', d:'the positive supply - pin 3 here, not a corner'},
+  4:{n:'IN2-'}, 5:{n:'IN2+'}, 6:{n:'IN1-'}, 7:{n:'IN1+'},
+  8:{n:'IN3-'}, 9:{n:'IN3+'}, 10:{n:'IN4-'}, 11:{n:'IN4+'},
+  12:{n:'GND', d:'ground, or the negative rail on a split supply - pin 12, not a corner'},
+  13:cmpOut(4,10,11), 14:cmpOut(3,8,9),
+};
+const PINS_LM311 = {
+  1:{n:'EMIT OUT', d:"the output transistor's emitter - usually tied to ground"},
+  2:{n:'IN+', d:'the non-inverting input - pin 2, the opposite of an op-amp'},
+  3:{n:'IN\u2212', d:'the inverting input - pin 3, the opposite of an op-amp'},
+  4:{n:'V\u2212', d:'the negative supply - ground on a single-rail build'},
+  5:{n:'BALANCE', d:'offset balance; left open on most builds'},
+  6:{n:'BAL/STROBE', d:'balance and strobe; left open on most builds'},
+  7:{n:'COL OUT', d:'the output, open collector - it needs a pull-up resistor'},
+  8:{n:'V+', d:'the positive supply'},
+};
+/* LF411: TI SLOS011D calls 1 and 5 "do not connect"; National's DS005655 has
+   them as offset balance. Every other pin agrees, and both are fine left
+   open, so they claim nothing but 'opt'. */
+const PINS_LF411 = {
+  1:{n:'NC/BAL', d:'offset balance on older parts, do-not-connect on TI\'s current one - leave it open'},
+  2:{n:'IN\u2212'}, 3:{n:'IN+'},
+  4:{n:'V\u2212', d:'the negative supply - ground on a single-rail pedal'},
+  5:{n:'NC/BAL', d:'offset balance on older parts, do-not-connect on TI\'s current one - leave it open'},
+  6:{n:'OUT'},
+  7:{n:'V+', d:'the positive supply'},
+  8:NC_,
+};
+
 /* IC library. `roles` drives pin labeling and the floating-input DRC.
    `ties` lists pin groups the datasheet itself joins -- see NE555.
    A pin left out of `roles` is one whose direction the tool does not claim to
@@ -2201,18 +2475,18 @@ const IC_LIB = {
     note:'The inputs are Schmitt triggers: they snap over rather than drift, which is why a ' +
          'resistor and capacitor on one input turns an inverter into an oscillator.'},
   CD4069 :{pins:14, about:"six plain inverters. Without the Schmitt trigger they will not oscillate as reliably as a 40106, so use them for logic rather than for voices", name:'hex inverter',         cmos:true, volts:V_CD4000B, roles:INV_HEX, pinInfo:PINS_INV_HEX},
-  CD4049 :{pins:16, name:'hex inverting buffer', cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
-  CD4050 :{pins:16, name:'hex buffer',           cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
+  CD4049 :{pins:16, about:"six inverters built to drive more current than an ordinary gate. Biased into their linear region they are also a well-known fuzz, which is how the Moria uses one", name:'hex inverting buffer', cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
+  CD4050 :{pins:16, about:"six buffers that do not invert: each output follows its input, with enough drive to feed something an ordinary gate could not", name:'hex buffer',           cmos:true, volts:V_CD4000B, roles:BUF_HEX, pinInfo:PINS_BUF_HEX},
 
   CD4011 :{pins:14, about:"four plain NAND gates, for logic rather than oscillators - no Schmitt trigger on the inputs", name:'quad NAND',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
   CD4093 :{pins:14, about:"four Schmitt NAND gates. Like a 40106 voice, but each gate has a second input, so you can gate the oscillator on and off without extra parts", name:'quad Schmitt NAND',    cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2,
     note:'Schmitt inputs, so it oscillates with a resistor and capacitor the way a 40106 does - ' +
          'with the second input left as a gate to switch the whole thing on and off.'},
   CD4001 :{pins:14, about:"four NOR gates. Two of them cross-coupled makes a latch, which is the usual way to build a set-reset from logic", name:'quad NOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4071 :{pins:14, name:'quad OR',              cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4081 :{pins:14, name:'quad AND',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4070 :{pins:14, name:'quad XOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
-  CD4077 :{pins:14, name:'quad XNOR',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4071 :{pins:14, about:"four OR gates. The output goes high when either input is high, which is an easy way to merge two triggers into one", name:'quad OR',              cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4081 :{pins:14, about:"four AND gates. The output is high only while both inputs are, so one input can switch the other on and off", name:'quad AND',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4070 :{pins:14, about:"four XOR gates. Two square waves into one gate come out as their sum and difference, the simplest ring modulator there is", name:'quad XOR',             cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  CD4077 :{pins:14, about:"four XNOR gates, an XOR with its output flipped. It does the same ring-mod trick as a 4070, upside down", name:'quad XNOR',            cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
 
   /* ---- 74-series high-speed CMOS: 5V parts, fast enough for a crystal clock ---- */
   '74HC86' :{pins:14, about:"four XOR gates in the fast 74HC family. Feed two crystal oscillators into one gate and the average of its output is the difference between them - a beat you can hear. A CD4070 is far too slow for that", name:'quad XOR (74HC)', cmos:true, volts:V_74HC, roles:GATE_QUAD2_74, pinInfo:PINS_GATE_QUAD2_74,
@@ -2269,6 +2543,51 @@ const IC_LIB = {
     roles:{1:'in',2:'out',3:'out',4:'in',5:'in',6:'out',7:'out',8:'gnd',
            9:'in',10:'in',11:'in',12:'out',13:'out',14:'in',15:'in',16:'vdd'}},
 
+
+  /* ---- more of her CMOS bins (v1.7.16), each off its TI sheet ---- */
+  /* TI SCHS017: no reset, and it shifts on the FALLING clock edge. Only seven
+     stages have a pin; the full 18 run 13 -> 4, 12 -> 5, 10 -> 6, out on 9. */
+  CD4006 :{pins:14, about:"an 18-stage shift register in four sections of four or five, chained by wiring outputs back to inputs. Clocked off a slow oscillator and fed back through a gate, it is a noise and pattern source", name:'18-stage shift register', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4006,
+    note:'It shifts on the falling edge of the clock, and it has no reset. Chain the sections 13 to 4, 12 to 5 and 10 to 6 for all 18 stages, out on pin 9.',
+    roles:{1:'in',2:'out',3:'in',4:'in',5:'in',6:'in',7:'gnd',8:'out',9:'out',10:'out',11:'out',12:'out',13:'out',14:'vdd'}},
+  /* TI SCHS021D: outputs on the corners, 1 and 13; 6 and 8 are NC. */
+  CD4012 :{pins:14, about:"two four-input NAND gates. Each output goes low only when all four of its inputs are high", name:'dual 4-input NAND', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4012,
+    roles:{1:'out',2:'in',3:'in',4:'in',5:'in',6:'nc',7:'gnd',8:'nc',9:'in',10:'in',11:'in',12:'in',13:'out',14:'vdd'}},
+  /* TI SCHS029C: KA on 9 and KB on 14, not side by side; A4 is 15, B4 is 1. */
+  CD4019 :{pins:16, about:"four two-way selectors with shared controls: KA passes the A inputs, KB the B inputs. A digital switch for picking between two patterns", name:'quad AND/OR select', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4019,
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'in',6:'in',7:'in',8:'gnd',9:'in',10:'out',11:'out',12:'out',13:'out',14:'in',15:'in',16:'vdd'}},
+  /* TI SCHS024C: only Q6, Q7 and Q8 come out. P/S high loads, and overrides the clock. */
+  CD4021 :{pins:16, about:"an eight-bit shift register you can load all at once from eight pins, then clock out one bit at a time. Only the last three stages have pins", name:'8-stage shift register (parallel in)', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4021,
+    note:'Every parallel input has to be tied to something, even when you only shift serially. Pin 9 high loads them, low lets the clock shift.',
+    roles:{1:'in',2:'out',3:'out',4:'in',5:'in',6:'in',7:'in',8:'gnd',9:'in',10:'in',11:'in',12:'out',13:'in',14:'in',15:'in',16:'vdd'}},
+  /* TI SCHS015C: gate 1's inputs are 1, 2 and 8, its output 9. */
+  CD4025 :{pins:14, about:"three three-input NOR gates. Any input high pulls that gate's output low", name:'triple 3-input NOR', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4025,
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'in',6:'out',7:'gnd',8:'in',9:'out',10:'out',11:'in',12:'in',13:'in',14:'vdd'}},
+  /* TI SCHS031B: segment pins are not in a-to-g order. */
+  CD4026 :{pins:16, about:"counts 0 to 9 and drives a seven-segment display directly, with a carry out to the next digit", name:'decade counter, 7-segment out', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4026,
+    note:'Tie clock inhibit (2) low and display enable (3) high, or it will not count or the display stays blank.',
+    roles:{1:'in',2:'in',3:'in',4:'out',5:'out',6:'out',7:'out',8:'gnd',9:'out',10:'out',11:'out',12:'out',13:'out',14:'out',15:'in',16:'vdd'}},
+  /* TI SCHS032D, Table 5-1. Flip-flop 2 is pins 1-7, flip-flop 1 is 9-15. */
+  CD4027 :{pins:16, about:"two JK flip-flops. With J and K both high each one toggles on every clock, halving it - a cleaner divider than a D flip-flop for some jobs", name:'dual JK flip-flop', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4027,
+    note:'SET and RESET are active high, so ground them or the flip-flop never moves. Flip-flop 2 is on pins 1-7 and flip-flop 1 on pins 9-15.',
+    roles:{1:'out',2:'out',3:'in',4:'in',5:'in',6:'in',7:'in',8:'gnd',9:'in',10:'in',11:'in',12:'in',13:'in',14:'out',15:'out',16:'vdd'}},
+  /* TI SCHS033C: the outputs are scrambled round the package; A=10, B=13, C=12, D=11. */
+  CD4028 :{pins:16, about:"turns a four-bit number into one of ten outputs going high - with a counter in front of it, a step sequencer's other half", name:'BCD to decimal decoder', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4028,
+    roles:{1:'out',2:'out',3:'out',4:'out',5:'out',6:'out',7:'out',8:'gnd',9:'out',10:'in',11:'in',12:'in',13:'in',14:'out',15:'out',16:'vdd'}},
+  /* TI SCHS035C: the same pins as the CD4070 (SCHS055E), so the same tables. */
+  CD4030 :{pins:14, about:"four XOR gates on the same pins as a CD4070, so it does the same square-wave ring modulation", name:'quad XOR', cmos:true, volts:V_CD4000B, roles:GATE_QUAD2, pinInfo:PINS_GATE_QUAD2},
+  /* TI SCHS041D: active-LOW set and reset, and ENABLE must be high. Not pin
+     compatible with the CD4043. */
+  CD4044 :{pins:16, about:"four set-reset latches with active-low inputs: pull S low and Q goes high, pull R low and it goes back. A button press that stays pressed", name:'quad NAND R/S latch', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4044,
+    note:'Set and reset are active LOW, so hold them high when idle, and tie ENABLE (5) high or every output floats.',
+    roles:{1:'out',2:'nc',3:'in',4:'in',5:'in',6:'in',7:'in',8:'gnd',9:'out',10:'out',11:'in',12:'in',13:'out',14:'in',15:'in',16:'vdd'}},
+  /* TI SCHS047O, Table 4-2 and Fig 4-2. Only INH, the selects and the rails
+     claim a direction; the channels conduct both ways, as on the CD4051/53. */
+  CD4052 :{pins:16, about:"two four-way switches that move together: two select bits pick channel 0 to 3 on both sides at once. A stereo selector, or one signal routed two ways", name:'dual 4-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4052,
+    roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',16:'vdd'}},
+  /* TI SCHS053C: two outputs, AND on 1 and NAND on 13; 6 and 8 are NC. */
+  CD4068 :{pins:14, about:"one eight-input gate with both answers: pin 13 is the NAND and pin 1 the AND", name:'8-input NAND/AND', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4068,
+    roles:{1:'out',2:'in',3:'in',4:'in',5:'in',6:'nc',7:'gnd',8:'nc',9:'in',10:'in',11:'in',12:'in',13:'out',14:'vdd'}},
   /* ---- timers ---- */
   /* `ties` lists pin groups the datasheet itself joins. A 555 astable ties
      trigger to threshold; a monostable ties threshold to discharge. Both look
@@ -2280,6 +2599,14 @@ const IC_LIB = {
          'timing cap between the two. Tying 2 to 6 makes it run continuously.',
     roles:{1:'gnd',2:'in',3:'out',4:'in',5:'in',6:'in',7:'out',8:'vdd'},
     ties:[[2,6],[6,7],[2,6,7]], volts:{min:4.5, max:16}, pinInfo:PINS_NE555},
+  /* TLC555, TI SLFS043K, Table 4-1: the 555's pins in CMOS. RESET must go to
+     VDD when unused (TI's words), so it is an input the floating rule watches;
+     CONT is 'opt', a bypass node fine left open. 2-15V for the C grade. */
+  TLC555 :{pins:8, decoupleNote:'a 555 throws a current spike into the rail every time it switches, and this is the cap that keeps that out of everything else', about:"the CMOS 555: the same pins, runs from 2V and draws almost nothing. The One Shot is built on one", name:'CMOS timer', cmos:true,
+    note:'Trigger (2) starts the pulse, threshold (6) ends it, and discharge (7) empties the ' +
+         'timing cap between the two. Tie RESET (4) to the supply when you are not using it.',
+    roles:{1:'gnd',2:'in',3:'out',4:'in',5:'opt',6:'in',7:'out',8:'vdd'},
+    ties:[[2,6],[6,7],[2,6,7]], volts:{min:2, max:15, note:'2-15V, with 18V the absolute maximum'}, pinInfo:PINS_NE555},
   /* Two 555s in one package. Timer 1 is pins 1-6, timer 2 is 8-13, and the
      ties are the 555's per timer: trigger to threshold (astable), threshold
      to discharge (monostable). Pin order verified against TI's NE556 and
@@ -2299,21 +2626,21 @@ const IC_LIB = {
     ties:[[2,6],[1,2],[1,2,6],[8,12],[12,13],[8,12,13]], volts:{min:2, max:15}, pinInfo:PINS_NE556},
 
   /* ---- op-amps ---- */
-  TL071  :{pins:8,  name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  TL081  :{pins:8,  name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  LM741  :{pins:8,  name:'op-amp',                cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  NE5534 :{pins:8,  name:'low-noise op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
-  OPA134 :{pins:8,  name:'FET audio op-amp',      cmos:false, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  TL071  :{pins:8,  about:"the single version of the TL072: one JFET-input op-amp, with two offset-null pins most audio builds leave open", name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  TL081  :{pins:8,  about:"one JFET-input op-amp, the general-purpose sibling of the lower-noise TL071 on the same pins", name:'FET op-amp',            cmos:false, volts:V_TL0XX, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  LM741  :{pins:8,  name:'op-amp',                cmos:false, volts:{min:20, max:36, note:'+-10V to +-18V for the LM741C, so 20-36V across both rails (TI SNOSC25D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  NE5534 :{pins:8,  about:"one low-noise op-amp from studio and mixing-desk gear, the single version of the NE5532", name:'low-noise op-amp',      cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 44V the absolute maximum (TI SLOS070D)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
+  OPA134 :{pins:8,  about:"one audio op-amp built for very low distortion", name:'FET audio op-amp',      cmos:false, volts:{min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_SINGLE, pinInfo:PINS_OPAMP_SINGLE},
 
   TL072  :{pins:8, about:"the default audio op-amp - quiet, cheap, and in more pedals than any other part",  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  TL082  :{pins:8,  name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  TL062  :{pins:8,  name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  JRC4580:{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  NE5532 :{pins:8,  name:'dual low-noise op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  LM358  :{pins:8,  name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  LM833  :{pins:8,  name:'dual audio op-amp',     cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  OPA2134:{pins:8,  name:'dual FET audio op-amp', cmos:false, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL082  :{pins:8,  about:"two JFET-input op-amps on the TL072's pins, the general-purpose sibling of the lower-noise TL072", name:'dual FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TL062  :{pins:8,  about:"two low-power JFET-input op-amps. They draw a fraction of a TL072's current, which suits a battery build", name:'dual low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4558:{pins:8, about:"the op-amp from the Tube Screamer, which is the only reason anyone still asks for it by name",  name:'dual op-amp',           cmos:false, volts:{min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (Nisshinbo NJM4558)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  JRC4580:{pins:8,  about:"two low-noise op-amps on the standard dual pinout, often swapped in for a 4558", name:'dual audio op-amp',     cmos:false, volts:{min:4, max:36, note:'+-2V to +-18V, so 4-36V across both rails (Nisshinbo NJM4580)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  NE5532 :{pins:8,  about:"two low-noise op-amps from studio and mixing-desk gear", name:'dual low-noise op-amp', cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS075K)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM358  :{pins:8,  about:"two op-amps that run from a single low supply, with inputs that work right down to ground. Not hi-fi, but they work where others will not", name:'dual op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LM833  :{pins:8,  about:"two low-noise audio op-amps on the standard dual pinout", name:'dual audio op-amp',     cmos:false, volts:{min:10, max:36, note:'+-5V to +-18V, so 10-36V across both rails (TI SLOS481B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  OPA2134:{pins:8,  about:"two audio op-amps built for very low distortion, the dual OPA134", name:'dual FET audio op-amp', cmos:false, volts:{min:5, max:36, note:'5-36V across the rails, single or split (TI SBOS058B)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
   /* Rail-to-rail, and single supply. A TL072 cannot get its output within a
      volt or two of either rail, which is fine in a pedal biased at half the
@@ -2321,14 +2648,38 @@ const IC_LIB = {
      rail. These two can, which is what lets a single-supply design delete the
      output diode a split-rail one needs. */
   TLC2272:{pins:8, about:"a rail-to-rail op-amp that runs from one supply - its output actually reaches 0V and V+, which a TL072 never does", name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLC227X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
-  TLV2372:{pins:8,  name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLV237X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TLV2372:{pins:8,  about:"two op-amps whose inputs and outputs reach both rails, so they keep their full swing on a low supply", name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLV237X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
 
-  TL074  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  TL084  :{pins:14, name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  TL064  :{pins:14, name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL074  :{pins:14, about:"four JFET-input op-amps in one package, the quad TL072, for filters and mixers that need several stages", name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL084  :{pins:14, about:"four JFET-input op-amps, the general-purpose sibling of the TL074 on the same pins", name:'quad FET op-amp',       cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TL064  :{pins:14, about:"four low-power JFET-input op-amps, the quad TL062", name:'quad low-power op-amp', cmos:false, volts:V_TL0XX, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
   LM324  :{pins:14, about:"four op-amps in one package, and it will run from a single low rail - handy when board space matters more than noise", name:'quad op-amp',           cmos:false, volts:V_LM358, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
-  LM348  :{pins:14, name:'quad op-amp',           cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  LM348  :{pins:14, about:"four 741-style op-amps in one package", name:'quad op-amp',           cmos:false, volts:{min:8, max:36, note:'+-4V to +-18V, so 8-36V across both rails (TI SLOS058C)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
 
+
+  /* v1.7.16, from her bins, each off its own sheet. The standard dual and
+     quad op-amp pinouts were confirmed pin for pin before sharing the tables. */
+  LF411  :{pins:8, about:"a single JFET-input op-amp, a common upgrade for the 741 on the same core pins", name:'FET op-amp', cmos:false, volts:V_TL0XX, roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'out',7:'vdd',8:'nc'}, pinInfo:PINS_LF411},
+  MC1458 :{pins:8, about:"two 741-style op-amps in one package", name:'dual op-amp', cmos:false, volts:{min:10, max:30, note:'+-5V to +-15V, so 10-30V across both rails, with 36V the absolute maximum (TI SLOS069C)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  TLC2262:{pins:8, about:"two CMOS op-amps whose outputs reach both rails, the lower-power sibling of the TLC2272", name:'dual rail-to-rail op-amp', cmos:false, volts:V_TLC227X, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  LMC6482:{pins:8, about:"two CMOS op-amps that swing rail to rail in and out and run from 3V", name:'dual rail-to-rail op-amp', cmos:false, volts:{min:3, max:15.5, note:'3-15.5V, with 16V the absolute maximum (TI SNOS674J)'}, roles:OPAMP_DUAL, pinInfo:PINS_OPAMP_DUAL},
+  /* CA3130, Renesas FN817: not the usual single. 1, 5 and 8 are offset and
+     compensation, 'opt' because most builds leave 5 open and 1-8 needs a cap
+     only at low gain. 16V total is also its absolute maximum. */
+  CA3130 :{pins:8, about:"a CMOS-input op-amp whose output swings to within millivolts of both rails. Pin 8 is not a spare: it takes a compensation cap from pin 1", name:'CMOS-input op-amp', cmos:false, volts:{min:5, max:16, note:'5-16V across both rails, and 16V is also the absolute maximum - do not run it on 18V'}, roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'out',7:'vdd',8:'opt'}, pinInfo:PINS_CA3130},
+  LF444  :{pins:14, about:"four low-power JFET-input op-amps on the standard quad pinout", name:'quad low-power FET op-amp', cmos:false, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+  TLE2074:{pins:14, about:"four fast, low-noise JFET-input op-amps on the standard quad pinout", name:'quad FET op-amp', cmos:false, volts:{min:4.5, max:38, note:'+-2.25V to +-19V, so 4.5-38V across both rails (TI SLOS181D)'}, roles:OPAMP_QUAD, pinInfo:PINS_OPAMP_QUAD},
+
+  /* ---- comparators: open-collector outputs that need a pull-up ---- */
+  LM393  :{pins:8, about:"two comparators: each output switches according to which input is higher. Open collector, so each output needs a pull-up resistor", name:'dual comparator', cmos:false, volts:{min:2, max:30, note:'2-30V from one rail, with 36V the absolute maximum (TI SLCS005AH)'}, roles:OPAMP_DUAL, pinInfo:PINS_LM393},
+  LM339  :{pins:14, about:"four comparators with open-collector outputs - each needs a pull-up. The supply and ground are pins 3 and 12, not the corners", name:'quad comparator', cmos:false, volts:{min:2, max:30, note:'2-30V from one rail, with 36V the absolute maximum (TI SLCS006Z)'},
+    roles:{1:'out',2:'out',3:'vdd',4:'in',5:'in',6:'in',7:'in',8:'in',9:'in',10:'in',11:'in',12:'vee',13:'out',14:'out'}, pinInfo:PINS_LM339},
+  LM2901 :{pins:14, about:"four comparators on exactly the LM339's pins, rated over a wider temperature range", name:'quad comparator', cmos:false, volts:{min:2, max:30, note:'2-30V from one rail, with 36V the absolute maximum (TI SLCS006Z)'},
+    roles:{1:'out',2:'out',3:'vdd',4:'in',5:'in',6:'in',7:'in',8:'in',9:'in',10:'in',11:'in',12:'vee',13:'out',14:'out'}, pinInfo:PINS_LM339},
+  /* TI SLCS007K. IN+ is 2 and IN- is 3, the other way around from an op-amp.
+     The emitter (1) usually goes to ground, so it claims nothing. */
+  LM311  :{pins:8, about:"a single comparator with its output transistor's collector and emitter both brought out. Note IN+ is pin 2 and IN- pin 3, the reverse of an op-amp", name:'comparator', cmos:false, volts:{min:3.5, max:30, note:'3.5-30V across the rails, with 36V the absolute maximum (TI SLCS007K)'},
+    roles:{1:'opt',2:'in',3:'in',4:'vee',5:'opt',6:'opt',7:'out',8:'vdd'}, pinInfo:PINS_LM311},
   /* ---- the odd-shaped ones ---- */
   LM386  :{pins:8, about:"a small speaker amplifier. Half a watt or so, happy on a battery", name:'audio power amp', cmos:false,
     volts:{min:4, max:12, note:'the -1 and -3 grades; the -4 grade reaches 18V'},
@@ -2378,6 +2729,44 @@ const IC_LIB = {
     roles:{1:'vdd',2:'out',3:'gnd',4:'gnd',5:'out',6:'in',7:'opt',8:'opt',
            9:'out',10:'in',11:'in',12:'out',13:'in',14:'out',15:'out',16:'in'}, pinInfo:PINS_PT2399},
 
+
+  /* LM567, TI SNOSBQ4F. The timing resistor is pin 5 and the cap pin 6 - Rev F
+     corrected a Rev E table that had them swapped, so an old printout can be
+     wrong. 3.5-8.5V recommended, 9V absolute. `max` here is the one that kills the
+     part, so it is the 9V - the same figure the Sound Fuckulator guide gives. */
+  LM567  :{pins:8, about:"a tone decoder: it listens for one frequency, set by a resistor on pin 5 and a capacitor on pin 6, and pulls pin 8 low while it hears it. Paul Stevenson pointed one at a guitar for the Sound Fuckulator", name:'tone decoder', cmos:false,
+    note:'The output on pin 8 is open collector, so it needs a pull-up resistor. The timing resistor goes on pin 5 and the cap on pin 6.',
+    volts:{min:3.5, max:9, note:'3.5-8.5V to work to spec, and 9V is the absolute maximum - a fresh 9V battery can sit just over it'},
+    roles:{3:'in',4:'vdd',7:'gnd',8:'out'}, pinInfo:PINS_LM567},
+  /* ICL8038, Renesas FN2864 Rev.4.00 (obsolete, no replacement). 4 and 5 may be
+     joined through one resistor, and 7 tied to 8 for a fixed frequency, so both
+     pairs are declared ties. 10-30V, 36V absolute. */
+  ICL8038:{pins:14, about:"a function generator: one timing cap and two resistors give a sine, a triangle and a square at the same time, and a voltage on pin 8 sweeps the pitch", name:'function generator', cmos:false,
+    note:'The square on pin 9 is open collector, so it needs a load resistor to V+. Tie pin 7 to pin 8 for a fixed pitch, or feed pin 8 a control voltage - never leave it open.',
+    volts:{min:10, max:30, note:'10-30V, single or split, with 36V the absolute maximum'},
+    roles:{1:'opt',2:'out',3:'out',6:'vdd',7:'opt',8:'in',9:'out',11:'vee',12:'opt',13:'nc',14:'nc'},
+    ties:[[4,5],[7,8]], pinInfo:PINS_ICL8038},
+  /* LM384, TI SNAS547C, Figure 12. Six heatsink grounds joined by the lead
+     frame, plus a separate signal ground on 7. 12-26V: not a 9V part. */
+  LM384  :{pins:14, about:"a bigger LM386: about 5W into a speaker, from a 12V to 26V supply. Six of its ground pins are the heatsink", name:'5W audio amp', cmos:false,
+    note:'Pins 3, 4, 5, 10, 11 and 12 are ground and heatsink both - give them copper. Pin 7 is a separate ground and still has to be connected. It will not run properly on 9V.',
+    volts:{min:12, max:26, note:'12-26V, with 28V the absolute maximum'},
+    roles:{2:'in',3:'gnd',4:'gnd',5:'gnd',6:'in',7:'gnd',8:'out',9:'nc',10:'gnd',11:'gnd',12:'gnd',13:'nc',14:'vdd'},
+    ties:[[3,4,5,10,11,12]], pinInfo:PINS_LM384},
+  /* TL494, TI SLVS074J. The four output-switch pins claim no direction: an
+     emitter to ground or a collector to the supply is how they are used. */
+  TL494  :{pins:16, about:"a PWM controller: an oscillator, two error amplifiers and two output switches, the heart of many switching power supplies", name:'PWM controller', cmos:false,
+    note:'1IN+ is pin 1 but 2IN+ is pin 16. Tie the inputs of an error amplifier you do not use, and ground pin 13 unless you want push-pull.',
+    volts:{min:7, max:40, note:'7-40V, with 41V the absolute maximum'},
+    roles:{1:'in',2:'in',4:'in',7:'gnd',8:'opt',9:'opt',10:'opt',11:'opt',12:'vdd',13:'in',14:'out',15:'in',16:'in'}, pinInfo:PINS_TL494},
+  /* ULN2003A, TI SLRS027T; ULN2803A, TI SLRS049C. No supply pin at all: E/GND
+     is the shared emitter, and COM is the flyback diodes, fine open. */
+  ULN2003A:{pins:16, about:"seven Darlington switches: a logic-level input on one side sinks up to half an amp on the other, for relays, motors, lamps and strings of LEDs", name:'7-channel Darlington driver', cmos:false,
+    note:'Channel n goes in on pin n and out on pin 17-n. Pin 9 goes to the load supply for relays and motors; leave it open for LEDs.',
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'in',6:'in',7:'in',8:'gnd',9:'opt',10:'out',11:'out',12:'out',13:'out',14:'out',15:'out',16:'out'}, pinInfo:PINS_ULN2003A},
+  ULN2803A:{pins:18, about:"eight Darlington switches, the ULN2003A with one more channel - but ground and COM move to pins 9 and 10", name:'8-channel Darlington driver', cmos:false,
+    note:'Channel n goes in on pin n and out on pin 19-n. Ground is pin 9 and COM pin 10, one along from the ULN2003A.',
+    roles:{1:'in',2:'in',3:'in',4:'in',5:'in',6:'in',7:'in',8:'in',9:'gnd',10:'opt',11:'out',12:'out',13:'out',14:'out',15:'out',16:'out',17:'out',18:'out'}, pinInfo:PINS_ULN2803A},
   /* A half-size crystal oscillator can: an 8-pin DIP outline with only the
      four corner legs, 1, 4, 5 and 8, on a 0.3in square. Abracon ACH series
      (rev 11.15.2016): pin 1 tri-state or NC, "1" or open oscillates; 4

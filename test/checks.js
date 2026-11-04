@@ -1409,6 +1409,85 @@ ok(IC_LIB.CD4053.pinInfo[12].n === 'AX' && IC_LIB.CD4053.pinInfo[13].n === 'AY' 
    'each switch: x, y and common where SCHS047 puts them');
 ok(/low joins AX \(12\)/.test(IC_LIB.CD4053.pinInfo[11].d), 'select A low joins AX');
 
+console.log("-- v1.7.16: her drawers, each pinout off its manufacturer's sheet --");
+{
+  const L = IC_LIB, R = k => L[k].roles, N = (k, p) => L[k].pinInfo[p].n;
+  const added = ['TLC555','LM567','ICL8038','LM384','TL494','ULN2003A','ULN2803A','CA3130',
+    'LF411','LF444','MC1458','TLC2262','TLE2074','LMC6482','LM393','LM339','LM2901','LM311',
+    'CD4006','CD4012','CD4019','CD4021','CD4025','CD4026','CD4027','CD4028','CD4030','CD4044','CD4052','CD4068'];
+  ok(added.every(k => L[k] && L[k].pinInfo && L[k].roles && L[k].about), 'all 30 are in, each with pin names, roles and an about');
+  ok(added.every(k => Object.keys(L[k].pinInfo).length === L[k].pins), 'every new pin table names every pin of its package');
+
+  /* the two that published layouts already used */
+  ok(R('TLC555')[4] === 'in' && R('TLC555')[5] === 'opt' && L.TLC555.cmos === true,
+     'TLC555 (SLFS043K): RESET is a watched CMOS input, CONT may be left open');
+  ok(L.TLC555.volts.min === 2 && L.TLC555.volts.max === 15, 'TLC555 runs 2-15V');
+  ok(N('LM567',5) === 'T RES' && N('LM567',6) === 'T CAP',
+     'LM567 (SNOSBQ4F Rev F): timing RESISTOR on 5, capacitor on 6 - Rev E had them swapped');
+  ok(R('LM567')[4] === 'vdd' && R('LM567')[7] === 'gnd' && R('LM567')[3] === 'in' && R('LM567')[8] === 'out',
+     'LM567: VCC 4, GND 7, IN 3, OUT 8');
+  ok(L.LM567.volts.max === 9 && L.LM567.volts.min === 3.5, 'LM567: 9V is its absolute maximum, and the error fires only past it');
+
+  /* the special ones */
+  ok(R('ICL8038')[6] === 'vdd' && R('ICL8038')[11] === 'vee' && R('ICL8038')[8] === 'in' &&
+     R('ICL8038')[13] === 'nc' && R('ICL8038')[14] === 'nc', 'ICL8038 (FN2864): V+ 6, V- 11, sweep 8, 13 and 14 NC');
+  ok([3,4,5,7,10,11,12].every(p => R('LM384')[p] === 'gnd') && R('LM384')[14] === 'vdd' && R('LM384')[8] === 'out',
+     'LM384 (SNAS547C): six heatsink grounds plus 7, VS 14, out 8');
+  ok(R('TL494')[1] === 'in' && R('TL494')[16] === 'in' && N('TL494',16) === '2IN+' && R('TL494')[12] === 'vdd' && R('TL494')[7] === 'gnd',
+     'TL494 (SLVS074J): 1IN+ on 1 but 2IN+ on 16; VCC 12, GND 7');
+  ok(R('ULN2003A')[8] === 'gnd' && R('ULN2003A')[9] === 'opt' && N('ULN2003A',1) === '1B' && N('ULN2003A',16) === '1C',
+     'ULN2003A (SLRS027T): ground 8, COM 9, channel 1 in on 1 and out on 16');
+  ok(R('ULN2803A')[9] === 'gnd' && R('ULN2803A')[10] === 'opt' && N('ULN2803A',18) === '1C' && N('ULN2803A',11) === '8C',
+     'ULN2803A (SLRS049C): ground 9 and COM 10, one along from the 2003');
+  ok(R('CA3130')[8] === 'opt' && /STROBE/.test(N('CA3130',8)) && R('CA3130')[7] === 'vdd' && R('CA3130')[4] === 'vee',
+     'CA3130 (FN817): pin 8 is strobe and compensation, not NC');
+  ok(L.CA3130.volts.max === 16, 'CA3130 is 16V total at most');
+
+  /* op-amps and comparators */
+  ok(['MC1458','TLC2262','LMC6482'].every(k => R(k) === OPAMP_DUAL) && ['LF444','TLE2074'].every(k => R(k) === OPAMP_QUAD),
+     'the standard duals and quads share the family tables, checked pin for pin first');
+  ok(R('LF411')[1] === 'opt' && R('LF411')[5] === 'opt' && R('LF411')[6] === 'out' && R('LF411')[8] === 'nc',
+     'LF411: 1 and 5 are left open (balance on National, do-not-connect on TI), out 6');
+  ok(R('LM339')[3] === 'vdd' && R('LM339')[12] === 'vee' && R('LM339')[1] === 'out' && R('LM339')[14] === 'out',
+     'LM339 (SLCS006Z): supply 3, ground 12, outputs on the corners 1, 2, 13, 14');
+  ok(L.LM2901.pinInfo === L.LM339.pinInfo, 'LM2901 shares the LM339 table, as TI prints one table for both');
+  ok(/pull-up/.test(N('LM393',1) + L.LM393.pinInfo[1].d) && R('LM393')[8] === 'vdd',
+     'LM393 (SLCS005AH): open-collector outputs say they need a pull-up');
+  ok(N('LM311',2) === 'IN+' && N('LM311',3) === 'IN−' && R('LM311')[7] === 'out' && R('LM311')[1] === 'opt',
+     'LM311 (SLCS007K): IN+ on 2 and IN- on 3, the reverse of an op-amp; output collector 7');
+
+  /* CMOS */
+  ok(L.CD4030.roles === GATE_QUAD2 && L.CD4030.pinInfo === PINS_GATE_QUAD2, 'CD4030 (SCHS035C) is the CD4070 pinout');
+  ok(R('CD4012')[1] === 'out' && R('CD4012')[13] === 'out' && R('CD4012')[6] === 'nc' && R('CD4012')[8] === 'nc',
+     'CD4012 (SCHS021D): outputs on 1 and 13, 6 and 8 NC');
+  ok(R('CD4068')[1] === 'out' && N('CD4068',1) === 'AND' && N('CD4068',13) === 'NAND', 'CD4068: AND on 1, NAND on 13');
+  ok(R('CD4021')[9] === 'in' && R('CD4021')[10] === 'in' && R('CD4021')[11] === 'in' && R('CD4021')[3] === 'out' && R('CD4021')[1] === 'in',
+     'CD4021 (SCHS024C): P/S 9, clock 10, serial in 11, Q8 on 3, PI-8 on 1');
+  ok(N('CD4006',3) === 'CLOCK' && R('CD4006')[9] === 'out' && /FALLING/.test(L.CD4006.pinInfo[3].d),
+     'CD4006 (SCHS017): clock 3, falling edge, end of chain 9');
+  ok(N('CD4027',4) === 'R2' && R('CD4027')[4] === 'in' && N('CD4027',15) === 'Q1' && N('CD4027',1) === 'Q2',
+     'CD4027 (SCHS032D): flip-flop 2 on 1-7, flip-flop 1 on 9-15');
+  ok(N('CD4028',3) === 'Q0' && N('CD4028',14) === 'Q1' && N('CD4028',10) === 'A' && N('CD4028',11) === 'D',
+     'CD4028 (SCHS033C): the scrambled outputs, Q0 on 3 and Q1 on 14; A 10, D 11');
+  ok(R('CD4044')[2] === 'nc' && R('CD4044')[5] === 'in' && N('CD4044',13) === 'Q1' && N('CD4044',1) === 'Q4',
+     'CD4044 (SCHS041D): ENABLE 5, Q1 on 13, Q4 on 1, pin 2 NC');
+  ok(R('CD4052')[7] === 'vee' && R('CD4052')[6] === 'in' && N('CD4052',13) === 'X COM' && N('CD4052',3) === 'Y COM' &&
+     [1,2,4,5,11,12,14,15].every(p => R('CD4052')[p] === undefined),
+     'CD4052 (SCHS047O): commons 13 and 3, and the channels claim no direction');
+  ok(N('CD4026',2) === 'CLK INH' && R('CD4026')[15] === 'in' && N('CD4026',10) === 'a',
+     'CD4026 (SCHS031B): clock inhibit 2, reset 15, segment a on 10');
+  ok(N('CD4019',9) === 'KA' && N('CD4019',14) === 'KB', 'CD4019 (SCHS029C): KA 9 and KB 14, not together');
+  ok(N('CD4025',8) === '1C' && N('CD4025',9) === '1Y', "CD4025 (SCHS015C): gate 1's third input on 8, output 9");
+
+  /* left out on purpose */
+  ok(!L.CD4067, 'CD4067 stays out: a 0.6in 24-pin package, which placement cannot draw yet');
+
+  /* supply ranges filled in from datasheets */
+  ok(['LM741','NE5534','OPA134','OPA2134','JRC4558','JRC4580','NE5532','LM833','LM348'].every(k => L[k].volts && L[k].volts.max),
+     'the nine op-amps that had no supply range now have their datasheet one');
+  ok(L.NE5532.volts.min === 10 && L.NE5532.volts.max === 30, 'NE5532: 10-30V (SLOS075K)');
+}
+
 console.log("-- NE571: the Beetle's compander, on the NE570/D pinout --");
 ok(!!IC_LIB.NE571 && IC_LIB.NE571.pins === 16, 'NE571 is in the library, 16 pins');
 ok(IC_LIB.NE571.roles[4] === 'gnd' && IC_LIB.NE571.roles[13] === 'vdd', 'GND on 4 and VCC on 13, not the corners');
