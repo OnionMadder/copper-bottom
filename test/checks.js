@@ -3708,6 +3708,58 @@ console.log('-- the schematic, derived from the board --');
   ok(!crossed, 'no shunt crosses a body on its way to a rail' + (crossed ? ' (' + crossed + ')' : ''));
 }
 
+console.log('-- v1.7.21: fewer node lines crossed, input still first --');
+{
+  const pos = ids => new Map(ids.map((id, i) => [id, i]));
+  ok(schCrossCost([[1, 2]], pos([1, 2, 3])) === 0, 'two neighbors: nothing crossed');
+  ok(schCrossCost([[1, 3]], pos([1, 2, 3])) === 1, 'one line between them: one crossing');
+  ok(schCrossCost([[1, 2, 3]], pos([3, 1, 2])) === 0, 'a part touching every line in its span crosses none');
+
+  /* a chain IN - a - b - c laid out IN, c, a, b: the walk would never do this,
+     but it is the shape a bad order takes, and the tidy-up has to fix it */
+  const net = (id, name) => ({net:{id:id}, name:name});
+  const IN = net(1, 'IN'), A = net(2, 'A'), B = net(3, 'B'), C = net(4, 'C');
+  const dev = (a, b) => ({legs:[{net:a}, {net:b}]});
+  const devs = [dev(IN, A), dev(A, B), dev(B, C)];
+  const none = () => null;
+  const tidy = schUncross([IN, C, A, B], devs, none);
+  const ids = tidy.map(r => r.net.id);
+  ok(ids[0] === 1, 'the input stays first');
+  ok(schCrossCost(devs.map(d => d.legs.map(l => l.net.net.id)), pos(ids)) === 0,
+     'IN, C, A, B comes out as a straight chain: ' + tidy.map(r => r.name).join(' '));
+  ok(eq3(schUncross([IN, A, B, C], devs, none), [IN, A, B, C]), 'a chain already in order is left exactly as it was');
+  ok(eq3(schUncross([IN, C, A, B], devs, none), tidy), 'and the same board always comes out the same');
+  function eq3(a, b){ return a.length === b.length && a.every((r, i) => r === b[i]); }
+
+  S = demoProject(); computeNets();
+  const m = schematicModel();
+  ok(m.nodes.every((n, i) => n.col === i), 'columns are still numbered in the order they are drawn');
+  let dc = 0;
+  for(const p of m.devices) if(p.cols.length >= 2) dc += p.to - p.from + 1 - p.cols.length;
+  ok(dc === 3 && m.nodes[0].name === 'V1_IN', 'the demo board crosses 3 node lines, not the walk\'s 4, and still starts at V1_IN');
+
+  /* found by search: here the input would cross least in the MIDDLE (0, against
+     2 pinned first) - and it stays first anyway, because that is the reading order */
+  const N = [1,2,3,4,5].map(id => net(id, id === 1 ? 'IN' : 'N' + id));
+  const D = [[2,1],[1,2],[3,2],[4,5,1]].map(ids => ({legs:ids.map(id => ({net:N[id - 1]}))}));
+  const got = schUncross(N, D, none);
+  ok(got[0] === N[0], 'the input stays first even where the middle would cross less');
+
+  /* two separate pairs: moving either one costs nothing, and nothing moves */
+  const P = [IN, A, B, C], PD = [dev(IN, A), dev(B, C)];
+  ok(eq3(schUncross(P, PD, none), P), 'a move that only ties is not taken - the walk order stands');
+
+  /* a star: IN wired to X, A and B. First in line it always crosses 3, and
+     with X allowed IN FRONT of it, 1 - so this is the case that tells the
+     input staying put from merely happening to stay put */
+  const X = net(5, 'X'), Dn = net(6, 'D');
+  const star = [IN, X, A, B], SD = [dev(X, IN), dev(IN, A), dev(IN, B)];
+  ok(eq3(schUncross(star, SD, none), star), 'nothing is moved in front of the input, even where that would cross less');
+  /* the star plus a separate pair: 3 crossings, and every move of C or D ties */
+  const star2 = [IN, X, A, B, C, Dn], SD2 = SD.concat([dev(C, Dn)]);
+  ok(eq3(schUncross(star2, SD2, none), star2), 'with crossings left to fix, a move that only ties is still not taken');
+}
+
 console.log('-- v1.7.9: the 74-series XOR, read off TI SCLS100F and Diodes DS35335 --');
 {
   const want = {1:'in',2:'in',3:'out',4:'in',5:'in',6:'out',7:'gnd',
