@@ -1480,7 +1480,7 @@ console.log("-- v1.7.16: her drawers, each pinout off its manufacturer's sheet -
   ok(N('CD4025',8) === '1C' && N('CD4025',9) === '1Y', "CD4025 (SCHS015C): gate 1's third input on 8, output 9");
 
   /* left out on purpose */
-  ok(!L.CD4067, 'CD4067 stays out: a 0.6in 24-pin package, which placement cannot draw yet');
+  /* the CD4067 came in with v1.7.18, once a 0.6in package could be drawn - see below */
 
   /* supply ranges filled in from datasheets */
   ok(['LM741','NE5534','OPA134','OPA2134','JRC4558','JRC4580','NE5532','LM833','LM348'].every(k => L[k].volts && L[k].volts.max),
@@ -3770,6 +3770,46 @@ console.log('-- v1.7.9: the half-size oscillator can, read off Abracon ACH --');
   S.parts[0].pins = [[0,0],[0,1]];
   computeNets();
   ok(clashes() === 0, 'two holes clear of the legs, it fits');
+}
+
+console.log('-- v1.7.18: the CD4067, the first 0.6in package --');
+{
+  const L = IC_LIB.CD4067, N = p => L.pinInfo[p].n;
+  ok(L.pins === 24 && Object.keys(L.pinInfo).length === 24, 'CD4067: 24 pins, every one named');
+  ok(L.span === 6, 'CD4067: placed with its pin rows 6 holes apart, 0.6in');
+  ok(N(1) === 'COM' && N(24) === 'VDD' && N(12) === 'VSS' && L.roles[12] === 'gnd' && L.roles[24] === 'vdd',
+     'CD4067 (SCHS052D): COM 1, VSS 12, VDD 24, and no VEE pin');
+  ok(N(9) === 'I0' && N(2) === 'I7' && N(23) === 'I8' && N(16) === 'I15',
+     'channels 0-7 run up pins 9 to 2, and 8-15 down pins 23 to 16');
+  ok(N(10) === 'A' && N(11) === 'B' && N(14) === 'C' && N(13) === 'D' && N(15) === 'INH',
+     'selects A 10, B 11, C 14, D 13 (D and C are NOT in order), inhibit 15');
+  ok([10,11,13,14,15].every(q => L.roles[q] === 'in'), 'the four selects and inhibit are watched CMOS inputs');
+  ok([1,2,3,4,5,6,7,8,9,16,17,18,19,20,21,22,23].every(q => L.roles[q] === undefined), 'the switch pins claim no direction');
+
+  const m6 = icMoldBody({part:'CD4067', pins:24, pin1:[0,0], span:6});
+  ok(m6 && Math.abs(m6.wid - 32.13 / 2.54) < 0.001, 'a 0.6in 24-pin body is 32.13mm long, over 11 holes of pins');
+  ok(m6 && m6.len < 6, 'and narrower than the 6 holes between its pin rows');
+  ok(icMoldBody({part:'CD4067', pins:24, pin1:[0,0], span:3}) === null,
+     'at span 3 it gets no molded body: no 0.3in 24-pin outline has been read');
+  ok(icMoldBody({part:'DIP-N', pins:20, pin1:[0,0], span:6}) === null,
+     'and a 0.6in pin count the wide table does not know gets none either');
+
+  const wideBoard = ics => migrate({version:2, name:'wide', board:{rows:30, cols:12},
+    cuts:[], parts:[], pads:[],
+    ics:ics.map((c, i) => ({id:'w' + i, ref:'U' + (i + 1), part:'CD4067', pins:24,
+                            pin1:c[0], span:c[1], autoCuts:[]}))});
+  const spanF = () => runDRC().filter(f => f.rule === 'ic-span');
+  S = wideBoard([[[0,2], 3]]); computeNets();
+  ok(spanF().length === 1 && spanF()[0].sev === 'warn' && /6 apart/.test(spanF()[0].msg),
+     'a CD4067 drawn 3 holes wide is a warning that names the 6 on its sheet');
+  S = wideBoard([[[0,2], 6]]); computeNets();
+  ok(spanF().length === 0, 'drawn 6 holes wide it says nothing');
+
+  /* 11 holes of pins under 12.65 holes of body: each end sticks out 0.83 */
+  S = wideBoard([[[0,2], 6], [[12,2], 6]]); computeNets();
+  ok(dipClash().length === 1, 'two CD4067s one hole apart end to end overlap at their molded ends');
+  S = wideBoard([[[0,2], 6], [[14,2], 6]]); computeNets();
+  ok(dipClash().length === 0, 'and three holes apart they clear');
 }
 
 S = demoProject(); computeNets();

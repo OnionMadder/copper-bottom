@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.17';
+const APP_VERSION = 'v1.7.18';
 
 const K = (r,c) => r + ',' + c;
 
@@ -2164,6 +2164,21 @@ const PINS_CD4052 = {
   14:mx(1,'X'), 15:mx(2,'X'),
   16:VDD_,
 };
+/* TI SCHS052D (Aug 2024), Figure 4-1. Channels 7 down to 0 run up the left
+   side on pins 2-9 and 8 up to 15 down the right on 23-16. No VEE pin: VSS
+   is the floor for the signal as well as the supply. */
+const PINS_CD4067 = {
+  1:{n:'COM', d:'the common: one channel joins here at a time, chosen by DCBA'},
+  2:mx(7,'I'), 3:mx(6,'I'), 4:mx(5,'I'), 5:mx(4,'I'), 6:mx(3,'I'), 7:mx(2,'I'), 8:mx(1,'I'), 9:mx(0,'I'),
+  10:{n:'A', d:'select bit A, the lowest of the four'},
+  11:{n:'B', d:'select bit B'},
+  12:{n:'VSS', d:'the negative supply, and the lowest a signal through the switches may go - ground on a single-rail build'},
+  13:{n:'D', d:'select bit D, the highest: DCBA picks channel 0 to 15'},
+  14:{n:'C', d:'select bit C'},
+  15:{n:'INH', d:'high opens every channel - tie it to ground when unused'},
+  16:mx(15,'I'), 17:mx(14,'I'), 18:mx(13,'I'), 19:mx(12,'I'), 20:mx(11,'I'), 21:mx(10,'I'), 22:mx(9,'I'), 23:mx(8,'I'),
+  24:VDD_,
+};
 const PINS_CD4068 = {
   1:{n:'AND', d:'high only while all eight inputs are high'},
   2:{n:'A'}, 3:{n:'B'}, 4:{n:'C'}, 5:{n:'D'},
@@ -2592,6 +2607,11 @@ const IC_LIB = {
      claim a direction; the channels conduct both ways, as on the CD4051/53. */
   CD4052 :{pins:16, about:"two four-way switches that move together: two select bits pick channel 0 to 3 on both sides at once. A stereo selector, or one signal routed two ways", name:'dual 4-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4052,
     roles:{6:'in',7:'vee',8:'gnd',9:'in',10:'in',16:'vdd'}},
+  /* `span` on a plain DIP is the pin-row spacing it is placed at, in holes.
+     The CD4067 is the first 0.6in package here: TI's drawing (MCDI004A, the
+     J package SCHS052D ships it in) puts its rows 0.590-0.624in apart. */
+  CD4067 :{pins:24, span:6, about:"passes one of sixteen signals through to a common pin, chosen by four logic inputs. A 0.6in package: its pin rows are six holes apart, not three", name:'16-channel analog mux', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4067,
+    roles:{10:'in',11:'in',12:'gnd',13:'in',14:'in',15:'in',24:'vdd'}},
   /* TI SCHS053C: two outputs, AND on 1 and NAND on 13; 6 and 8 are NC. */
   CD4068 :{pins:14, about:"one eight-input gate with both answers: pin 13 is the NAND and pin 1 the AND", name:'8-input NAND/AND', cmos:true, volts:V_CD4000B, pinInfo:PINS_CD4068,
     roles:{1:'out',2:'in',3:'in',4:'in',5:'in',6:'nc',7:'gnd',8:'nc',9:'in',10:'in',11:'in',12:'in',13:'out',14:'vdd'}},
@@ -3528,6 +3548,9 @@ const DRC_WHY = {
   'orphan':
     'A strip with one thing on it goes nowhere. Whatever you soldered there is connected to ' +
     'nothing but itself.',
+  'ic-span':
+    'A chip\'s pins are fixed in its package. If the rows on the board are not as far apart as ' +
+    'the legs on the chip, it does not go in - and the cuts between the rows are in the wrong place too.',
   'body-clash':
     'Electrically this is fine. Physically one of these two is not going on the board.',
   'lead-span':
@@ -3877,6 +3900,19 @@ function runDRC(){
       add('warn', 'ic-nocuts',
           ic.ref + ' has no cut between its pin rows (' + bad.length + ' row' + (bad.length > 1 ? 's' : '') + ')',
           [bad[0], ic.pin1[1]], null, {type:'ic-cuts', id:ic.id});
+  }
+
+  /* --- a 0.6in chip drawn at another spacing ---
+     A warning, not an error: a 24-pin chip also comes in a 0.3in body, and
+     the one in the builder's hand is what decides. */
+  for(const ic of S.ics){
+    const def = IC_LIB[ic.part];
+    if(!def || !def.span || def.module || Array.isArray(def.pinMap) || hasFootprint(ic)) continue;
+    if(ic.span === def.span) continue;
+    add('warn', 'ic-span',
+        ic.ref + ' (' + ic.part + ') has its pin rows ' + ic.span + ' holes apart, and the ' + ic.part +
+        ' is drawn on its sheet ' + def.span + ' apart (' + holesMM(def.span) + '). Measure yours across the pins.',
+        pinPos(ic, 1));
   }
 
   /* --- two things in one hole --- */
@@ -5776,17 +5812,25 @@ const PINNED_SLACK = 0.6;
    wide at most, NARROWER than the 7.62mm between the pin rows - only the legs
    reach out that far, and only at the pins.
 
-   A pin count not in this table, a module, a reshaped footprint or a wide
-   package gets no molded body: guessing bigger invents clashes. */
+   A 0.6in package (span 6) has its own table. The 24-pin length is TI's
+   own CD4067 package, the J ceramic DIP in SCHS052D (drawing MCDI004A):
+   1.265in, 32.13mm, at most, and 0.598in, 15.19mm, across the body of its
+   wide form. No plastic 0.6in outline has been read for it yet.
+
+   A pin count not in its table, a module, a reshaped footprint or any other
+   spacing gets no molded body: guessing bigger invents clashes. */
 const DIP_BODY_MM = {8:9.78, 14:19.30, 16:19.30, 18:22.99, 20:26.42};
 const DIP_BODY_WIDE_MM = 6.60;
+const DIP600_BODY_MM = {24:32.13};
+const DIP600_BODY_WIDE_MM = 15.19;
 function icMoldBody(ic){
   const def = IC_LIB[ic.part] || {};
-  const D = DIP_BODY_MM[ic.pins];
-  if(!D || def.module || hasFootprint(ic) || ic.span !== 3) return null;
+  if(def.module || hasFootprint(ic)) return null;
+  const D = ic.span === 3 ? DIP_BODY_MM[ic.pins] : ic.span === 6 ? DIP600_BODY_MM[ic.pins] : 0;
+  if(!D) return null;
   const ex = icExtent(ic);
   return {shape:'box', ang:0, cx:(ex.c0 + ex.c1) / 2, cy:(ex.r0 + ex.r1) / 2,
-          len:DIP_BODY_WIDE_MM / HOLE_MM, wid:D / HOLE_MM};
+          len:(ic.span === 6 ? DIP600_BODY_WIDE_MM : DIP_BODY_WIDE_MM) / HOLE_MM, wid:D / HOLE_MM};
 }
 
 /* Every occupied body on the board, in hole units. Angles are radians, with
@@ -11371,6 +11415,10 @@ function renderCtx(){
       o.push('<button id="ctxDelMod">forget this module</button>');
     }else{
     o.push('<label>SPAN (holes)</label><input id="ctxSpan" type="number" min="2" max="9" value="' + IC_SPAN + '">');
+    const wd = IC_LIB[IC_PART];
+    if(wd && wd.span && !wd.pinMap)
+      o.push('<div class="hint">a 0.6in chip: ' + wd.span + ' holes between its pin rows. measure yours across the pins - ' +
+             holesMM(wd.span) + ' is ' + wd.span + ' holes, ' + holesMM(3) + ' is 3.</div>');
     }
     if(IC_LIB[IC_PART] && IC_LIB[IC_PART].custom){
       o.push('<label>PIN COUNT</label><input id="ctxPins" type="number" min="2" max="64" value="' + IC_PINS + '">');
@@ -11392,7 +11440,14 @@ function renderCtx(){
     if(Number.isFinite(v) && v > 0 && v < 1 && Math.abs(v - 0.1) > 0.0005) S.board.pitch = v;
     else delete S.board.pitch;
   }));
-  on('ctxIc',  'onchange', e => { IC_PART = e.target.value; renderCtx(); });   // custom reveals a pin-count field
+  on('ctxIc',  'onchange', e => {   // custom reveals a pin-count field
+    const was = IC_LIB[IC_PART], now = IC_LIB[e.target.value];
+    IC_PART = e.target.value;
+    /* a 0.6in chip brings its own spacing, and leaving one puts the 0.3in back */
+    if(now && now.span && !now.pinMap) IC_SPAN = now.span;
+    else if(was && was.span && !was.pinMap) IC_SPAN = 3;
+    renderCtx();
+  });
   on('ctxDelMod', 'onclick', () => {
     const nm = IC_PART.slice(5);
     saveUserModules(loadUserModules().filter(m => m.name !== nm));
@@ -11825,6 +11880,9 @@ function onHole(r, c){
        had. Made as an explicit footprint so nothing else needs a case. */
     if(isBread()){
       if(pinCount % 2){ flash('an odd pin count cannot straddle the channel'); return; }
+      if(def.span && def.span !== 3 && !def.pinMap){
+        flash('the breadboard here only draws 0.3in chips across the channel, and the ' + IC_PART +
+              ' is ' + (def.span / 10) + 'in wide - draw it on stripboard or perfboard'); return; }
       if(r !== 7 && r !== 6){ flash('a chip straddles the channel - click its pin-1 hole in row E, just below the channel'); return; }
       if(c + half - 1 >= S.board.cols){ flash('IC would run off the board'); return; }
       pushUndo();
