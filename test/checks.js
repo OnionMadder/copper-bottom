@@ -3850,6 +3850,62 @@ console.log('-- v1.7.19: two bare links crossing on different nets --');
   ok(kept === true && junk === undefined && res === undefined, 'a file keeps insulated:true on a link and nothing else');
 }
 
+console.log('-- v1.7.20: squeezing out empty lines, proven on a copy --');
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const sb = (o) => migrate(Object.assign({version:2, name:'sq', board:{rows:5, cols:5}, cuts:[], ics:[],
+    pads:[{id:'pa', label:'IN', at:[0,0]}, {id:'pb', label:'OUT', at:[4,0]}],
+    parts:[{id:'l1', kind:'link', ref:'J1', pins:[[0,2],[4,2]]}]}, o || {}));
+
+  S = sb(); computeNets();
+  const before = JSON.stringify(S);
+  let pl = squeezePlan();
+  ok(JSON.stringify(S) === before, 'planning works on a copy - the board is untouched');
+  ok(eq(pl.rows, [1,2,3]) && eq(pl.cols, [1,3,4]) && pl.fitsRows === 2 && pl.fitsCols === 2,
+     'three empty strips under a link and three empty columns go: 5 x 5 fits on 2 x 2');
+  const sig = netSignature();
+  ok(applySqueeze(pl) && S.board.rows === 2 && S.board.cols === 2 && netSignature() === sig,
+     'applied, the board is 2 x 2 and every net has the same members');
+  ok(eq(S.parts[0].pins, [[0,1],[1,1]]), 'the link spanning the squeezed strips got shorter, as a hand delete does');
+
+  S = sb({cuts:['2,3']}); computeNets();
+  pl = squeezePlan();
+  ok(pl.rows.indexOf(2) < 0 && pl.cols.indexOf(3) < 0, 'a cut is something somebody decided: its strip and column stay');
+
+  /* a resistor that only just lies flat: a column under it is not spare */
+  const L = Math.ceil(FOOTPRINT.res.len);
+  const rb = (span) => migrate({version:2, name:'r', board:{rows:2, cols:span + 1}, cuts:[], ics:[], pads:[],
+    parts:[{id:'r', kind:'res', ref:'R1', value:'10k', pins:[[0,0],[0,span]]}]});
+  S = rb(L); computeNets();
+  ok(squeezePlan().cols.length === 0, 'R1 across exactly its body length: no column under it can go');
+  S = rb(L + 1); computeNets();
+  ok(squeezePlan().cols.length === 1, 'one hole longer, and exactly one column can');
+
+  /* the guard on the circuit itself */
+  S = migrate({version:2, name:'g', board:{rows:2, cols:6}, cuts:[], ics:[], parts:[],
+    pads:[{id:'a', label:'A', at:[0,0]}, {id:'b', label:'B', at:[0,5]}]});
+  const whole = netSignature();
+  S.cuts = ['0,2']; 
+  ok(netSignature() !== whole, 'a cut between two pads changes the signature - it is the circuit, not the drawing');
+
+  S = migrate({version:2, name:'b', board:{rows:BREAD_ROWS, cols:12, kind:'bread'}, cuts:[], ics:[], parts:[],
+    pads:[{id:'a', label:'A', at:[3,1]}]});
+  ok(squeezePlan().rows.length === 0, 'a permanent breadboard keeps all its rows');
+
+  /* legs fixed in the package: nothing squeezes between them (the Simple Ring
+     Modulator's transformer was squeezed by the first draft and passed) */
+  const fb = (part) => migrate({version:2, name:'f', board:{rows:3, cols:3}, cuts:[], ics:[], pads:[],
+    parts:[Object.assign({id:'p', ref:'X1'}, part)]});
+  S = fb({kind:'cap', value:'100n', pins:[[0,0],[0,2]]}); computeNets();
+  ok(squeezePlan().cols.indexOf(1) < 0 && squeezeBlocker(1, 1) !== null, 'a radial cap keeps the column between its legs');
+  S = fb({kind:'trim', value:'10k', pins:[[0,0],[2,0],[1,2]]}); computeNets();
+  ok(squeezePlan().rows.indexOf(1) < 0 && squeezePlan().cols.indexOf(1) < 0, 'a trimmer keeps every line between its legs');
+  S = fb({kind:'pot', value:'100k', pins:[[0,0],[0,1],[0,2]], fly:[0,1,2]}); computeNets();
+  ok(squeezeBlocker(1, 1) === null, 'a pot on flying wires does not block: its legs are on the panel');
+  S = fb({kind:'res', value:'10k', pins:[[0,0],[0,2]], mount:'vertical'}); computeNets();
+  ok(squeezeBlocker(1, 1) === null, 'an axial part may span a squeezed line - lead-span guards its length');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

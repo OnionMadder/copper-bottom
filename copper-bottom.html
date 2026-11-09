@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.19';
+const APP_VERSION = 'v1.7.20';
 
 const K = (r,c) => r + ',' + c;
 
@@ -7574,6 +7574,120 @@ function trimBoard(){
 }
 
 /* ============================================================
+   SQUEEZING OUT EMPTY LINES
+   "This fits on 11 rows." Trimming takes only the blank EDGES. A blank
+   strip or column in the MIDDLE is also carrying nothing, and it is the
+   same fact rather than an opinion - as long as it is proven, not guessed.
+
+   So nothing here moves a part to make room. Each empty line is deleted on a
+   COPY of the board, and the deletion is kept only when:
+     - nothing went with it (no lead, pin, pad or cut on that line),
+     - every net still has exactly the same members, and
+     - no check fires more often than it did before.
+   The last one is what keeps a squeezed resistor honest: a line under a part
+   that only just lies flat is not spare, and lead-span says so.
+
+   And only a part whose legs can CHANGE spacing may span a squeezed line: a
+   wire link, an axial part (lead-span polices its length), or a part whose
+   every leg is on a flying wire. A transformer, a trimmer, a TO-92 or a
+   radial cap has its legs fixed in the package, and no check measures them -
+   the first draft of this squeezed a column between a transformer's pins on
+   the Simple Ring Modulator and called it proven. Parts that may span a
+   squeezed line get one hole shorter, as the line tool's delete does by hand.
+   ============================================================ */
+
+/* The circuit as a comparable string: each net's members, sorted. Net ids
+   and positions are left out on purpose, because both change when a line
+   goes and neither is the circuit. */
+function netSignature(){
+  computeNets();
+  const by = new Map();
+  for(const cn of connections()){
+    const net = NET.netAt(cn.at[0], cn.at[1]);
+    const k = net ? 'n' + net.id : 'x' + cn.at.join(',');
+    if(!by.has(k)) by.set(k, []);
+    by.get(k).push(cn.label);
+  }
+  return [...by.values()].map(m => m.sort().join(' ')).sort().join('\n');
+}
+function drcCounts(){
+  computeNets();
+  const m = {};
+  for(const f of runDRC()){ const k = f.rule + '/' + f.sev; m[k] = (m[k] || 0) + 1; }
+  return m;
+}
+
+/* The first part whose legs straddle this line and cannot close up, or null. */
+function squeezeBlocker(axis, at){
+  for(const p of S.parts){
+    const v = p.pins.map(g => g[axis]);
+    if(!(Math.min.apply(null, v) < at && at < Math.max.apply(null, v))) continue;
+    if(p.kind === 'link') continue;
+    if(Array.isArray(p.fly) && p.fly.length === p.pins.length) continue;
+    const fp = footprintOf(p);
+    if(p.pins.length === 2 && fp && fp.leads === 'axial') continue;
+    return p;
+  }
+  return null;
+}
+
+/* Which lines can go, in the board's CURRENT coordinates: {rows:[..],
+   cols:[..], fitsRows, fitsCols}. Works on a copy and puts S back. */
+function squeezePlan(){
+  const real = S;
+  const plan = {rows:[], cols:[]};
+  try{
+    S = JSON.parse(JSON.stringify(real));
+    const sig = netSignature(), base = drcCounts();
+    const orig = [[...Array(S.board.rows).keys()], [...Array(S.board.cols).keys()]];
+    let changed = true, guard = 0;
+    while(changed && guard++ < 8){
+      changed = false;
+      for(const axis of [0, 1]){
+        if(axis === 0 && isBread()) continue;   // a permanent breadboard is always its rows
+        for(let at = (axis ? S.board.cols : S.board.rows) - 1; at >= 0; at--){
+          if(squeezeBlocker(axis, at)) continue;
+          const keep = JSON.stringify(S);
+          const r = deleteLine(axis, at);
+          const took = !r.ok || r.removed.parts.length || r.removed.ics.length ||
+                       r.removed.pads.length || r.removed.cuts;
+          let ok = !took && netSignature() === sig;
+          if(ok){
+            const now = drcCounts();
+            ok = Object.keys(now).every(k => now[k] <= (base[k] || 0));
+          }
+          if(ok){
+            (axis ? plan.cols : plan.rows).push(orig[axis][at]);
+            orig[axis].splice(at, 1);
+            changed = true;
+          }else{
+            S = JSON.parse(keep);
+          }
+        }
+      }
+    }
+    plan.fitsRows = S.board.rows;
+    plan.fitsCols = S.board.cols;
+  }finally{
+    S = real;
+    computeNets();
+  }
+  plan.rows.sort((a, b) => a - b);
+  plan.cols.sort((a, b) => a - b);
+  return plan;
+}
+
+/* Take the planned lines out of the real board, highest first so the lower
+   numbers still mean what they meant, then prove the circuit came through.
+   Deletions commute, so the order cannot change the result. */
+function applySqueeze(plan){
+  const sig = netSignature();
+  for(const r of plan.rows.slice().sort((a, b) => b - a)) deleteLine(0, r);
+  for(const c of plan.cols.slice().sort((a, b) => b - a)) deleteLine(1, c);
+  return netSignature() === sig;
+}
+
+/* ============================================================
    PARTS THAT LIVE OFF THE BOARD
    A panel pot with every leg flown is three labeled terminals on the copper
    and nothing else - which loses the one fact that matters about it: those
@@ -7829,6 +7943,12 @@ let drag      = null;     // in-flight move
 let REGION    = null;     // {r0,c0,r1,c1} block marquee
 let RDR = 0, RDC = 0;     // where a copy of it would land
 let LINE      = null;     // [row,col] picked for a row/column insert or delete
+let SQUEEZE_CACHE = {key:null, plan:null};
+function squeezePlanCached(){
+  const key = JSON.stringify(S);
+  if(SQUEEZE_CACHE.key !== key) SQUEEZE_CACHE = {key:key, plan:squeezePlan()};
+  return SQUEEZE_CACHE.plan;
+}
 
 const X = c => MARGIN + c * PITCH;
 const Y = r => MARGIN + r * PITCH;
@@ -11283,6 +11403,21 @@ function renderCtx(){
       }else{
         o.push('<div class="hint">no blank edges - the board is already cut to what it holds.</div>');
       }
+      const sq = squeezePlanCached();
+      const inner = {rows:sq.rows.filter(r => r > sl.top - 1 && r < S.board.rows - sl.bottom),
+                     cols:sq.cols.filter(c => c > sl.left - 1 && c < S.board.cols - sl.right)};
+      if(inner.rows.length || inner.cols.length){
+        const named = [];
+        if(inner.rows.length) named.push((isBread() ? 'row' : 'strip') + (inner.rows.length > 1 ? 's ' : ' ') + inner.rows.map(dRow).join(', '));
+        if(inner.cols.length) named.push('column' + (inner.cols.length > 1 ? 's ' : ' ') + inner.cols.map(dCol).join(', '));
+        o.push('<label>FITS ON</label><input value="' + sq.fitsRows + ' x ' + sq.fitsCols + '" readonly>');
+        o.push('<button id="lnSqueeze">squeeze to ' + sq.fitsRows + ' x ' + sq.fitsCols + '</button>');
+        o.push('<div class="hint">' + named.join(' and ') + ' carr' + (inner.rows.length + inner.cols.length > 1 ? 'y' : 'ies') +
+               ' nothing, inside the layout. squeezing takes ' + (inner.rows.length + inner.cols.length > 1 ? 'them' : 'it') +
+               ' out along with any blank edges: every net keeps exactly the same parts, no check fires that did not before, ' +
+               'and nothing is rearranged. only wire links, resistors and diodes may span a removed line, and they get one hole shorter; ' +
+               'a part with its legs fixed in the package keeps every line between them.</div>');
+      }
     }
     o.push('<label>HOLE SPACING - inches</label>');
     o.push('<input id="lnPitch" type="number" step="0.005" min="0.02" max="0.5" value="' + boardPitch() + '">');
@@ -11632,6 +11767,24 @@ function renderCtx(){
   on('lnDR', 'onclick', () => lineGo(0, -1));
   on('lnIC', 'onclick', () => lineGo(1, 1));
   on('lnDC', 'onclick', () => lineGo(1, -1));
+  on('lnSqueeze', 'onclick', () => {
+    const plan = squeezePlan();
+    if(!plan.rows.length && !plan.cols.length){ flash('nothing to squeeze'); return; }
+    pushUndo();
+    const before = S.board.rows + ' x ' + S.board.cols;
+    if(!applySqueeze(plan)){
+      /* proven on a copy, so this should not happen - if it does, say so and put it back */
+      undo();
+      flash('squeeze changed a net, so it was undone - that is a bug worth reporting');
+      return;
+    }
+    LINE = null;
+    rows.value = S.board.rows;
+    cols.value = S.board.cols;
+    REGION = null;
+    commit();
+    flash('squeezed ' + before + ' to ' + S.board.rows + ' x ' + S.board.cols + ' - ctrl+z');
+  });
   on('lnTrim', 'onclick', () => {
     pushUndo();
     const t = trimBoard();
