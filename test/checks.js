@@ -2437,6 +2437,11 @@ ok(String(LEG_LIB.trans['BS170']) === 'D,G,S', 'BS170 is D-G-S');
 ok(String(LEG_LIB.trans['2N5458']) === 'D,S,G', '2N5458 matches the 2N5457 JFET family (D-S-G)');
 // left out on purpose: its datasheets disagreed on pin order
 ok(!('PN2907A' in LEG_LIB.trans), 'PN2907A is deliberately absent - sources disagreed');
+// two makers' TO-92 2N2222A disagree, so each goes in under its own marking
+ok(String(LEG_LIB.trans['PN2222A']) === 'E,B,C', 'PN2222A (Fairchild) is EBC');
+ok(String(LEG_LIB.trans['P2N2222A']) === 'C,B,E', 'P2N2222A (onsemi, case 29 style 17) is CBE, not EBC');
+ok(!('2N2222' in LEG_LIB.trans) && !('2N2222A' in LEG_LIB.trans),
+   'a bare 2N2222 is deliberately absent - PN2222A and P2N2222A are wired opposite ways');
 
 /* The regulator family, and the one relationship in it a tidy-up would
    destroy: the TO-92 part and the TO-220 part of the same number carry their

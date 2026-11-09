@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.16';
+const APP_VERSION = 'v1.7.17';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1191,6 +1191,13 @@ const LEG_LIB = {
     '2N4401':['E','B','C'], '2N4403':['E','B','C'],
     '2N5551':['E','B','C'], '2N5401':['E','B','C'],
     'PN2222A':['E','B','C'], 'MPSA13':['E','B','C'],
+    /* A TO-92 2N2222A the OTHER way around. onsemi P2N2222A/D rev 7,
+       Jan 2013, TO-92 CASE 29 STYLE 17: "PIN 1. COLLECTOR 2. BASE
+       3. EMITTER", where Fairchild's PN2222A (rev 1.1.0) is EBC. Both get
+       called "a 2N2222", so a bare 2N2222 is deliberately NOT here: one
+       entry would swap collector and emitter for whoever holds the other.
+       The body says which it is - onsemi's reads P2N2 / 222A. */
+    'P2N2222A':['C','B','E'],
     /* Japanese 2S parts are ECB, NOT EBC - the classic mix-up that kills a build */
     '2SC1815':['E','C','B'], '2SA1015':['E','C','B'],
     '2N5458':['D','S','G'],  'BS170' :['D','G','S'],
