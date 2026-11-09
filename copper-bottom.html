@@ -1021,7 +1021,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.18';
+const APP_VERSION = 'v1.7.19';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1359,6 +1359,7 @@ function migrate(obj){
     /* 'vertical' is the only mount the checks read; anything else is dropped
        rather than carried, so a file cannot smuggle in a value nothing honours. */
     if('mount' in r && r.mount !== 'vertical'){ r = Object.assign({}, r); delete r.mount; }
+    if('insulated' in r && !(r.insulated === true && r.kind === 'link')){ r = Object.assign({}, r); delete r.insulated; }
     if(!r.id) r = Object.assign({}, r, {id:uid()});
     return r;
   }).filter(Boolean);
@@ -3551,6 +3552,9 @@ const DRC_WHY = {
   'ic-span':
     'A chip\'s pins are fixed in its package. If the rows on the board are not as far apart as ' +
     'the legs on the chip, it does not go in - and the cuts between the rows are in the wrong place too.',
+  'link-cross':
+    'On the drawing two lines can cross without meeting. Two bare wires on a real board cannot - ' +
+    'press the board down once and they touch, joining two nets that were meant to stay apart.',
   'body-clash':
     'Electrically this is fine. Physically one of these two is not going on the board.',
   'lead-span':
@@ -3926,6 +3930,37 @@ function runDRC(){
     if(who.length > 1)
       add('warn', 'shared-hole', who.join(' and ') + ' share ' +
           holeText(+k.split(',')[0], +k.split(',')[1]), k.split(',').map(Number));
+
+  /* --- two wire links crossing ---
+     A STRAIGHT link, along a strip or across them, is bare tinned wire, and
+     two bare wires that cross on the
+     component side touch the moment the board is pressed flat. On ONE net that
+     is harmless, so it says nothing; on two it is a short the drawing hides,
+     because a drawing lets lines cross without meeting. A link that runs over
+     the hole another link ends in is the same thing at a point.
+
+     A DIAGONAL link is insulated hookup wire (hers, 9 Nov 2026: "diagonals
+     insulated"). Her built Opto Duet crosses two of them between VCC and
+     the LDR and works, and every crossing in her 80 layouts with links
+     had a diagonal in it. So only two straight links are tested.
+
+     A warning: sleeving one of them is ordinary and fixes it, and a link
+     ticked insulated (`insulated:true`) is left alone. */
+  {
+    const links = S.parts.filter(p => p.kind === 'link' && p.pins.length === 2 && !linkInsulated(p));
+    for(let i = 0; i < links.length; i++)
+      for(let j = i + 1; j < links.length; j++){
+        const A = links[i], B = links[j];
+        const at = linksMeet(A.pins[0], A.pins[1], B.pins[0], B.pins[1]);
+        if(!at) continue;
+        const na = NET.netAt(A.pins[0][0], A.pins[0][1]), nb = NET.netAt(B.pins[0][0], B.pins[0][1]);
+        if(!na || !nb || na.id === nb.id) continue;
+        add('warn', 'link-cross',
+            A.ref + ' and ' + B.ref + ' cross, and they are on different nets (' + netName(na) + ', ' + netName(nb) +
+            '). Bare wire there is a short - sleeve one, or route it around.',
+            at, null, {type:'insulate', id:A.id});
+      }
+  }
 
   /* --- floating CMOS input --- */
   const floatingNets = new Set();
@@ -5885,6 +5920,48 @@ function bodies(){
       wid:(ex.r1 - ex.r0) + (icBodyPad(ic) ? 2 * icBodyPad(ic) : 0.5), mold:icMoldBody(ic)});
   }
   return out;
+}
+
+/* A link is bare unless it is ticked insulated or runs diagonally - a
+   diagonal is hookup wire with its sleeve on (hers, 9 Nov 2026). */
+function linkInsulated(p){
+  if(p.insulated === true) return true;
+  const a = p.pins[0], b = p.pins[1];
+  return a[0] !== b[0] && a[1] !== b[1];
+}
+
+/* Where two straight links meet, as a hole [r, c] to point at, or null.
+   Holes are integers, so the orientation tests are exact. Meeting only at a
+   shared end hole is not a crossing - that is two leads in one hole, which
+   the shared-hole rule already reports. */
+function linksMeet(a, b, c, d){
+  const o = (p, q, r) => Math.sign((q[1] - p[1]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[1] - p[1]));
+  const on = (p, q, r) => Math.min(p[0], q[0]) <= r[0] && r[0] <= Math.max(p[0], q[0]) &&
+                          Math.min(p[1], q[1]) <= r[1] && r[1] <= Math.max(p[1], q[1]);
+  const same = (p, q) => p[0] === q[0] && p[1] === q[1];
+  const ends = [a, b].filter(p => same(p, c) || same(p, d));
+  const o1 = o(a, b, c), o2 = o(a, b, d), o3 = o(c, d, a), o4 = o(c, d, b);
+  if(o1 && o2 && o3 && o4){
+    if(o1 === o2 || o3 === o4) return null;
+    /* a proper crossing: report the hole nearest the point */
+    const den = (b[1] - a[1]) * (d[0] - c[0]) - (b[0] - a[0]) * (d[1] - c[1]);
+    const t = ((c[1] - a[1]) * (d[0] - c[0]) - (c[0] - a[0]) * (d[1] - c[1])) / den;
+    return [Math.round(a[0] + t * (b[0] - a[0])), Math.round(a[1] + t * (b[1] - a[1]))];
+  }
+  /* touching or lying along each other: some end hole sits on the other wire */
+  const hits = [];
+  if(!o1 && on(a, b, c)) hits.push(c);
+  if(!o2 && on(a, b, d)) hits.push(d);
+  if(!o3 && on(c, d, a)) hits.push(a);
+  if(!o4 && on(c, d, b)) hits.push(b);
+  const real = hits.filter(h => !ends.some(e => same(e, h)));
+  if(real.length) return [real[0][0], real[0][1]];
+  /* collinear and sharing an end, but running on along each other */
+  if(ends.length === 1 && !o1 && !o2){
+    const e = ends[0], fa = same(e, a) ? b : a, fc = same(e, c) ? d : c;
+    if((fa[0] - e[0]) * (fc[0] - e[0]) + (fa[1] - e[1]) * (fc[1] - e[1]) > 0) return [e[0], e[1]];
+  }
+  return null;
 }
 
 /* ---- overlap tests, all in hole units ---- */
@@ -8900,6 +8977,15 @@ function applyFix(f){
     commit();
     return;
   }
+  if(f.fix.type === 'insulate'){
+    /* Says this link is sleeved. Changes no wiring, and undo puts it back. */
+    const link = S.parts.find(x => x.id === f.fix.id);
+    if(!link) return;
+    pushUndo();
+    link.insulated = true;
+    commit();
+    return;
+  }
   if(f.fix.type === 'ic-cuts'){
     const ic = S.ics.find(x => x.id === f.fix.id);
     if(!ic) return;
@@ -11278,6 +11364,16 @@ function renderCtx(){
                'wiring table on the build sheet for every leg you have flown, in place of the line ' +
                'the tool writes itself.</div>');
       }
+      if(p.kind === 'link'){
+        o.push('<label>WIRE</label>');
+        const diag = p.pins[0][0] !== p.pins[1][0] && p.pins[0][1] !== p.pins[1][1];
+        if(diag)
+          o.push('<div class="hint">a diagonal link is insulated hookup wire, so it can cross anything.</div>');
+        else{
+          o.push('<label class="chk"><input type="checkbox" id="edIns"' + (p.insulated ? ' checked' : '') + '> insulated (sleeved)</label>');
+          o.push('<div class="hint">a straight link is bare wire unless you tick this. two bare links crossing on different nets are a short; a sleeved one can cross anything.</div>');
+        }
+      }
       const efp = footprintOf(p);
       if(p.pins.length === 2 && efp && efp.leads === 'axial'){
         o.push('<label>MOUNT</label>');
@@ -11563,6 +11659,7 @@ function renderCtx(){
   on('edDev',  'onchange', e => edit(() => { const t = selObj(); if(t) t.device = e.target.value; }));
   on('edKind', 'onchange', e => edit(() => { const t = selObj(); if(t) t.kind = e.target.value; }));
   on('edVert', 'onchange', e => edit(() => { const t = selObj(); if(!t) return; if(e.target.checked) t.mount = 'vertical'; else delete t.mount; }));
+  on('edIns',  'onchange', e => edit(() => { const t = selObj(); if(!t) return; if(e.target.checked) t.insulated = true; else delete t.insulated; }));
   /* stored as an explicit false rather than a deleted key: every other reader
      tests polarized === false, and a missing key has always meant "not set",
      which for an ecap means polarised. */

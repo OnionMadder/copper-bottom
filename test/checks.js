@@ -3812,6 +3812,44 @@ console.log('-- v1.7.18: the CD4067, the first 0.6in package --');
   ok(dipClash().length === 0, 'and three holes apart they clear');
 }
 
+console.log('-- v1.7.19: two bare links crossing on different nets --');
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(eq(linksMeet([2,0],[2,4],[0,2],[4,2]), [2,2]), 'a plus: they meet at the middle hole');
+  ok(linksMeet([0,0],[0,4],[2,0],[2,4]) === null, 'two parallel links do not meet');
+  ok(linksMeet([0,2],[4,2],[4,2],[4,6]) === null, 'an L sharing one end hole is shared-hole business, not a crossing');
+  ok(eq(linksMeet([0,2],[4,2],[2,0],[2,2]), [2,2]), 'a T: one ends on the middle of the other');
+  ok([linksMeet([0,2],[4,2],[2,2],[2,0]), linksMeet([2,0],[2,2],[0,2],[4,2]), linksMeet([2,2],[2,0],[0,2],[4,2])]
+       .every(m => eq(m, [2,2])), 'the T is found whichever end of either link does the touching');
+  ok(eq(linksMeet([0,2],[4,2],[2,2],[6,2]), [2,2]) || eq(linksMeet([0,2],[4,2],[2,2],[6,2]), [4,2]),
+     'two links lying along each other meet');
+  ok(eq(linksMeet([0,2],[4,2],[4,2],[8,2]), null), 'end to end in a line, sharing one hole, they do not run along each other');
+  ok(eq(linksMeet([0,2],[4,2],[4,2],[2,2]), [2,2]), 'sharing an end and doubling back along it, they do');
+
+  ok(linkInsulated({pins:[[0,0],[3,4]]}) === true, 'a diagonal link is insulated hookup wire (hers)');
+  ok(linkInsulated({pins:[[0,3],[4,3]]}) === false, 'a straight link is bare');
+  ok(linkInsulated({pins:[[0,3],[4,3]], insulated:true}) === true, 'unless it is ticked');
+
+  const lb = (links) => migrate({version:2, name:'links', board:{rows:8, cols:10}, cuts:[], ics:[], pads:[],
+    parts:links.map((l, i) => Object.assign({id:'l' + i, kind:'link', ref:'J' + (i + 1), pins:[l[0], l[1]]}, l[2] || {}))});
+  const lc = () => runDRC().filter(f => f.rule === 'link-cross');
+  S = lb([[[0,3],[4,3]], [[2,1],[2,5]]]); computeNets();
+  ok(lc().length === 1 && lc()[0].sev === 'warn' && eq(lc()[0].at, [2,3]) && lc()[0].fix.type === 'insulate',
+     'two bare straight links crossing on different nets: one warning, at the crossing, with the insulate fix');
+  S = lb([[[0,3],[4,3]], [[2,1],[2,5], {insulated:true}]]); computeNets();
+  ok(lc().length === 0, 'tick one insulated and it goes quiet');
+  S = lb([[[0,3],[4,3]], [[1,1],[3,5]]]); computeNets();
+  ok(lc().length === 0, 'a diagonal crossing a straight one says nothing');
+  S = lb([[[0,3],[4,3]], [[2,1],[2,5]], [[0,8],[2,8]]]); computeNets();
+  ok(lc().length === 0, 'two links on ONE net may cross - nothing to short');
+
+  const kept = lb([[[0,3],[4,3], {insulated:true}]]).parts[0].insulated;
+  const junk = lb([[[0,3],[4,3], {insulated:'yes'}]]).parts[0].insulated;
+  const res = migrate({version:2, name:'r', board:{rows:8, cols:10}, cuts:[], ics:[], pads:[],
+    parts:[{id:'r1', kind:'res', ref:'R1', value:'10k', pins:[[0,0],[0,4]], insulated:true}]}).parts[0].insulated;
+  ok(kept === true && junk === undefined && res === undefined, 'a file keeps insulated:true on a link and nothing else');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
