@@ -1022,7 +1022,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.22';
+const APP_VERSION = 'v1.7.23';
 
 const K = (r,c) => r + ',' + c;
 
@@ -4328,6 +4328,151 @@ function apronSides(ob, wires, rows, cols){
   }
   for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
   return ob;
+}
+
+/* One panel part drawn the way the layout image draws it - a pot as a pot,
+   a jack as a jack - with its lugs on the edge that faces the board (f = +1:
+   the board is to the right). The layout image and, since v1.7.23, the
+   editing board both call this, so the two pictures cannot drift apart.
+
+   P carries what differs between them: out (the array the SVG goes into),
+   lugAt (a Map that learns where every lug landed, as 'ID.LUG' -> [x, y, f]),
+   used(lug) (whether a wire reaches it), and four inks for whatever sits on
+   the page rather than on a body - lug names, leads, the LED's plus and the
+   value. The image passes its own grays; the editor passes its theme's.
+   Returns the top and bottom of the drawing, labels included. */
+function apronGlyph(q, cx, cy, f, ink, P){
+  const txt = (tx, ty, str, size, extra) =>
+    P.out.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" font-family="Verdana, sans-serif" ' +
+               (extra || '') + '>' + esc(str) + '</text>');
+  const lib = OFFBOARD_LIB[q.kind];
+
+        const lug = (name, lx, ly, show) => {
+      P.lugAt.set(q.id + '.' + name, [lx, ly, f]);
+      if(!show) return;
+      P.out.push('<circle cx="' + lx + '" cy="' + ly + '" r="3.6" fill="#fff" stroke="#444" stroke-width="1.2"/>');
+      txt(lx + f * 7, ly + 3, name, 8, 'fill="' + P.lug + '" text-anchor="' + (f > 0 ? 'start' : 'end') + '"');
+    };
+        let top = cy - 24, bot = cy + 24;
+    if(q.kind === 'pot'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="23" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#D8D8D8" stroke="#777" stroke-width="1.2"/>' +
+               '<line x1="' + (cx - 5) + '" y1="' + (cy - 5) + '" x2="' + (cx + 5) + '" y2="' + (cy - 5) + '" stroke="#777" stroke-width="1.2"/>');
+      [-14, 0, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 21) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 30) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 32, cy + dy, true);
+      });
+      top = cy - 30; bot = cy + 30;
+    }else if(q.kind === 'toggle'){
+      P.out.push('<rect x="' + (cx - 11) + '" y="' + (cy - 18) + '" width="22" height="36" rx="4" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
+               '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy - 30) + '" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>' +
+               '<circle cx="' + cx + '" cy="' + (cy - 30) + '" r="3.5" fill="#3B4A5A"/>');
+      [-12, 0, 12].forEach((dy, i) => lug(lib.lugs[i], cx + f * 19, cy + dy, true));
+      top = cy - 36; bot = cy + 24;
+    }else if(q.kind === 'jack'){
+      const xo = cx - f * 22;                      // the outer edge, away from the board
+      P.out.push('<rect x="' + (f > 0 ? xo - 12 : xo) + '" y="' + (cy - 7) + '" width="12" height="14" fill="#BBB" stroke="#444" stroke-width="1.2"/>' +
+               '<rect x="' + (cx - 22) + '" y="' + (cy - 13) + '" width="44" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      const slots = {T:-12, R:-4, N:4, S:12};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + slots[nm], nm === 'T' || nm === 'S' || P.used(nm));
+      top = cy - 20; bot = cy + 20;
+    }else if(q.kind === 'led'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
+      lug('A', cx + f * 17, cy - 7, true); lug('K', cx + f * 17, cy + 7, true);
+      txt(cx - f * 16, cy - 4, '+', 10, 'fill="' + P.plus + '" font-weight="bold" text-anchor="middle"');
+      top = cy - 18; bot = cy + 18;
+    }else if(q.kind === 'spk'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="20" fill="#E9E4D8" stroke="#5A4A32" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="#B8A98A" stroke="#5A4A32" stroke-width="1.2"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="2.5" fill="#5A4A32"/>');
+      [-8, 8].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 18) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 25) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 27, cy + dy, true);
+      });
+      top = cy - 26; bot = cy + 26;
+    }else if(q.kind === 'ldr'){
+      P.out.push('<rect x="' + (cx - 16) + '" y="' + (cy - 10) + '" width="32" height="20" rx="4" fill="#FBF3D5" stroke="#8A6A1A" stroke-width="1.5"/>' +
+               '<path d="M' + (cx - 11) + ' ' + (cy - 5) + 'h22m0 5h-22m0 5h22" fill="none" stroke="#8A6A1A" stroke-width="1.2"/>');
+      lug('1', cx + f * 22, cy - 6, true); lug('2', cx + f * 22, cy + 6, true);
+      top = cy - 16; bot = cy + 16;
+    }else if(q.kind === 'vactrol'){
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 16) + '" width="44" height="32" rx="7" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>');
+      txt(cx, cy + 3, 'VACTROL', 7, 'fill="#fff" font-weight="bold" text-anchor="middle"');
+      [-12, -4, 4, 12].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 22) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 26) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 28, cy + dy, true);
+      });
+      top = cy - 22; bot = cy + 22;
+    }else if(q.kind === 'btn'){
+      P.out.push('<rect x="' + (cx - 13) + '" y="' + (cy - 6) + '" width="26" height="16" rx="3" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
+               '<circle cx="' + cx + '" cy="' + (cy - 11) + '" r="9" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.5"/>');
+      lug('1', cx + f * 19, cy - 2, true); lug('2', cx + f * 19, cy + 8, true);
+      top = cy - 24; bot = cy + 18;
+    }else if(q.kind === 'batt'){
+      P.out.push('<rect x="' + (cx - 4) + '" y="' + (cy - 20) + '" width="8" height="5" fill="#444"/>' +
+               '<rect x="' + (cx - 12) + '" y="' + (cy - 16) + '" width="24" height="34" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      txt(cx, cy + 4, 'BATT', 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
+      lug('+', cx + f * 17, cy - 9, true); lug('-', cx + f * 17, cy + 9, true);
+      top = cy - 26; bot = cy + 24;
+    }else if(q.kind === 'res'){
+      P.out.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="4" fill="#F0DDBE" stroke="#7A5B2E" stroke-width="1.5"/>' +
+               '<path d="M' + (cx - 6) + ' ' + (cy - 8) + 'h12M' + (cx - 6) + ' ' + (cy - 3) + 'h12M' + (cx - 6) + ' ' + (cy + 2) + 'h12" stroke="#7A5B2E" stroke-width="2"/>');
+      [-14, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 14, cy + dy, true);
+      });
+      top = cy - 20; bot = cy + 20;
+    }else if(q.kind === 'module'){
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 22) + '" width="44" height="44" rx="3" fill="#DCEBD8" stroke="#3E6B3A" stroke-width="1.5"/>');
+      txt(cx - f * 3, cy + 3, 'MODULE', 7, 'fill="#3E6B3A" font-weight="bold" text-anchor="middle"');
+      const mslots = {'+':-15, '-':-5, IN:5, OUT:15};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + mslots[nm], nm === '+' || nm === '-' || P.used(nm));
+      top = cy - 28; bot = cy + 28;
+    }else if(q.kind === 'xfmr'){
+      /* a laminated block: the core down the middle, the P winding's lugs on the
+         upper half of the board-facing edge and the S winding's on the lower,
+         with a rule between them so the two windings read as two */
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 28) + '" width="44" height="56" rx="3" fill="#E6E2EE" stroke="#4A3F63" stroke-width="1.5"/>' +
+               '<rect x="' + (cx - 5) + '" y="' + (cy - 24) + '" width="10" height="48" fill="#B9B1CB" stroke="#4A3F63" stroke-width="1"/>' +
+               '<line x1="' + (cx + f * 5) + '" y1="' + cy + '" x2="' + (cx + f * 22) + '" y2="' + cy + '" stroke="#4A3F63" stroke-width="1.2"/>');
+      txt(cx - f * 13, cy - 10, 'P', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+      txt(cx - f * 13, cy + 16, 'S', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+      const xslots = {P1:-22, PCT:-15, P2:-8, S1:8, SCT:15, S2:22};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + xslots[nm], nm !== 'PCT' && nm !== 'SCT' || P.used(nm));
+      top = cy - 34; bot = cy + 34;
+    }else if(q.kind === 'tube'){
+      /* a noval socket seen from its wiring side: nine pins on a circle, a gap of two
+         pitches between 9 and 1, the gap turned away from the board */
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="26" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#DDD" stroke="#777" stroke-width="1.2"/>');
+      const gap = f > 0 ? Math.PI : 0;                 // the gap faces away from the board
+      lib.lugs.forEach((nm, i) => {
+        const a = gap + (i + 1) * Math.PI / 5;         // 36 degrees a pin, clockwise on screen
+        const lx = cx + 19 * Math.cos(a), ly = cy + 19 * Math.sin(a);
+        lug(nm, lx, ly, false);
+        P.out.push('<circle cx="' + lx + '" cy="' + ly + '" r="2.8" fill="#fff" stroke="#444" stroke-width="1.2"/>');
+        txt(cx + 31 * Math.cos(a), cy + 31 * Math.sin(a) + 3, nm, 7, 'fill="' + P.lug + '" text-anchor="middle"');
+      });
+      top = cy - 34; bot = cy + 34;
+    }else if(q.kind === 'diode'){
+      /* a black axial body standing on end, A at the top and K at the bottom,
+         the silver band drawn at the K end so it reads the way the part does */
+      P.out.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="3" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>' +
+               '<rect x="' + (cx - 6) + '" y="' + (cy + 6) + '" width="12" height="5" fill="#D8D8D8"/>');
+      [-14, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 14, cy + dy, true);
+      });
+      top = cy - 20; bot = cy + 20;
+    }else{                                         // dc
+      P.out.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
+      lug('+', cx + f * 25, cy - 8, true); lug('-', cx + f * 25, cy + 8, true);
+      top = cy - 20; bot = cy + 20;
+    }
+    txt(cx, top - 6, q.id, 11, 'fill="' + ink + '" font-weight="bold" text-anchor="middle"');
+    if(q.value) txt(cx, bot + 12, q.value, 10, 'fill="' + P.val + '" text-anchor="middle"');
+  return {top:top - 17, bot:q.value ? bot + 16 : bot};
 }
 
 /* ---------- what each panel part is, and where its legs go ----------
@@ -8048,7 +8193,7 @@ let NETCOLOUR = false;
 const OFFB_KEY = 'copper-bottom.offboard';
 let SHOW_OFFB = true;
 try{ SHOW_OFFB = localStorage.getItem(OFFB_KEY) !== '0'; }catch(err){}
-const AP_LUG = 16, AP_HEAD = 36, AP_GAP = 30, AP_CH = 6.6;   // AP_CH: 11px mono, about 0.6em a character
+const AP_GAP = 34;
 /* the parts, their sides, and each body's size. Positions across the page
    need the gutters, so render() places them. */
 function editorApron(rows, cols){
@@ -8061,25 +8206,25 @@ function editorApron(rows, cols){
     wires.some(w => (w.a === q.id && w.al === nm) || (w.b === q.id && w.bl === nm));
   const side = {left:[], right:[]};
   for(const q of ob){
-    const lib = OFFBOARD_LIB[q.kind];
-    const all = lib ? lib.lugs : [...q.lugs.keys()];
-    /* three lugs or fewer are all drawn, so an empty pot lug is SEEN to be
-       empty; a part with more (a jack, a socket) shows the lugs in use */
-    q.show = all.length <= 3 ? all.slice() : all.filter(nm => used(q, nm));
-    q.title = q.id + (q.value ? ' ' + q.value : '');
-    q.sub = q.role || (lib ? lib.name : q.kind);
-    q.w = Math.max(100, Math.max(q.title.length, q.sub.length) * AP_CH + 22);
-    q.h = AP_HEAD + Math.max(1, q.show.length) * AP_LUG + 6;
+    /* the picture the layout image draws, measured by drawing it once at the
+       origin; render() draws it again where it lands */
+    q.used = nm => used(q, nm);
+    const ext = apronGlyph(q, 0, 0, 1, '#000', {out:[], lugAt:new Map(), used:q.used,
+                                                  lug:'', lead:'', plus:'', val:''});
+    q.up = -ext.top; q.h = ext.bot - ext.top;
+    /* the widest thing is the value under the body or the id over it, at
+       about 0.62em a character in Verdana */
+    q.w = Math.max(130, String(q.value || '').length * 6.4 + 24, q.id.length * 7.4 + 24);
     side[q.left ? 'left' : 'right'].push(q);
   }
-  /* each side is one column in row order: a body sits level with its pads
+  /* each side is one column in row order: a part sits level with its pads
      where there is room, and is pushed down where there is not */
   let top = Infinity, bot = -Infinity;
   for(const k of ['left', 'right']){
     side[k].sort((a, b) => a.row - b.row);
     let prev = -Infinity;
     for(const q of side[k]){
-      q.y = Math.max(Y(q.row) - q.h / 2, prev + 12);
+      q.y = Math.max(Y(q.row) - q.h / 2, prev + 14);
       prev = q.y + q.h;
       top = Math.min(top, q.y); bot = Math.max(bot, prev);
     }
@@ -8220,14 +8365,19 @@ function render(){
     }else{
       gutB = Math.max(gutB, under - boxB0);
     }
-    /* where every body and lug lands. f is the side the board is on: +1, it
-       is to the right. Lugs sit on the edge that faces the board. */
+    /* where every part and lug lands. f is the side the board is on: +1, it
+       is to the right. Each side is one column as wide as its widest part,
+       and the picture is drawn now so the wires know where its lugs are. */
     for(const q of AP.ob){
       q.f = q.left ? 1 : -1;
-      q.x = q.left ? -(obL + pgL) - AP_GAP - q.w : boxR0 + obR + pgR + AP_GAP;
-      q.edge = q.left ? q.x + q.w : q.x;
+      const cw = q.left ? AP.wL : AP.wR;
+      const cx = q.left ? -(obL + pgL) - AP_GAP - cw / 2 : boxR0 + obR + pgR + AP_GAP + cw / 2;
+      const lugAt = new Map(), out = [];
+      apronGlyph(q, cx, q.y + q.up, q.f, C('link'), {out:out, lugAt:lugAt, used:q.used,
+        lug:C('lead'), lead:C('lead'), plus:C('link'), val:C('link')});
+      q.svg = out.join('');
       q.lugXY = new Map();
-      q.show.forEach((nm, i) => q.lugXY.set(nm, [q.edge, q.y + AP_HEAD + i * AP_LUG + AP_LUG / 2]));
+      for(const [k, v] of lugAt) q.lugXY.set(k.slice(q.id.length + 1), v);
     }
   }
 
@@ -8858,18 +9008,7 @@ function render(){
       o.push('<path d="' + path + '" fill="none" stroke="' + C('halo') + '" stroke-width="5" stroke-linecap="round"/>');
       o.push('<path d="' + path + '" fill="none" stroke="' + C('lead') + '" stroke-width="1.8" stroke-dasharray="6 4" stroke-linecap="round"/>');
     }
-    for(const q of AP.ob){
-      const cx = q.x + q.w / 2;
-      o.push('<rect x="' + q.x + '" y="' + q.y + '" width="' + q.w + '" height="' + q.h + '" rx="6" fill="' +
-             C('board2') + '" stroke="' + C('lead') + '" stroke-width="1.6"/>');
-      o.push('<text class="apt" x="' + cx + '" y="' + (q.y + 15) + '">' + esc(q.title) + '</text>');
-      o.push('<text class="aps" x="' + cx + '" y="' + (q.y + 29) + '">' + esc(q.sub) + '</text>');
-      for(const [nm, at] of q.lugXY){
-        o.push('<circle cx="' + at[0] + '" cy="' + at[1] + '" r="3.8" fill="' + C('board') + '" stroke="' + C('lead') + '" stroke-width="1.4"/>');
-        o.push('<text class="apl" text-anchor="' + (q.left ? 'end' : 'start') + '" x="' + (at[0] - q.f * 9) +
-               '" y="' + (at[1] + 4) + '">' + esc(nm) + '</text>');
-      }
-    }
+    for(const q of AP.ob) o.push(q.svg);
     if(apList){
       const lx = -gutL + 14;
       o.push('<text class="aph" x="' + lx + '" y="' + apList.y + '">OFF THE BOARD</text>');
@@ -9046,9 +9185,6 @@ function render(){
     '.pin-in{fill:var(--pin-in)}.pin-out{fill:var(--pin-out)}.pin-pwr{fill:var(--pin-pwr)}' +
     '.icref{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
     '.icpart{fill:var(--icpart-ink);font:9px ui-monospace,monospace;text-anchor:middle}' +
-    '.apt{fill:var(--lbl-ink);font:11px ui-monospace,monospace;font-weight:700;text-anchor:middle}' +
-    '.aps{fill:var(--lbl-ink);font:11px ui-monospace,monospace;text-anchor:middle}' +
-    '.apl{fill:var(--lbl-ink);font:11px ui-monospace,monospace;font-weight:700}' +
     '.aph{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;letter-spacing:.08em}' +
     '.apx{fill:var(--lbl-ink);font:12px ui-monospace,monospace;white-space:pre}' +
     '.pol{fill:var(--lbl-ink);font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3}' +
@@ -10659,139 +10795,9 @@ function classicSVG(opts){
   if(ob.length){
     const obW = [], obB = [];
     const lugAt = new Map();                       // 'ID.LUG' -> [x, y, facing]
-    const txt = (tx, ty, str, size, extra) =>
-      obB.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" font-family="Verdana, sans-serif" ' +
-               (extra || '') + '>' + esc(str) + '</text>');
-    /* one body, its lugs on the edge that faces the board (f = +1: board is to the right) */
-    const body = (q, cx, cy, f, ink) => {
-      const lib = OFFBOARD_LIB[q.kind];
-      const lug = (name, lx, ly, show) => {
-        lugAt.set(q.id + '.' + name, [lx, ly, f]);
-        if(!show) return;
-        obB.push('<circle cx="' + lx + '" cy="' + ly + '" r="3.6" fill="#fff" stroke="#444" stroke-width="1.2"/>');
-        txt(lx + f * 7, ly + 3, name, 8, 'fill="#444" text-anchor="' + (f > 0 ? 'start' : 'end') + '"');
-      };
-      const used = name => q.lugs.has(name) || obWires.some(w => (w.a === q.id && w.al === name) || (w.b === q.id && w.bl === name));
-      let top = cy - 24, bot = cy + 24;
-      if(q.kind === 'pot'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="23" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#D8D8D8" stroke="#777" stroke-width="1.2"/>' +
-                 '<line x1="' + (cx - 5) + '" y1="' + (cy - 5) + '" x2="' + (cx + 5) + '" y2="' + (cy - 5) + '" stroke="#777" stroke-width="1.2"/>');
-        [-14, 0, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 21) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 30) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 32, cy + dy, true);
-        });
-        top = cy - 30; bot = cy + 30;
-      }else if(q.kind === 'toggle'){
-        obB.push('<rect x="' + (cx - 11) + '" y="' + (cy - 18) + '" width="22" height="36" rx="4" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
-                 '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy - 30) + '" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>' +
-                 '<circle cx="' + cx + '" cy="' + (cy - 30) + '" r="3.5" fill="#3B4A5A"/>');
-        [-12, 0, 12].forEach((dy, i) => lug(lib.lugs[i], cx + f * 19, cy + dy, true));
-        top = cy - 36; bot = cy + 24;
-      }else if(q.kind === 'jack'){
-        const xo = cx - f * 22;                      // the outer edge, away from the board
-        obB.push('<rect x="' + (f > 0 ? xo - 12 : xo) + '" y="' + (cy - 7) + '" width="12" height="14" fill="#BBB" stroke="#444" stroke-width="1.2"/>' +
-                 '<rect x="' + (cx - 22) + '" y="' + (cy - 13) + '" width="44" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        const slots = {T:-12, R:-4, N:4, S:12};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + slots[nm], nm === 'T' || nm === 'S' || used(nm));
-        top = cy - 20; bot = cy + 20;
-      }else if(q.kind === 'led'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
-        lug('A', cx + f * 17, cy - 7, true); lug('K', cx + f * 17, cy + 7, true);
-        txt(cx - f * 16, cy - 4, '+', 10, 'fill="#7E1E16" font-weight="bold" text-anchor="middle"');
-        top = cy - 18; bot = cy + 18;
-      }else if(q.kind === 'spk'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="20" fill="#E9E4D8" stroke="#5A4A32" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="#B8A98A" stroke="#5A4A32" stroke-width="1.2"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="2.5" fill="#5A4A32"/>');
-        [-8, 8].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 18) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 25) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 27, cy + dy, true);
-        });
-        top = cy - 26; bot = cy + 26;
-      }else if(q.kind === 'ldr'){
-        obB.push('<rect x="' + (cx - 16) + '" y="' + (cy - 10) + '" width="32" height="20" rx="4" fill="#FBF3D5" stroke="#8A6A1A" stroke-width="1.5"/>' +
-                 '<path d="M' + (cx - 11) + ' ' + (cy - 5) + 'h22m0 5h-22m0 5h22" fill="none" stroke="#8A6A1A" stroke-width="1.2"/>');
-        lug('1', cx + f * 22, cy - 6, true); lug('2', cx + f * 22, cy + 6, true);
-        top = cy - 16; bot = cy + 16;
-      }else if(q.kind === 'vactrol'){
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 16) + '" width="44" height="32" rx="7" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>');
-        txt(cx, cy + 3, 'VACTROL', 7, 'fill="#fff" font-weight="bold" text-anchor="middle"');
-        [-12, -4, 4, 12].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 22) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 26) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 28, cy + dy, true);
-        });
-        top = cy - 22; bot = cy + 22;
-      }else if(q.kind === 'btn'){
-        obB.push('<rect x="' + (cx - 13) + '" y="' + (cy - 6) + '" width="26" height="16" rx="3" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
-                 '<circle cx="' + cx + '" cy="' + (cy - 11) + '" r="9" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.5"/>');
-        lug('1', cx + f * 19, cy - 2, true); lug('2', cx + f * 19, cy + 8, true);
-        top = cy - 24; bot = cy + 18;
-      }else if(q.kind === 'batt'){
-        obB.push('<rect x="' + (cx - 4) + '" y="' + (cy - 20) + '" width="8" height="5" fill="#444"/>' +
-                 '<rect x="' + (cx - 12) + '" y="' + (cy - 16) + '" width="24" height="34" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        txt(cx, cy + 4, 'BATT', 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
-        lug('+', cx + f * 17, cy - 9, true); lug('-', cx + f * 17, cy + 9, true);
-        top = cy - 26; bot = cy + 24;
-      }else if(q.kind === 'res'){
-        obB.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="4" fill="#F0DDBE" stroke="#7A5B2E" stroke-width="1.5"/>' +
-                 '<path d="M' + (cx - 6) + ' ' + (cy - 8) + 'h12M' + (cx - 6) + ' ' + (cy - 3) + 'h12M' + (cx - 6) + ' ' + (cy + 2) + 'h12" stroke="#7A5B2E" stroke-width="2"/>');
-        [-14, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 14, cy + dy, true);
-        });
-        top = cy - 20; bot = cy + 20;
-      }else if(q.kind === 'module'){
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 22) + '" width="44" height="44" rx="3" fill="#DCEBD8" stroke="#3E6B3A" stroke-width="1.5"/>');
-        txt(cx - f * 3, cy + 3, 'MODULE', 7, 'fill="#3E6B3A" font-weight="bold" text-anchor="middle"');
-        const mslots = {'+':-15, '-':-5, IN:5, OUT:15};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + mslots[nm], nm === '+' || nm === '-' || used(nm));
-        top = cy - 28; bot = cy + 28;
-      }else if(q.kind === 'xfmr'){
-        /* a laminated block: the core down the middle, the P winding's lugs on the
-           upper half of the board-facing edge and the S winding's on the lower,
-           with a rule between them so the two windings read as two */
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 28) + '" width="44" height="56" rx="3" fill="#E6E2EE" stroke="#4A3F63" stroke-width="1.5"/>' +
-                 '<rect x="' + (cx - 5) + '" y="' + (cy - 24) + '" width="10" height="48" fill="#B9B1CB" stroke="#4A3F63" stroke-width="1"/>' +
-                 '<line x1="' + (cx + f * 5) + '" y1="' + cy + '" x2="' + (cx + f * 22) + '" y2="' + cy + '" stroke="#4A3F63" stroke-width="1.2"/>');
-        txt(cx - f * 13, cy - 10, 'P', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
-        txt(cx - f * 13, cy + 16, 'S', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
-        const xslots = {P1:-22, PCT:-15, P2:-8, S1:8, SCT:15, S2:22};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + xslots[nm], nm !== 'PCT' && nm !== 'SCT' || used(nm));
-        top = cy - 34; bot = cy + 34;
-      }else if(q.kind === 'tube'){
-        /* a noval socket seen from its wiring side: nine pins on a circle, a gap of two
-           pitches between 9 and 1, the gap turned away from the board */
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="26" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#DDD" stroke="#777" stroke-width="1.2"/>');
-        const gap = f > 0 ? Math.PI : 0;                 // the gap faces away from the board
-        lib.lugs.forEach((nm, i) => {
-          const a = gap + (i + 1) * Math.PI / 5;         // 36 degrees a pin, clockwise on screen
-          const lx = cx + 19 * Math.cos(a), ly = cy + 19 * Math.sin(a);
-          lug(nm, lx, ly, false);
-          obB.push('<circle cx="' + lx + '" cy="' + ly + '" r="2.8" fill="#fff" stroke="#444" stroke-width="1.2"/>');
-          txt(cx + 31 * Math.cos(a), cy + 31 * Math.sin(a) + 3, nm, 7, 'fill="#444" text-anchor="middle"');
-        });
-        top = cy - 34; bot = cy + 34;
-      }else if(q.kind === 'diode'){
-        /* a black axial body standing on end, A at the top and K at the bottom,
-           the silver band drawn at the K end so it reads the way the part does */
-        obB.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="3" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>' +
-                 '<rect x="' + (cx - 6) + '" y="' + (cy + 6) + '" width="12" height="5" fill="#D8D8D8"/>');
-        [-14, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 14, cy + dy, true);
-        });
-        top = cy - 20; bot = cy + 20;
-      }else{                                         // dc
-        obB.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
-        lug('+', cx + f * 25, cy - 8, true); lug('-', cx + f * 25, cy + 8, true);
-        top = cy - 20; bot = cy + 20;
-      }
-      txt(cx, top - 6, q.id, 11, 'fill="' + ink + '" font-weight="bold" text-anchor="middle"');
-      if(q.value) txt(cx, bot + 12, q.value, 10, 'fill="#333" text-anchor="middle"');
-    };
+    const body = (q, cx, cy, f, ink) => apronGlyph(q, cx, cy, f, ink, {
+      out:obB, lugAt:lugAt, lug:'#444', lead:'#444', plus:'#7E1E16', val:'#333',
+      used:name => q.lugs.has(name) || obWires.some(w => (w.a === q.id && w.al === name) || (w.b === q.id && w.bl === name))});
     const inkOf = q => padInk.get(q.id) || '#24357E';
     for(const side of ['left', 'right']){
       const f = side === 'left' ? 1 : -1;
