@@ -1001,6 +1001,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
+  <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list under it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
   <div class="sp"></div>
@@ -1021,7 +1022,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.21';
+const APP_VERSION = 'v1.7.22';
 
 const K = (r,c) => r + ',' + c;
 
@@ -4285,6 +4286,49 @@ function offboardWireReport(){
   return {wires:out, bad:bad};
 }
 function offboardWires(){ return offboardWireReport().wires; }
+
+/* Which side of the board each panel part hangs off, and how far down, in
+   board rows. Written onto the parts as q.left and q.row. One rule for the
+   layout image and the editing board (v1.7.22), so the two cannot disagree
+   about where a pot lives.
+
+   A part with pads hangs off the margin most of them sit on, at the average
+   height of those pads. A part that reaches no pad has no hole to hang off,
+   so it takes the side and the height of the panel parts it IS wired to,
+   and the pass repeats so a chain of them settles rather than piling up in
+   the top left corner. One that reaches nothing anchored goes to the right
+   margin at mid board - arbitrary, but stated, and it is drawn. */
+function apronSides(ob, wires, rows, cols){
+  const anchored = new Set();
+  for(const q of ob){
+    if(!q.pads.length) continue;
+    const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
+    q.left = lefts * 2 >= q.pads.length;
+    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
+    anchored.add(q.id);
+  }
+  for(let pass = 0; pass < ob.length; pass++){
+    let settled = 0;
+    for(const q of ob){
+      if(anchored.has(q.id)) continue;
+      const near = [];
+      for(const w of wires){
+        const other = w.a === q.id ? w.b : w.b === q.id ? w.a : null;
+        if(other && other !== q.id && anchored.has(other)){
+          const z = ob.find(x => x.id === other);
+          if(z) near.push(z);
+        }
+      }
+      if(!near.length) continue;
+      q.left = near.filter(z => z.left).length * 2 >= near.length;
+      q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
+      anchored.add(q.id); settled++;
+    }
+    if(!settled) break;
+  }
+  for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
+  return ob;
+}
 
 /* ---------- what each panel part is, and where its legs go ----------
    Her ask, 18 Sept 2026: label a variable resistor by number AND function AND
@@ -7986,7 +8030,65 @@ function schematicModel(){
    ============================================================ */
 const PITCH = 30, MARGIN = 34;
 let Z = 1;
-let NETCOLOUR = false;   // false = quiet copper board, true = every net painted
+let NETCOLOUR = false;
+/* ---- the off-board toggle and the apron on the editing board (v1.7.22) ----
+   Her ask, 10 Nov 2026: "we should be able to toggle seeing offboard wiring
+   in copper bottom while editing". Until then the panel parts the pads name -
+   pots, jacks, switches and their wires - were drawn only in the downloaded
+   layout image, so the board you edit never showed them.
+
+   This is a VIEW of the same offboardParts() and offboardWires() the image
+   and the build sheet read, never a second record. Hiding it changes what
+   the screen draws and nothing else: not the file, not a check, not an
+   export - the image, the sheet and the schematic each draw their own. A part
+   whose every leg is flown is a BOARD part with a body off the edge; it is
+   drawn with the board whichever way this is set, because it is edited there.
+
+   Remembered per machine, like the theme. Shown unless it was turned off. */
+const OFFB_KEY = 'copper-bottom.offboard';
+let SHOW_OFFB = true;
+try{ SHOW_OFFB = localStorage.getItem(OFFB_KEY) !== '0'; }catch(err){}
+const AP_LUG = 16, AP_HEAD = 36, AP_GAP = 30, AP_CH = 6.6;   // AP_CH: 11px mono, about 0.6em a character
+/* the parts, their sides, and each body's size. Positions across the page
+   need the gutters, so render() places them. */
+function editorApron(rows, cols){
+  if(!SHOW_OFFB) return null;
+  const ob = offboardParts();
+  if(!ob.length) return null;
+  const wires = offboardWires();
+  apronSides(ob, wires, rows, cols);
+  const used = (q, nm) => q.lugs.has(nm) ||
+    wires.some(w => (w.a === q.id && w.al === nm) || (w.b === q.id && w.bl === nm));
+  const side = {left:[], right:[]};
+  for(const q of ob){
+    const lib = OFFBOARD_LIB[q.kind];
+    const all = lib ? lib.lugs : [...q.lugs.keys()];
+    /* three lugs or fewer are all drawn, so an empty pot lug is SEEN to be
+       empty; a part with more (a jack, a socket) shows the lugs in use */
+    q.show = all.length <= 3 ? all.slice() : all.filter(nm => used(q, nm));
+    q.title = q.id + (q.value ? ' ' + q.value : '');
+    q.sub = q.role || (lib ? lib.name : q.kind);
+    q.w = Math.max(100, Math.max(q.title.length, q.sub.length) * AP_CH + 22);
+    q.h = AP_HEAD + Math.max(1, q.show.length) * AP_LUG + 6;
+    side[q.left ? 'left' : 'right'].push(q);
+  }
+  /* each side is one column in row order: a body sits level with its pads
+     where there is room, and is pushed down where there is not */
+  let top = Infinity, bot = -Infinity;
+  for(const k of ['left', 'right']){
+    side[k].sort((a, b) => a.row - b.row);
+    let prev = -Infinity;
+    for(const q of side[k]){
+      q.y = Math.max(Y(q.row) - q.h / 2, prev + 12);
+      prev = q.y + q.h;
+      top = Math.min(top, q.y); bot = Math.max(bot, prev);
+    }
+  }
+  const colW = k => side[k].length ? Math.max.apply(null, side[k].map(q => q.w)) : 0;
+  return {ob:ob, wires:wires, side:side, wL:colW('left'), wR:colW('right'), top:top, bot:bot,
+          lines:offboardLines()};
+}
+   // false = quiet copper board, true = every net painted
 let hoverHole = null;     // [r,c] under the cursor
 let pinnedNet = null;     // net id pinned by clicking with the inspect tool
 let pending   = [];       // legs clicked so far for the part being placed
@@ -8084,7 +8186,50 @@ function render(){
   };
   const pgL = padGut('left'), pgR = padGut('right');
   const pgT = padGut('top'),  pgB = padGut('bottom');
-  const gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
+  const boxR0 = MARGIN * 2 + (cols - 1) * PITCH, boxB0 = MARGIN * 2 + (rows - 1) * PITCH;
+  /* the apron sits outside the pad labels, and the OFF THE BOARD list under
+     everything. Nothing here moves the board: the viewBox only grows. */
+  const AP = editorApron(rows, cols);
+  let gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
+  let apList = null;
+  if(AP){
+    if(AP.wL) gutL += AP.wL + AP_GAP + 10;
+    if(AP.wR) gutR += AP.wR + AP_GAP + 10;
+    gutT = Math.max(gutT, -AP.top + 10);
+    const under = Math.max(boxB0 + obB + pgB, AP.bot + 10);
+    if(AP.lines.length){
+      /* one line per part, monospace so the columns stack - the layout
+         image's block, read from the same offboardLines(). Too wide for the
+         page and each leg takes its own indented line. */
+      const pad = (t, n) => t + ' '.repeat(Math.max(0, n - t.length));
+      const wId = Math.max.apply(null, AP.lines.map(l => l.id.length));
+      const wVal = Math.max.apply(null, AP.lines.map(l => l.value.length));
+      const wRole = Math.max.apply(null, AP.lines.map(l => l.role.length));
+      const head = l => (pad(l.id, wId) + '  ' + pad(l.value, wVal) + (wRole ? '  ' + pad(l.role, wRole) : ''));
+      const LCH = 7.2;                                    // 12px mono
+      const avail = boxR0 + gutL + gutR - 28;
+      let rowsOut = AP.lines.map(l => head(l) + '   ' + l.legs.join('   '));
+      if(rowsOut.some(t => t.length * LCH > avail)){
+        rowsOut = [];
+        for(const l of AP.lines){ rowsOut.push(head(l)); for(const g of l.legs) rowsOut.push('    ' + g); }
+      }
+      const wide = Math.max.apply(null, rowsOut.map(t => t.length * LCH));
+      if(wide > avail) gutR += wide - avail;
+      apList = {y:under + 30, rows:rowsOut};
+      gutB = Math.max(gutB, under - boxB0 + 30 + rowsOut.length * 16 + 14);
+    }else{
+      gutB = Math.max(gutB, under - boxB0);
+    }
+    /* where every body and lug lands. f is the side the board is on: +1, it
+       is to the right. Lugs sit on the edge that faces the board. */
+    for(const q of AP.ob){
+      q.f = q.left ? 1 : -1;
+      q.x = q.left ? -(obL + pgL) - AP_GAP - q.w : boxR0 + obR + pgR + AP_GAP;
+      q.edge = q.left ? q.x + q.w : q.x;
+      q.lugXY = new Map();
+      q.show.forEach((nm, i) => q.lugXY.set(nm, [q.edge, q.y + AP_HEAD + i * AP_LUG + AP_LUG / 2]));
+    }
+  }
 
   const W = MARGIN * 2 + (cols - 1) * PITCH + gutL + gutR;
   const H = MARGIN * 2 + (rows - 1) * PITCH + gutT + gutB;
@@ -8215,6 +8360,27 @@ function render(){
     if(on) o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
     o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="' + C('hole') + '" stroke="' + rim +
            '" stroke-opacity="' + (on ? 1 : NETCOLOUR ? 0.85 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
+  }
+
+  /* --- the apron's wires, lug to hole, in the net's color --- */
+  if(AP){
+    o.push('<g pointer-events="none">');
+    for(const q of AP.ob){
+      for(const [nm, pads] of q.lugs){
+        const at = q.lugXY.get(nm);
+        if(!at) continue;
+        for(const d of pads){
+          const hx = X(d.at[1]), hy = Y(d.at[0]);
+          const net = NET.netAt(d.at[0], d.at[1]);
+          const col = net ? net.color : C('lead');
+          const path = 'M' + at[0] + ' ' + at[1] + 'C' + (at[0] + q.f * 60) + ' ' + at[1] + ' ' +
+                       (hx - q.f * 40) + ' ' + hy + ' ' + hx + ' ' + hy;
+          o.push('<path d="' + path + '" fill="none" stroke="' + C('halo') + '" stroke-width="5" stroke-linecap="round"/>');
+          o.push('<path d="' + path + '" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-linecap="round"/>');
+        }
+      }
+    }
+    o.push('</g>');
   }
 
   /* --- ICs --- */
@@ -8677,6 +8843,42 @@ function render(){
        the wires look like they were labeled at both ends. */
   }
 
+  /* ---- the apron's bodies, its part-to-part wires, and the list ---- */
+  if(AP){
+    o.push('<g pointer-events="none">');
+    /* a wire between two panel parts: dashed, bowed toward the board so it
+       runs in the gap rather than through either body */
+    const find = id => AP.ob.find(z => z.id === id);
+    for(const w of AP.wires){
+      const qa = find(w.a), qb = find(w.b);
+      const pa = qa && qa.lugXY.get(w.al), pb = qb && qb.lugXY.get(w.bl);
+      if(!pa || !pb) continue;
+      const path = 'M' + pa[0] + ' ' + pa[1] + 'C' + (pa[0] + qa.f * 40) + ' ' + pa[1] + ' ' +
+                   (pb[0] + qb.f * 40) + ' ' + pb[1] + ' ' + pb[0] + ' ' + pb[1];
+      o.push('<path d="' + path + '" fill="none" stroke="' + C('halo') + '" stroke-width="5" stroke-linecap="round"/>');
+      o.push('<path d="' + path + '" fill="none" stroke="' + C('lead') + '" stroke-width="1.8" stroke-dasharray="6 4" stroke-linecap="round"/>');
+    }
+    for(const q of AP.ob){
+      const cx = q.x + q.w / 2;
+      o.push('<rect x="' + q.x + '" y="' + q.y + '" width="' + q.w + '" height="' + q.h + '" rx="6" fill="' +
+             C('board2') + '" stroke="' + C('lead') + '" stroke-width="1.6"/>');
+      o.push('<text class="apt" x="' + cx + '" y="' + (q.y + 15) + '">' + esc(q.title) + '</text>');
+      o.push('<text class="aps" x="' + cx + '" y="' + (q.y + 29) + '">' + esc(q.sub) + '</text>');
+      for(const [nm, at] of q.lugXY){
+        o.push('<circle cx="' + at[0] + '" cy="' + at[1] + '" r="3.8" fill="' + C('board') + '" stroke="' + C('lead') + '" stroke-width="1.4"/>');
+        o.push('<text class="apl" text-anchor="' + (q.left ? 'end' : 'start') + '" x="' + (at[0] - q.f * 9) +
+               '" y="' + (at[1] + 4) + '">' + esc(nm) + '</text>');
+      }
+    }
+    if(apList){
+      const lx = -gutL + 14;
+      o.push('<text class="aph" x="' + lx + '" y="' + apList.y + '">OFF THE BOARD</text>');
+      apList.rows.forEach((t, i) =>
+        o.push('<text class="apx" xml:space="preserve" x="' + lx + '" y="' + (apList.y + 18 + i * 16) + '">' + esc(t) + '</text>'));
+    }
+    o.push('</g>');
+  }
+
   o.push(labels.join(''));
 
   /* grab handles on the IC being reshaped */
@@ -8844,6 +9046,11 @@ function render(){
     '.pin-in{fill:var(--pin-in)}.pin-out{fill:var(--pin-out)}.pin-pwr{fill:var(--pin-pwr)}' +
     '.icref{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
     '.icpart{fill:var(--icpart-ink);font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.apt{fill:var(--lbl-ink);font:11px ui-monospace,monospace;font-weight:700;text-anchor:middle}' +
+    '.aps{fill:var(--lbl-ink);font:11px ui-monospace,monospace;text-anchor:middle}' +
+    '.apl{fill:var(--lbl-ink);font:11px ui-monospace,monospace;font-weight:700}' +
+    '.aph{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;letter-spacing:.08em}' +
+    '.apx{fill:var(--lbl-ink);font:12px ui-monospace,monospace;white-space:pre}' +
     '.pol{fill:var(--lbl-ink);font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3}' +
     '</style></svg>');
 
@@ -10076,34 +10283,7 @@ function classicSVG(opts){
      and the pass repeats so a chain of them settles rather than piling up in
      the top left corner. One that reaches nothing anchored goes to the right
      margin at mid board - arbitrary, but stated, and it is drawn. */
-  const anchored = new Set();
-  for(const q of ob){
-    if(!q.pads.length) continue;
-    const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
-    q.left = lefts * 2 >= q.pads.length;
-    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
-    anchored.add(q.id);
-  }
-  for(let pass = 0; pass < ob.length; pass++){
-    let settled = 0;
-    for(const q of ob){
-      if(anchored.has(q.id)) continue;
-      const near = [];
-      for(const w of obWires){
-        const other = w.a === q.id ? w.b : w.b === q.id ? w.a : null;
-        if(other && other !== q.id && anchored.has(other)){
-          const z = ob.find(x => x.id === other);
-          if(z) near.push(z);
-        }
-      }
-      if(!near.length) continue;
-      q.left = near.filter(z => z.left).length * 2 >= near.length;
-      q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
-      anchored.add(q.id); settled++;
-    }
-    if(!settled) break;
-  }
-  for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
+  apronSides(ob, obWires, rows, cols);
   for(const side of ['left', 'right']){
     const parts = ob.filter(q => q.left === (side === 'left')).sort((a, b) => a.row - b.row);
     if(!parts.length) continue;
@@ -12623,6 +12803,14 @@ async function openShareLink(){
    Spider (27 Sept 2026). The fragment IS the layout, so watch it. */
 window.addEventListener('hashchange', () => { openShareLink(); });
 
+/* the off-board toggle: the screen only, remembered per machine */
+const syncOffb = () => { toff.textContent = SHOW_OFFB ? 'shown' : 'hidden'; };
+syncOffb();
+toff.onclick = () => {
+  SHOW_OFFB = !SHOW_OFFB;
+  try{ localStorage.setItem(OFFB_KEY, SHOW_OFFB ? '1' : '0'); }catch(err){}
+  syncOffb(); render();
+};
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
 /* ---- theme ----

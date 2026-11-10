@@ -3958,6 +3958,29 @@ console.log('-- v1.7.20: squeezing out empty lines, proven on a copy --');
   ok(squeezeBlocker(1, 1) === null, 'an axial part may span a squeezed line - lead-span guards its length');
 }
 
+/* v1.7.22: apronSides() is the one rule the layout image and the editing
+   board both use to hang a panel part off a side of the board */
+{
+  const raw = {version:2, name:'apron sides', board:{rows:10, cols:10}, cuts:[], parts:[], ics:[],
+    pads:[
+      {id:'a', label:'P1', at:[2,0], parts:[{id:'POT1', kind:'pot', lug:'1'}]},
+      {id:'b', label:'P2', at:[4,1], parts:[{id:'POT1', kind:'pot', lug:'W'}]},
+      {id:'c', label:'OUT', at:[7,9], parts:[{id:'J1', kind:'jack', lug:'T'}]},
+      {id:'d', label:'MIX', at:[6,8], parts:[{id:'LED1', kind:'led', lug:'A'}]},
+      {id:'e', label:'MIX2', at:[2,1], parts:[{id:'LED1', kind:'led', lug:'K'}]},
+    ],
+    panel:[{id:'SW1', kind:'toggle'}, {id:'SW2', kind:'toggle'}],
+    offboard:['SW1.C - POT1.3']};
+  S = migrate(JSON.parse(JSON.stringify(raw))); computeNets();
+  const ob = apronSides(offboardParts(), offboardWires(), 10, 10);
+  const by = id => ob.find(q => q.id === id);
+  ok(by('POT1').left === true && by('POT1').row === 3, 'a pot whose pads sit left hangs left, level with their average row');
+  ok(by('J1').left === false && by('J1').row === 7, 'a jack whose pad sits right hangs right');
+  ok(by('LED1').left === true, 'a part split one pad each side goes left: a tie keeps the left margin');
+  ok(by('SW1').left === true && by('SW1').row === 3, 'a padless toggle wired to the pot takes the pot\'s side and height');
+  ok(by('SW2').left === false && by('SW2').row === 4.5, 'a padless toggle wired to nothing goes right, at mid board');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');
