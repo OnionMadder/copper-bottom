@@ -1001,7 +1001,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
-  <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list under it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
+  <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list to the right of it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
   <div class="sp"></div>
@@ -1022,7 +1022,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.23';
+const APP_VERSION = 'v1.7.24';
 
 const K = (r,c) => r + ',' + c;
 
@@ -8332,8 +8332,10 @@ function render(){
   const pgL = padGut('left'), pgR = padGut('right');
   const pgT = padGut('top'),  pgB = padGut('bottom');
   const boxR0 = MARGIN * 2 + (cols - 1) * PITCH, boxB0 = MARGIN * 2 + (rows - 1) * PITCH;
-  /* the apron sits outside the pad labels, and the OFF THE BOARD list under
-     everything. Nothing here moves the board: the viewBox only grows. */
+  /* the apron sits outside the pad labels, and the OFF THE BOARD list to the
+     right of everything, level with the top (hers, 12 Nov 2026: "the right
+     hand side", beside the board). Nothing here moves the board: the viewBox
+     only grows. */
   const AP = editorApron(rows, cols);
   let gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
   let apList = null;
@@ -8344,24 +8346,26 @@ function render(){
     const under = Math.max(boxB0 + obB + pgB, AP.bot + 10);
     if(AP.lines.length){
       /* one line per part, monospace so the columns stack - the layout
-         image's block, read from the same offboardLines(). Too wide for the
-         page and each leg takes its own indented line. */
+         image's block, read from the same offboardLines(). Wider than
+         LIST_MAX and each leg takes its own indented line, so the column
+         beside the board stays narrow and the text stays its own size. */
       const pad = (t, n) => t + ' '.repeat(Math.max(0, n - t.length));
       const wId = Math.max.apply(null, AP.lines.map(l => l.id.length));
       const wVal = Math.max.apply(null, AP.lines.map(l => l.value.length));
       const wRole = Math.max.apply(null, AP.lines.map(l => l.role.length));
       const head = l => (pad(l.id, wId) + '  ' + pad(l.value, wVal) + (wRole ? '  ' + pad(l.role, wRole) : ''));
       const LCH = 7.2;                                    // 12px mono
-      const avail = boxR0 + gutL + gutR - 28;
+      const LIST_MAX = 600;
       let rowsOut = AP.lines.map(l => head(l) + '   ' + l.legs.join('   '));
-      if(rowsOut.some(t => t.length * LCH > avail)){
+      if(rowsOut.some(t => t.length * LCH > LIST_MAX)){
         rowsOut = [];
         for(const l of AP.lines){ rowsOut.push(head(l)); for(const g of l.legs) rowsOut.push('    ' + g); }
       }
-      const wide = Math.max.apply(null, rowsOut.map(t => t.length * LCH));
-      if(wide > avail) gutR += wide - avail;
-      apList = {y:under + 30, rows:rowsOut};
-      gutB = Math.max(gutB, under - boxB0 + 30 + rowsOut.length * 16 + 14);
+      const wide = Math.max.apply(null, ['OFF THE BOARD'].concat(rowsOut).map(t => t.length * LCH));
+      const x = boxR0 + gutR + 14, y = -gutT + 24;
+      gutR += 14 + wide + 20;
+      apList = {x:x, y:y, rows:rowsOut};
+      gutB = Math.max(gutB, under - boxB0, y + 18 + (rowsOut.length - 1) * 16 + 14 - boxB0);
     }else{
       gutB = Math.max(gutB, under - boxB0);
     }
@@ -9010,7 +9014,7 @@ function render(){
     }
     for(const q of AP.ob) o.push(q.svg);
     if(apList){
-      const lx = -gutL + 14;
+      const lx = apList.x;
       o.push('<text class="aph" x="' + lx + '" y="' + apList.y + '">OFF THE BOARD</text>');
       apList.rows.forEach((t, i) =>
         o.push('<text class="apx" xml:space="preserve" x="' + lx + '" y="' + (apList.y + 18 + i * 16) + '">' + esc(t) + '</text>'));
