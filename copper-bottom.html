@@ -724,8 +724,9 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     </span>
   </span>
   <span class="grp">
-    <button id="btnImport" title="a Copper Bottom .json, or a DIYLC .diy stripboard layout">import</button>
-    <button id="btnExport">export .json</button>
+    <button id="btnOpen" title="open a Copper Bottom .json, or a DIYLC .diy stripboard layout">open</button>
+    <button id="btnSave" title="save to the same file (ctrl+s)">save</button>
+    <button id="btnSaveAs" title="save a copy to a new file">save as</button>
     <button id="btnShare" title="copy a link that carries this whole layout - no server, nothing uploaded">share link</button>
     <button id="btnDemo" title="load the CD40106 two-voice test fixture">demo</button>
     <button id="btnNew" class="danger" title="clear the board and start again - ctrl+z brings it back">new</button>
@@ -1001,6 +1002,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
+  <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list to the right of it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
   <div class="sp"></div>
@@ -1021,7 +1023,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.21';
+const APP_VERSION = 'v1.7.24';
 
 const K = (r,c) => r + ',' + c;
 
@@ -4285,6 +4287,194 @@ function offboardWireReport(){
   return {wires:out, bad:bad};
 }
 function offboardWires(){ return offboardWireReport().wires; }
+
+/* Which side of the board each panel part hangs off, and how far down, in
+   board rows. Written onto the parts as q.left and q.row. One rule for the
+   layout image and the editing board (v1.7.22), so the two cannot disagree
+   about where a pot lives.
+
+   A part with pads hangs off the margin most of them sit on, at the average
+   height of those pads. A part that reaches no pad has no hole to hang off,
+   so it takes the side and the height of the panel parts it IS wired to,
+   and the pass repeats so a chain of them settles rather than piling up in
+   the top left corner. One that reaches nothing anchored goes to the right
+   margin at mid board - arbitrary, but stated, and it is drawn. */
+function apronSides(ob, wires, rows, cols){
+  const anchored = new Set();
+  for(const q of ob){
+    if(!q.pads.length) continue;
+    const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
+    q.left = lefts * 2 >= q.pads.length;
+    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
+    anchored.add(q.id);
+  }
+  for(let pass = 0; pass < ob.length; pass++){
+    let settled = 0;
+    for(const q of ob){
+      if(anchored.has(q.id)) continue;
+      const near = [];
+      for(const w of wires){
+        const other = w.a === q.id ? w.b : w.b === q.id ? w.a : null;
+        if(other && other !== q.id && anchored.has(other)){
+          const z = ob.find(x => x.id === other);
+          if(z) near.push(z);
+        }
+      }
+      if(!near.length) continue;
+      q.left = near.filter(z => z.left).length * 2 >= near.length;
+      q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
+      anchored.add(q.id); settled++;
+    }
+    if(!settled) break;
+  }
+  for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
+  return ob;
+}
+
+/* One panel part drawn the way the layout image draws it - a pot as a pot,
+   a jack as a jack - with its lugs on the edge that faces the board (f = +1:
+   the board is to the right). The layout image and, since v1.7.23, the
+   editing board both call this, so the two pictures cannot drift apart.
+
+   P carries what differs between them: out (the array the SVG goes into),
+   lugAt (a Map that learns where every lug landed, as 'ID.LUG' -> [x, y, f]),
+   used(lug) (whether a wire reaches it), and four inks for whatever sits on
+   the page rather than on a body - lug names, leads, the LED's plus and the
+   value. The image passes its own grays; the editor passes its theme's.
+   Returns the top and bottom of the drawing, labels included. */
+function apronGlyph(q, cx, cy, f, ink, P){
+  const txt = (tx, ty, str, size, extra) =>
+    P.out.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" font-family="Verdana, sans-serif" ' +
+               (extra || '') + '>' + esc(str) + '</text>');
+  const lib = OFFBOARD_LIB[q.kind];
+
+        const lug = (name, lx, ly, show) => {
+      P.lugAt.set(q.id + '.' + name, [lx, ly, f]);
+      if(!show) return;
+      P.out.push('<circle cx="' + lx + '" cy="' + ly + '" r="3.6" fill="#fff" stroke="#444" stroke-width="1.2"/>');
+      txt(lx + f * 7, ly + 3, name, 8, 'fill="' + P.lug + '" text-anchor="' + (f > 0 ? 'start' : 'end') + '"');
+    };
+        let top = cy - 24, bot = cy + 24;
+    if(q.kind === 'pot'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="23" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#D8D8D8" stroke="#777" stroke-width="1.2"/>' +
+               '<line x1="' + (cx - 5) + '" y1="' + (cy - 5) + '" x2="' + (cx + 5) + '" y2="' + (cy - 5) + '" stroke="#777" stroke-width="1.2"/>');
+      [-14, 0, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 21) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 30) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 32, cy + dy, true);
+      });
+      top = cy - 30; bot = cy + 30;
+    }else if(q.kind === 'toggle'){
+      P.out.push('<rect x="' + (cx - 11) + '" y="' + (cy - 18) + '" width="22" height="36" rx="4" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
+               '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy - 30) + '" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>' +
+               '<circle cx="' + cx + '" cy="' + (cy - 30) + '" r="3.5" fill="#3B4A5A"/>');
+      [-12, 0, 12].forEach((dy, i) => lug(lib.lugs[i], cx + f * 19, cy + dy, true));
+      top = cy - 36; bot = cy + 24;
+    }else if(q.kind === 'jack'){
+      const xo = cx - f * 22;                      // the outer edge, away from the board
+      P.out.push('<rect x="' + (f > 0 ? xo - 12 : xo) + '" y="' + (cy - 7) + '" width="12" height="14" fill="#BBB" stroke="#444" stroke-width="1.2"/>' +
+               '<rect x="' + (cx - 22) + '" y="' + (cy - 13) + '" width="44" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      const slots = {T:-12, R:-4, N:4, S:12};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + slots[nm], nm === 'T' || nm === 'S' || P.used(nm));
+      top = cy - 20; bot = cy + 20;
+    }else if(q.kind === 'led'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
+      lug('A', cx + f * 17, cy - 7, true); lug('K', cx + f * 17, cy + 7, true);
+      txt(cx - f * 16, cy - 4, '+', 10, 'fill="' + P.plus + '" font-weight="bold" text-anchor="middle"');
+      top = cy - 18; bot = cy + 18;
+    }else if(q.kind === 'spk'){
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="20" fill="#E9E4D8" stroke="#5A4A32" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="#B8A98A" stroke="#5A4A32" stroke-width="1.2"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="2.5" fill="#5A4A32"/>');
+      [-8, 8].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 18) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 25) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 27, cy + dy, true);
+      });
+      top = cy - 26; bot = cy + 26;
+    }else if(q.kind === 'ldr'){
+      P.out.push('<rect x="' + (cx - 16) + '" y="' + (cy - 10) + '" width="32" height="20" rx="4" fill="#FBF3D5" stroke="#8A6A1A" stroke-width="1.5"/>' +
+               '<path d="M' + (cx - 11) + ' ' + (cy - 5) + 'h22m0 5h-22m0 5h22" fill="none" stroke="#8A6A1A" stroke-width="1.2"/>');
+      lug('1', cx + f * 22, cy - 6, true); lug('2', cx + f * 22, cy + 6, true);
+      top = cy - 16; bot = cy + 16;
+    }else if(q.kind === 'vactrol'){
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 16) + '" width="44" height="32" rx="7" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>');
+      txt(cx, cy + 3, 'VACTROL', 7, 'fill="#fff" font-weight="bold" text-anchor="middle"');
+      [-12, -4, 4, 12].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 22) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 26) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 28, cy + dy, true);
+      });
+      top = cy - 22; bot = cy + 22;
+    }else if(q.kind === 'btn'){
+      P.out.push('<rect x="' + (cx - 13) + '" y="' + (cy - 6) + '" width="26" height="16" rx="3" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
+               '<circle cx="' + cx + '" cy="' + (cy - 11) + '" r="9" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.5"/>');
+      lug('1', cx + f * 19, cy - 2, true); lug('2', cx + f * 19, cy + 8, true);
+      top = cy - 24; bot = cy + 18;
+    }else if(q.kind === 'batt'){
+      P.out.push('<rect x="' + (cx - 4) + '" y="' + (cy - 20) + '" width="8" height="5" fill="#444"/>' +
+               '<rect x="' + (cx - 12) + '" y="' + (cy - 16) + '" width="24" height="34" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      txt(cx, cy + 4, 'BATT', 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
+      lug('+', cx + f * 17, cy - 9, true); lug('-', cx + f * 17, cy + 9, true);
+      top = cy - 26; bot = cy + 24;
+    }else if(q.kind === 'res'){
+      P.out.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="4" fill="#F0DDBE" stroke="#7A5B2E" stroke-width="1.5"/>' +
+               '<path d="M' + (cx - 6) + ' ' + (cy - 8) + 'h12M' + (cx - 6) + ' ' + (cy - 3) + 'h12M' + (cx - 6) + ' ' + (cy + 2) + 'h12" stroke="#7A5B2E" stroke-width="2"/>');
+      [-14, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 14, cy + dy, true);
+      });
+      top = cy - 20; bot = cy + 20;
+    }else if(q.kind === 'module'){
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 22) + '" width="44" height="44" rx="3" fill="#DCEBD8" stroke="#3E6B3A" stroke-width="1.5"/>');
+      txt(cx - f * 3, cy + 3, 'MODULE', 7, 'fill="#3E6B3A" font-weight="bold" text-anchor="middle"');
+      const mslots = {'+':-15, '-':-5, IN:5, OUT:15};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + mslots[nm], nm === '+' || nm === '-' || P.used(nm));
+      top = cy - 28; bot = cy + 28;
+    }else if(q.kind === 'xfmr'){
+      /* a laminated block: the core down the middle, the P winding's lugs on the
+         upper half of the board-facing edge and the S winding's on the lower,
+         with a rule between them so the two windings read as two */
+      P.out.push('<rect x="' + (cx - 22) + '" y="' + (cy - 28) + '" width="44" height="56" rx="3" fill="#E6E2EE" stroke="#4A3F63" stroke-width="1.5"/>' +
+               '<rect x="' + (cx - 5) + '" y="' + (cy - 24) + '" width="10" height="48" fill="#B9B1CB" stroke="#4A3F63" stroke-width="1"/>' +
+               '<line x1="' + (cx + f * 5) + '" y1="' + cy + '" x2="' + (cx + f * 22) + '" y2="' + cy + '" stroke="#4A3F63" stroke-width="1.2"/>');
+      txt(cx - f * 13, cy - 10, 'P', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+      txt(cx - f * 13, cy + 16, 'S', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
+      const xslots = {P1:-22, PCT:-15, P2:-8, S1:8, SCT:15, S2:22};
+      for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + xslots[nm], nm !== 'PCT' && nm !== 'SCT' || P.used(nm));
+      top = cy - 34; bot = cy + 34;
+    }else if(q.kind === 'tube'){
+      /* a noval socket seen from its wiring side: nine pins on a circle, a gap of two
+         pitches between 9 and 1, the gap turned away from the board */
+      P.out.push('<circle cx="' + cx + '" cy="' + cy + '" r="26" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
+               '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#DDD" stroke="#777" stroke-width="1.2"/>');
+      const gap = f > 0 ? Math.PI : 0;                 // the gap faces away from the board
+      lib.lugs.forEach((nm, i) => {
+        const a = gap + (i + 1) * Math.PI / 5;         // 36 degrees a pin, clockwise on screen
+        const lx = cx + 19 * Math.cos(a), ly = cy + 19 * Math.sin(a);
+        lug(nm, lx, ly, false);
+        P.out.push('<circle cx="' + lx + '" cy="' + ly + '" r="2.8" fill="#fff" stroke="#444" stroke-width="1.2"/>');
+        txt(cx + 31 * Math.cos(a), cy + 31 * Math.sin(a) + 3, nm, 7, 'fill="' + P.lug + '" text-anchor="middle"');
+      });
+      top = cy - 34; bot = cy + 34;
+    }else if(q.kind === 'diode'){
+      /* a black axial body standing on end, A at the top and K at the bottom,
+         the silver band drawn at the K end so it reads the way the part does */
+      P.out.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="3" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>' +
+               '<rect x="' + (cx - 6) + '" y="' + (cy + 6) + '" width="12" height="5" fill="#D8D8D8"/>');
+      [-14, 14].forEach((dy, i) => {
+        P.out.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(lib.lugs[i], cx + f * 14, cy + dy, true);
+      });
+      top = cy - 20; bot = cy + 20;
+    }else{                                         // dc
+      P.out.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
+      txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
+      lug('+', cx + f * 25, cy - 8, true); lug('-', cx + f * 25, cy + 8, true);
+      top = cy - 20; bot = cy + 20;
+    }
+    txt(cx, top - 6, q.id, 11, 'fill="' + ink + '" font-weight="bold" text-anchor="middle"');
+    if(q.value) txt(cx, bot + 12, q.value, 10, 'fill="' + P.val + '" text-anchor="middle"');
+  return {top:top - 17, bot:q.value ? bot + 16 : bot};
+}
 
 /* ---------- what each panel part is, and where its legs go ----------
    Her ask, 18 Sept 2026: label a variable resistor by number AND function AND
@@ -7986,7 +8176,65 @@ function schematicModel(){
    ============================================================ */
 const PITCH = 30, MARGIN = 34;
 let Z = 1;
-let NETCOLOUR = false;   // false = quiet copper board, true = every net painted
+let NETCOLOUR = false;
+/* ---- the off-board toggle and the apron on the editing board (v1.7.22) ----
+   Her ask, 10 Nov 2026: "we should be able to toggle seeing offboard wiring
+   in copper bottom while editing". Until then the panel parts the pads name -
+   pots, jacks, switches and their wires - were drawn only in the downloaded
+   layout image, so the board you edit never showed them.
+
+   This is a VIEW of the same offboardParts() and offboardWires() the image
+   and the build sheet read, never a second record. Hiding it changes what
+   the screen draws and nothing else: not the file, not a check, not an
+   export - the image, the sheet and the schematic each draw their own. A part
+   whose every leg is flown is a BOARD part with a body off the edge; it is
+   drawn with the board whichever way this is set, because it is edited there.
+
+   Remembered per machine, like the theme. Shown unless it was turned off. */
+const OFFB_KEY = 'copper-bottom.offboard';
+let SHOW_OFFB = true;
+try{ SHOW_OFFB = localStorage.getItem(OFFB_KEY) !== '0'; }catch(err){}
+const AP_GAP = 34;
+/* the parts, their sides, and each body's size. Positions across the page
+   need the gutters, so render() places them. */
+function editorApron(rows, cols){
+  if(!SHOW_OFFB) return null;
+  const ob = offboardParts();
+  if(!ob.length) return null;
+  const wires = offboardWires();
+  apronSides(ob, wires, rows, cols);
+  const used = (q, nm) => q.lugs.has(nm) ||
+    wires.some(w => (w.a === q.id && w.al === nm) || (w.b === q.id && w.bl === nm));
+  const side = {left:[], right:[]};
+  for(const q of ob){
+    /* the picture the layout image draws, measured by drawing it once at the
+       origin; render() draws it again where it lands */
+    q.used = nm => used(q, nm);
+    const ext = apronGlyph(q, 0, 0, 1, '#000', {out:[], lugAt:new Map(), used:q.used,
+                                                  lug:'', lead:'', plus:'', val:''});
+    q.up = -ext.top; q.h = ext.bot - ext.top;
+    /* the widest thing is the value under the body or the id over it, at
+       about 0.62em a character in Verdana */
+    q.w = Math.max(130, String(q.value || '').length * 6.4 + 24, q.id.length * 7.4 + 24);
+    side[q.left ? 'left' : 'right'].push(q);
+  }
+  /* each side is one column in row order: a part sits level with its pads
+     where there is room, and is pushed down where there is not */
+  let top = Infinity, bot = -Infinity;
+  for(const k of ['left', 'right']){
+    side[k].sort((a, b) => a.row - b.row);
+    let prev = -Infinity;
+    for(const q of side[k]){
+      q.y = Math.max(Y(q.row) - q.h / 2, prev + 14);
+      prev = q.y + q.h;
+      top = Math.min(top, q.y); bot = Math.max(bot, prev);
+    }
+  }
+  const colW = k => side[k].length ? Math.max.apply(null, side[k].map(q => q.w)) : 0;
+  return {ob:ob, wires:wires, side:side, wL:colW('left'), wR:colW('right'), top:top, bot:bot,
+          lines:offboardLines()};
+}
+   // false = quiet copper board, true = every net painted
 let hoverHole = null;     // [r,c] under the cursor
 let pinnedNet = null;     // net id pinned by clicking with the inspect tool
 let pending   = [];       // legs clicked so far for the part being placed
@@ -8084,7 +8332,59 @@ function render(){
   };
   const pgL = padGut('left'), pgR = padGut('right');
   const pgT = padGut('top'),  pgB = padGut('bottom');
-  const gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
+  const boxR0 = MARGIN * 2 + (cols - 1) * PITCH, boxB0 = MARGIN * 2 + (rows - 1) * PITCH;
+  /* the apron sits outside the pad labels, and the OFF THE BOARD list to the
+     right of everything, level with the top (hers, 12 Nov 2026: "the right
+     hand side", beside the board). Nothing here moves the board: the viewBox
+     only grows. */
+  const AP = editorApron(rows, cols);
+  let gutL = obL + pgL, gutR = obR + pgR, gutT = obT + pgT, gutB = obB + pgB;
+  let apList = null;
+  if(AP){
+    if(AP.wL) gutL += AP.wL + AP_GAP + 10;
+    if(AP.wR) gutR += AP.wR + AP_GAP + 10;
+    gutT = Math.max(gutT, -AP.top + 10);
+    const under = Math.max(boxB0 + obB + pgB, AP.bot + 10);
+    if(AP.lines.length){
+      /* one line per part, monospace so the columns stack - the layout
+         image's block, read from the same offboardLines(). Wider than
+         LIST_MAX and each leg takes its own indented line, so the column
+         beside the board stays narrow and the text stays its own size. */
+      const pad = (t, n) => t + ' '.repeat(Math.max(0, n - t.length));
+      const wId = Math.max.apply(null, AP.lines.map(l => l.id.length));
+      const wVal = Math.max.apply(null, AP.lines.map(l => l.value.length));
+      const wRole = Math.max.apply(null, AP.lines.map(l => l.role.length));
+      const head = l => (pad(l.id, wId) + '  ' + pad(l.value, wVal) + (wRole ? '  ' + pad(l.role, wRole) : ''));
+      const LCH = 7.2;                                    // 12px mono
+      const LIST_MAX = 600;
+      let rowsOut = AP.lines.map(l => head(l) + '   ' + l.legs.join('   '));
+      if(rowsOut.some(t => t.length * LCH > LIST_MAX)){
+        rowsOut = [];
+        for(const l of AP.lines){ rowsOut.push(head(l)); for(const g of l.legs) rowsOut.push('    ' + g); }
+      }
+      const wide = Math.max.apply(null, ['OFF THE BOARD'].concat(rowsOut).map(t => t.length * LCH));
+      const x = boxR0 + gutR + 14, y = -gutT + 24;
+      gutR += 14 + wide + 20;
+      apList = {x:x, y:y, rows:rowsOut};
+      gutB = Math.max(gutB, under - boxB0, y + 18 + (rowsOut.length - 1) * 16 + 14 - boxB0);
+    }else{
+      gutB = Math.max(gutB, under - boxB0);
+    }
+    /* where every part and lug lands. f is the side the board is on: +1, it
+       is to the right. Each side is one column as wide as its widest part,
+       and the picture is drawn now so the wires know where its lugs are. */
+    for(const q of AP.ob){
+      q.f = q.left ? 1 : -1;
+      const cw = q.left ? AP.wL : AP.wR;
+      const cx = q.left ? -(obL + pgL) - AP_GAP - cw / 2 : boxR0 + obR + pgR + AP_GAP + cw / 2;
+      const lugAt = new Map(), out = [];
+      apronGlyph(q, cx, q.y + q.up, q.f, C('link'), {out:out, lugAt:lugAt, used:q.used,
+        lug:C('lead'), lead:C('lead'), plus:C('link'), val:C('link')});
+      q.svg = out.join('');
+      q.lugXY = new Map();
+      for(const [k, v] of lugAt) q.lugXY.set(k.slice(q.id.length + 1), v);
+    }
+  }
 
   const W = MARGIN * 2 + (cols - 1) * PITCH + gutL + gutR;
   const H = MARGIN * 2 + (rows - 1) * PITCH + gutT + gutB;
@@ -8215,6 +8515,27 @@ function render(){
     if(on) o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="8.5" fill="' + col + '" fill-opacity="0.16"/>');
     o.push('<circle cx="' + X(c) + '" cy="' + Y(r) + '" r="5" fill="' + C('hole') + '" stroke="' + rim +
            '" stroke-opacity="' + (on ? 1 : NETCOLOUR ? 0.85 : 0.55) + '" stroke-width="' + (on ? 1.7 : 1.1) + '"/>');
+  }
+
+  /* --- the apron's wires, lug to hole, in the net's color --- */
+  if(AP){
+    o.push('<g pointer-events="none">');
+    for(const q of AP.ob){
+      for(const [nm, pads] of q.lugs){
+        const at = q.lugXY.get(nm);
+        if(!at) continue;
+        for(const d of pads){
+          const hx = X(d.at[1]), hy = Y(d.at[0]);
+          const net = NET.netAt(d.at[0], d.at[1]);
+          const col = net ? net.color : C('lead');
+          const path = 'M' + at[0] + ' ' + at[1] + 'C' + (at[0] + q.f * 60) + ' ' + at[1] + ' ' +
+                       (hx - q.f * 40) + ' ' + hy + ' ' + hx + ' ' + hy;
+          o.push('<path d="' + path + '" fill="none" stroke="' + C('halo') + '" stroke-width="5" stroke-linecap="round"/>');
+          o.push('<path d="' + path + '" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-linecap="round"/>');
+        }
+      }
+    }
+    o.push('</g>');
   }
 
   /* --- ICs --- */
@@ -8677,6 +8998,31 @@ function render(){
        the wires look like they were labeled at both ends. */
   }
 
+  /* ---- the apron's bodies, its part-to-part wires, and the list ---- */
+  if(AP){
+    o.push('<g pointer-events="none">');
+    /* a wire between two panel parts: dashed, bowed toward the board so it
+       runs in the gap rather than through either body */
+    const find = id => AP.ob.find(z => z.id === id);
+    for(const w of AP.wires){
+      const qa = find(w.a), qb = find(w.b);
+      const pa = qa && qa.lugXY.get(w.al), pb = qb && qb.lugXY.get(w.bl);
+      if(!pa || !pb) continue;
+      const path = 'M' + pa[0] + ' ' + pa[1] + 'C' + (pa[0] + qa.f * 40) + ' ' + pa[1] + ' ' +
+                   (pb[0] + qb.f * 40) + ' ' + pb[1] + ' ' + pb[0] + ' ' + pb[1];
+      o.push('<path d="' + path + '" fill="none" stroke="' + C('halo') + '" stroke-width="5" stroke-linecap="round"/>');
+      o.push('<path d="' + path + '" fill="none" stroke="' + C('lead') + '" stroke-width="1.8" stroke-dasharray="6 4" stroke-linecap="round"/>');
+    }
+    for(const q of AP.ob) o.push(q.svg);
+    if(apList){
+      const lx = apList.x;
+      o.push('<text class="aph" x="' + lx + '" y="' + apList.y + '">OFF THE BOARD</text>');
+      apList.rows.forEach((t, i) =>
+        o.push('<text class="apx" xml:space="preserve" x="' + lx + '" y="' + (apList.y + 18 + i * 16) + '">' + esc(t) + '</text>'));
+    }
+    o.push('</g>');
+  }
+
   o.push(labels.join(''));
 
   /* grab handles on the IC being reshaped */
@@ -8844,6 +9190,8 @@ function render(){
     '.pin-in{fill:var(--pin-in)}.pin-out{fill:var(--pin-out)}.pin-pwr{fill:var(--pin-pwr)}' +
     '.icref{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;text-anchor:middle;letter-spacing:.1em}' +
     '.icpart{fill:var(--icpart-ink);font:9px ui-monospace,monospace;text-anchor:middle}' +
+    '.aph{fill:var(--lbl-ink);font:12px ui-monospace,monospace;font-weight:700;letter-spacing:.08em}' +
+    '.apx{fill:var(--lbl-ink);font:12px ui-monospace,monospace;white-space:pre}' +
     '.pol{fill:var(--lbl-ink);font:13px ui-monospace,monospace;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--lbl-halo);stroke-width:3}' +
     '</style></svg>');
 
@@ -8953,8 +9301,6 @@ function renderSolderView(hl){
     const ex = icExtent(ic);
     const xa = mX(ex.c0), xb = mX(ex.c1);
     const bp = icBodyPad(ic) * PITCH;
-    const x0 = Math.min(xa, xb) - (bp || 9), x1 = Math.max(xa, xb) + (bp || 9);
-    const y0 = Y(ex.r0) - (bp || 12), y1 = Y(ex.r1) + (bp || 12);
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
            '" rx="4" fill="none" stroke="' + C('ghost') + '" stroke-width="1.2" stroke-dasharray="5 4"/>');
     const p1 = pinPos(ic, 1);
@@ -10076,34 +10422,7 @@ function classicSVG(opts){
      and the pass repeats so a chain of them settles rather than piling up in
      the top left corner. One that reaches nothing anchored goes to the right
      margin at mid board - arbitrary, but stated, and it is drawn. */
-  const anchored = new Set();
-  for(const q of ob){
-    if(!q.pads.length) continue;
-    const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
-    q.left = lefts * 2 >= q.pads.length;
-    q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
-    anchored.add(q.id);
-  }
-  for(let pass = 0; pass < ob.length; pass++){
-    let settled = 0;
-    for(const q of ob){
-      if(anchored.has(q.id)) continue;
-      const near = [];
-      for(const w of obWires){
-        const other = w.a === q.id ? w.b : w.b === q.id ? w.a : null;
-        if(other && other !== q.id && anchored.has(other)){
-          const z = ob.find(x => x.id === other);
-          if(z) near.push(z);
-        }
-      }
-      if(!near.length) continue;
-      q.left = near.filter(z => z.left).length * 2 >= near.length;
-      q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
-      anchored.add(q.id); settled++;
-    }
-    if(!settled) break;
-  }
-  for(const q of ob) if(!anchored.has(q.id)){ q.left = false; q.row = (rows - 1) / 2; }
+  apronSides(ob, obWires, rows, cols);
   for(const side of ['left', 'right']){
     const parts = ob.filter(q => q.left === (side === 'left')).sort((a, b) => a.row - b.row);
     if(!parts.length) continue;
@@ -10479,139 +10798,9 @@ function classicSVG(opts){
   if(ob.length){
     const obW = [], obB = [];
     const lugAt = new Map();                       // 'ID.LUG' -> [x, y, facing]
-    const txt = (tx, ty, str, size, extra) =>
-      obB.push('<text x="' + tx + '" y="' + ty + '" font-size="' + size + '" font-family="Verdana, sans-serif" ' +
-               (extra || '') + '>' + esc(str) + '</text>');
-    /* one body, its lugs on the edge that faces the board (f = +1: board is to the right) */
-    const body = (q, cx, cy, f, ink) => {
-      const lib = OFFBOARD_LIB[q.kind];
-      const lug = (name, lx, ly, show) => {
-        lugAt.set(q.id + '.' + name, [lx, ly, f]);
-        if(!show) return;
-        obB.push('<circle cx="' + lx + '" cy="' + ly + '" r="3.6" fill="#fff" stroke="#444" stroke-width="1.2"/>');
-        txt(lx + f * 7, ly + 3, name, 8, 'fill="#444" text-anchor="' + (f > 0 ? 'start' : 'end') + '"');
-      };
-      const used = name => q.lugs.has(name) || obWires.some(w => (w.a === q.id && w.al === name) || (w.b === q.id && w.bl === name));
-      let top = cy - 24, bot = cy + 24;
-      if(q.kind === 'pot'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="23" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#D8D8D8" stroke="#777" stroke-width="1.2"/>' +
-                 '<line x1="' + (cx - 5) + '" y1="' + (cy - 5) + '" x2="' + (cx + 5) + '" y2="' + (cy - 5) + '" stroke="#777" stroke-width="1.2"/>');
-        [-14, 0, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 21) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 30) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 32, cy + dy, true);
-        });
-        top = cy - 30; bot = cy + 30;
-      }else if(q.kind === 'toggle'){
-        obB.push('<rect x="' + (cx - 11) + '" y="' + (cy - 18) + '" width="22" height="36" rx="4" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
-                 '<line x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + (cy - 30) + '" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>' +
-                 '<circle cx="' + cx + '" cy="' + (cy - 30) + '" r="3.5" fill="#3B4A5A"/>');
-        [-12, 0, 12].forEach((dy, i) => lug(lib.lugs[i], cx + f * 19, cy + dy, true));
-        top = cy - 36; bot = cy + 24;
-      }else if(q.kind === 'jack'){
-        const xo = cx - f * 22;                      // the outer edge, away from the board
-        obB.push('<rect x="' + (f > 0 ? xo - 12 : xo) + '" y="' + (cy - 7) + '" width="12" height="14" fill="#BBB" stroke="#444" stroke-width="1.2"/>' +
-                 '<rect x="' + (cx - 22) + '" y="' + (cy - 13) + '" width="44" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        const slots = {T:-12, R:-4, N:4, S:12};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + slots[nm], nm === 'T' || nm === 'S' || used(nm));
-        top = cy - 20; bot = cy + 20;
-      }else if(q.kind === 'led'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.6"/>');
-        lug('A', cx + f * 17, cy - 7, true); lug('K', cx + f * 17, cy + 7, true);
-        txt(cx - f * 16, cy - 4, '+', 10, 'fill="#7E1E16" font-weight="bold" text-anchor="middle"');
-        top = cy - 18; bot = cy + 18;
-      }else if(q.kind === 'spk'){
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="20" fill="#E9E4D8" stroke="#5A4A32" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="#B8A98A" stroke="#5A4A32" stroke-width="1.2"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="2.5" fill="#5A4A32"/>');
-        [-8, 8].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 18) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 25) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 27, cy + dy, true);
-        });
-        top = cy - 26; bot = cy + 26;
-      }else if(q.kind === 'ldr'){
-        obB.push('<rect x="' + (cx - 16) + '" y="' + (cy - 10) + '" width="32" height="20" rx="4" fill="#FBF3D5" stroke="#8A6A1A" stroke-width="1.5"/>' +
-                 '<path d="M' + (cx - 11) + ' ' + (cy - 5) + 'h22m0 5h-22m0 5h22" fill="none" stroke="#8A6A1A" stroke-width="1.2"/>');
-        lug('1', cx + f * 22, cy - 6, true); lug('2', cx + f * 22, cy + 6, true);
-        top = cy - 16; bot = cy + 16;
-      }else if(q.kind === 'vactrol'){
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 16) + '" width="44" height="32" rx="7" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>');
-        txt(cx, cy + 3, 'VACTROL', 7, 'fill="#fff" font-weight="bold" text-anchor="middle"');
-        [-12, -4, 4, 12].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 22) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 26) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 28, cy + dy, true);
-        });
-        top = cy - 22; bot = cy + 22;
-      }else if(q.kind === 'btn'){
-        obB.push('<rect x="' + (cx - 13) + '" y="' + (cy - 6) + '" width="26" height="16" rx="3" fill="#DDE3EA" stroke="#3B4A5A" stroke-width="1.5"/>' +
-                 '<circle cx="' + cx + '" cy="' + (cy - 11) + '" r="9" fill="#D23B2F" stroke="#7E1E16" stroke-width="1.5"/>');
-        lug('1', cx + f * 19, cy - 2, true); lug('2', cx + f * 19, cy + 8, true);
-        top = cy - 24; bot = cy + 18;
-      }else if(q.kind === 'batt'){
-        obB.push('<rect x="' + (cx - 4) + '" y="' + (cy - 20) + '" width="8" height="5" fill="#444"/>' +
-                 '<rect x="' + (cx - 12) + '" y="' + (cy - 16) + '" width="24" height="34" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        txt(cx, cy + 4, 'BATT', 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
-        lug('+', cx + f * 17, cy - 9, true); lug('-', cx + f * 17, cy + 9, true);
-        top = cy - 26; bot = cy + 24;
-      }else if(q.kind === 'res'){
-        obB.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="4" fill="#F0DDBE" stroke="#7A5B2E" stroke-width="1.5"/>' +
-                 '<path d="M' + (cx - 6) + ' ' + (cy - 8) + 'h12M' + (cx - 6) + ' ' + (cy - 3) + 'h12M' + (cx - 6) + ' ' + (cy + 2) + 'h12" stroke="#7A5B2E" stroke-width="2"/>');
-        [-14, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 14, cy + dy, true);
-        });
-        top = cy - 20; bot = cy + 20;
-      }else if(q.kind === 'module'){
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 22) + '" width="44" height="44" rx="3" fill="#DCEBD8" stroke="#3E6B3A" stroke-width="1.5"/>');
-        txt(cx - f * 3, cy + 3, 'MODULE', 7, 'fill="#3E6B3A" font-weight="bold" text-anchor="middle"');
-        const mslots = {'+':-15, '-':-5, IN:5, OUT:15};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + mslots[nm], nm === '+' || nm === '-' || used(nm));
-        top = cy - 28; bot = cy + 28;
-      }else if(q.kind === 'xfmr'){
-        /* a laminated block: the core down the middle, the P winding's lugs on the
-           upper half of the board-facing edge and the S winding's on the lower,
-           with a rule between them so the two windings read as two */
-        obB.push('<rect x="' + (cx - 22) + '" y="' + (cy - 28) + '" width="44" height="56" rx="3" fill="#E6E2EE" stroke="#4A3F63" stroke-width="1.5"/>' +
-                 '<rect x="' + (cx - 5) + '" y="' + (cy - 24) + '" width="10" height="48" fill="#B9B1CB" stroke="#4A3F63" stroke-width="1"/>' +
-                 '<line x1="' + (cx + f * 5) + '" y1="' + cy + '" x2="' + (cx + f * 22) + '" y2="' + cy + '" stroke="#4A3F63" stroke-width="1.2"/>');
-        txt(cx - f * 13, cy - 10, 'P', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
-        txt(cx - f * 13, cy + 16, 'S', 9, 'fill="#4A3F63" font-weight="bold" text-anchor="middle"');
-        const xslots = {P1:-22, PCT:-15, P2:-8, S1:8, SCT:15, S2:22};
-        for(const nm of lib.lugs) lug(nm, cx + f * 27, cy + xslots[nm], nm !== 'PCT' && nm !== 'SCT' || used(nm));
-        top = cy - 34; bot = cy + 34;
-      }else if(q.kind === 'tube'){
-        /* a noval socket seen from its wiring side: nine pins on a circle, a gap of two
-           pitches between 9 and 1, the gap turned away from the board */
-        obB.push('<circle cx="' + cx + '" cy="' + cy + '" r="26" fill="#F3F3F3" stroke="#555" stroke-width="1.6"/>' +
-                 '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="#DDD" stroke="#777" stroke-width="1.2"/>');
-        const gap = f > 0 ? Math.PI : 0;                 // the gap faces away from the board
-        lib.lugs.forEach((nm, i) => {
-          const a = gap + (i + 1) * Math.PI / 5;         // 36 degrees a pin, clockwise on screen
-          const lx = cx + 19 * Math.cos(a), ly = cy + 19 * Math.sin(a);
-          lug(nm, lx, ly, false);
-          obB.push('<circle cx="' + lx + '" cy="' + ly + '" r="2.8" fill="#fff" stroke="#444" stroke-width="1.2"/>');
-          txt(cx + 31 * Math.cos(a), cy + 31 * Math.sin(a) + 3, nm, 7, 'fill="#444" text-anchor="middle"');
-        });
-        top = cy - 34; bot = cy + 34;
-      }else if(q.kind === 'diode'){
-        /* a black axial body standing on end, A at the top and K at the bottom,
-           the silver band drawn at the K end so it reads the way the part does */
-        obB.push('<rect x="' + (cx - 6) + '" y="' + (cy - 15) + '" width="12" height="30" rx="3" fill="#2B2B2B" stroke="#000" stroke-width="1.5"/>' +
-                 '<rect x="' + (cx - 6) + '" y="' + (cy + 6) + '" width="12" height="5" fill="#D8D8D8"/>');
-        [-14, 14].forEach((dy, i) => {
-          obB.push('<line x1="' + (cx + f * 6) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 12) + '" y2="' + (cy + dy) + '" stroke="#444" stroke-width="1.4"/>');
-          lug(lib.lugs[i], cx + f * 14, cy + dy, true);
-        });
-        top = cy - 20; bot = cy + 20;
-      }else{                                         // dc
-        obB.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
-        txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
-        lug('+', cx + f * 25, cy - 8, true); lug('-', cx + f * 25, cy + 8, true);
-        top = cy - 20; bot = cy + 20;
-      }
-      txt(cx, top - 6, q.id, 11, 'fill="' + ink + '" font-weight="bold" text-anchor="middle"');
-      if(q.value) txt(cx, bot + 12, q.value, 10, 'fill="#333" text-anchor="middle"');
-    };
+    const body = (q, cx, cy, f, ink) => apronGlyph(q, cx, cy, f, ink, {
+      out:obB, lugAt:lugAt, lug:'#444', lead:'#444', plus:'#7E1E16', val:'#333',
+      used:name => q.lugs.has(name) || obWires.some(w => (w.a === q.id && w.al === name) || (w.b === q.id && w.bl === name))});
     const inkOf = q => padInk.get(q.id) || '#24357E';
     for(const side of ['left', 'right']){
       const f = side === 'left' ? 1 : -1;
@@ -12623,6 +12812,14 @@ async function openShareLink(){
    Spider (27 Sept 2026). The fragment IS the layout, so watch it. */
 window.addEventListener('hashchange', () => { openShareLink(); });
 
+/* the off-board toggle: the screen only, remembered per machine */
+const syncOffb = () => { toff.textContent = SHOW_OFFB ? 'shown' : 'hidden'; };
+syncOffb();
+toff.onclick = () => {
+  SHOW_OFFB = !SHOW_OFFB;
+  try{ localStorage.setItem(OFFB_KEY, SHOW_OFFB ? '1' : '0'); }catch(err){}
+  syncOffb(); render();
+};
 tflip.onclick = () => { FLIP = !FLIP; tflip.textContent = FLIP ? 'hide back' : 'show back'; render(); };
 
 /* ---- theme ----
@@ -12833,8 +13030,8 @@ function load(obj){
   pending = []; pinnedNet = null; SEL = null;
   commit();
 }
-btnDemo.onclick = () => load(exampleProject());
-btnNew.onclick  = () => load({name:'untitled', board:{rows:13, cols:20}});
+btnDemo.onclick = () => { fileHandle = null; load(exampleProject()); };
+btnNew.onclick  = () => { fileHandle = null; load({name:'untitled', board:{rows:13, cols:20}}); };
 /* A printed-to-PDF sheet inherits the tab title as its file name, so every
    layout used to save as the same file. While printing - the button or
    ctrl+P - the tab wears the layout's own name instead. */
@@ -12845,22 +13042,6 @@ window.addEventListener('beforeprint', () => {
 });
 window.addEventListener('afterprint', () => { document.title = TITLE_BEFORE_PRINT; });
 
-btnExport.onclick = () => {
-  /* "app" is not read back by anything and is not part of the format. It is
-     there because the FILE is what travels: on Sept 15 2026 somebody wrote a
-     router and a checker of their own against one of these and never learnt
-     that the tool it came from already checks boards. A file that cannot say
-     where it came from cannot answer that. */
-  const out = saveProject();
-  out.app = 'Copper Bottom ' + APP_VERSION + ' - checks stripboard layouts electrically, ' +
-            'no schematic needed: https://messopedals.com/diy/copper-bottom/';
-  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
 
 /* ============================================================
    REFERENCE PANE
@@ -13760,38 +13941,131 @@ sheetdoc.addEventListener('change', e => {
   saveBuilt(set);
 });
 
-btnImport.onclick = () => file.click();
+
+/* ============================================================
+   OPEN / SAVE  (File System Access API with <input> fallback)
+
+   fileHandle  — the FileSystemFileHandle for the currently open
+                 file, or null when nothing has been saved/opened
+                 yet.  When set, Save writes straight back to it
+                 without a dialog.  Save As always asks.
+
+   Chrome/Edge: showOpenFilePicker / showSaveFilePicker are
+   available.  Firefox: they are undefined, so both paths fall
+   back to the old <input type=file> / blob-download approach.
+   The UI is identical either way; the experience is better
+   where the API exists.
+   ============================================================ */
+let fileHandle = null;
+
+function projectJSON(){
+  const out = saveProject();
+  out.app = 'Copper Bottom ' + APP_VERSION + ' - checks stripboard layouts electrically, ' +
+            'no schematic needed: https://messopedals.com/diy/copper-bottom/';
+  return JSON.stringify(out, null, 2);
+}
+
+function fallbackDownload(){
+  const blob = new Blob([projectJSON()], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function saveToHandle(handle){
+  const writable = await handle.createWritable();
+  await writable.write(projectJSON());
+  await writable.close();
+  flash('saved');
+}
+
+/* Save — overwrite the open file, or fall back to Save As */
+btnSave.onclick = async () => {
+  if(fileHandle){
+    try{ await saveToHandle(fileHandle); return; }catch(e){ fileHandle = null; }
+  }
+  btnSaveAs.click();
+};
+
+/* Save As — always ask for a location */
+btnSaveAs.onclick = async () => {
+  if(typeof showSaveFilePicker === 'undefined'){
+    fallbackDownload(); return;
+  }
+  try{
+    const handle = await showSaveFilePicker({
+      suggestedName: (S.name || 'layout').replace(/[^\w.-]+/g, '_') + '.json',
+      types: [{ description:'Copper Bottom layout', accept:{'application/json':['.json']} }]
+    });
+    fileHandle = handle;
+    await saveToHandle(handle);
+  }catch(e){ if(e.name !== 'AbortError') flash('save failed'); }
+};
+
+/* Ctrl+S / Cmd+S shortcut */
+document.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && e.key === 's'){
+    e.preventDefault();
+    btnSave.click();
+  }
+});
+
+/* Open — pick a file and load it */
+async function openFile(text, name){
+  const head = text.replace(/^\uFEFF/, '').trimStart();
+  if(head[0] !== '<'){
+    try{ load(JSON.parse(text)); }catch(err){ flash('bad json'); }
+    return;
+  }
+  const res = importDiylc(text, name);
+  if(res.failed){
+    imprText.textContent = 'NOT IMPORTED\n\n' + res.failed;
+    impr.hidden = false;
+    return;
+  }
+  load(res.project);
+  imprText.textContent =
+    res.project.name + '\n\n' +
+    res.notes.map(n => '· ' + n).join('\n\n') + '\n\n' +
+    'The import is a claim, not a fact. Open CHECKS for the DRC reading,\n' +
+    'and if the build came with a parts list or a netlist, paste it in - that\n' +
+    'second opinion is the whole point of bringing a published layout here.\n';
+  impr.hidden = false;
+}
+
+btnOpen.onclick = async () => {
+  if(typeof showOpenFilePicker === 'undefined'){
+    file.click(); return;
+  }
+  try{
+    const [handle] = await showOpenFilePicker({
+      types: [{ description:'Copper Bottom / DIYLC layout',
+                accept:{'application/json':['.json'], 'application/octet-stream':['.diy']} }],
+      multiple: false
+    });
+    const f = await handle.getFile();
+    const text = await f.text();
+    /* only remember the handle for .json files - DIYLC imports are
+       one-way conversions and should never be silently overwritten */
+    fileHandle = f.name.endsWith('.json') ? handle : null;
+    await openFile(text, f.name);
+  }catch(e){ if(e.name !== 'AbortError') flash('open failed'); }
+};
+
 imprClose.onclick = () => { impr.hidden = true; };
+
+/* <input type=file> fallback for Firefox */
 file.onchange = () => {
   const f = file.files[0]; if(!f) return;
+  fileHandle = null;          // fallback path gets no handle
   const fr = new FileReader();
-  fr.onload = () => {
-    const text = String(fr.result);
-    const head = text.replace(/^﻿/, '').trimStart();
-    if(head[0] !== '<'){
-      try{ load(JSON.parse(text)); }catch(err){ flash('bad json'); }
-      return;
-    }
-    /* a DIYLC .diy - imported, then REPORTED, because a translation that
-       cannot say what it left behind is a translation you cannot trust */
-    const res = importDiylc(text, f.name);
-    if(res.failed){
-      imprText.textContent = 'NOT IMPORTED\n\n' + res.failed;
-      impr.hidden = false;
-      return;
-    }
-    load(res.project);
-    imprText.textContent =
-      res.project.name + '\n\n' +
-      res.notes.map(n => '· ' + n).join('\n\n') + '\n\n' +
-      'The import is a claim, not a fact. Open CHECKS for the DRC reading,\n' +
-      'and if the build came with a parts list or a netlist, paste it in - that\n' +
-      'second opinion is the whole point of bringing a published layout here.\n';
-    impr.hidden = false;
-  };
+  fr.onload = () => openFile(String(fr.result), f.name);
   fr.readAsText(f);
   file.value = '';
 };
+
 
 /* ---- the one-time thank-you ----
    Its own key, like the reference picture's, so clearing a board never
