@@ -1022,7 +1022,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.24';
+const APP_VERSION = 'v1.7.25';
 
 const K = (r,c) => r + ',' + c;
 
@@ -4205,8 +4205,15 @@ const OFFBOARD_LIB = {
      had no way to draw one. A is the plain end, K the banded end, same as the
      on-board diode, and the drawing puts the band at K. */
   diode:  {name:'diode',            prefix:'D',   lugs:['A','K']},
+  /* v1.7.25: a 3PDT stomp switch, the true bypass on a pedal. Her ask, 19 Nov
+     2026: on Ben's Beetle the volume wiper, both jack tips and the LED's short
+     leg all go to the footswitch, and with no part to land on they were drawn
+     going nowhere. Nine lugs in three columns of three, seen from the lug side
+     with the blades lying crosswise: the column number, then T, C or B for the
+     top, common (middle) and bottom lug. Each column is one pole. */
+  fsw:    {name:'footswitch',       prefix:'FSW', lugs:['1T','1C','1B','2T','2C','2B','3T','3C','3B']},
 };
-const OFFBOARD_ORDER = {pot:1, toggle:2, btn:3, jack:4, led:5, dc:6, diode:6.5, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13, xfmr:14};
+const OFFBOARD_ORDER = {pot:1, toggle:2, fsw:2.5, btn:3, jack:4, led:5, dc:6, diode:6.5, batt:7, spk:8, ldr:9, vactrol:10, res:11, module:12, tube:13, xfmr:14};
 const OFFBOARD_WIRE = /^\s*([^.\s]+)\.(\S+)\s*-\s*([^.\s]+)\.(\S+)\s*$/;
 
 function boardPitch(){
@@ -4297,11 +4304,17 @@ function offboardWires(){ return offboardWireReport().wires; }
    so it takes the side and the height of the panel parts it IS wired to,
    and the pass repeats so a chain of them settles rather than piling up in
    the top left corner. One that reaches nothing anchored goes to the right
-   margin at mid board - arbitrary, but stated, and it is drawn. */
+   margin at mid board - arbitrary, but stated, and it is drawn.
+
+   A footswitch (v1.7.25) is the exception to the first rule. It is a hub:
+   two pads and five wires to jacks, a pot and an LED on a true bypass. Hung
+   by its pads alone it sat on the input's side and its wires crossed the
+   whole board, so it waits for the second pass and its pads vote beside the
+   parts it is wired to. */
 function apronSides(ob, wires, rows, cols){
   const anchored = new Set();
   for(const q of ob){
-    if(!q.pads.length) continue;
+    if(!q.pads.length || q.kind === 'fsw') continue;
     const lefts = q.pads.filter(d => d.at[1] < cols / 2).length;
     q.left = lefts * 2 >= q.pads.length;
     q.row = q.pads.reduce((a, d) => a + d.at[0], 0) / q.pads.length;
@@ -4319,6 +4332,7 @@ function apronSides(ob, wires, rows, cols){
           if(z) near.push(z);
         }
       }
+      if(q.kind === 'fsw') for(const d of q.pads) near.push({left:d.at[1] < cols / 2, row:d.at[0]});
       if(!near.length) continue;
       q.left = near.filter(z => z.left).length * 2 >= near.length;
       q.row = near.reduce((a, z) => a + z.row, 0) / near.length;
@@ -4464,6 +4478,26 @@ function apronGlyph(q, cx, cy, f, ink, P){
         lug(lib.lugs[i], cx + f * 14, cy + dy, true);
       });
       top = cy - 20; bot = cy + 20;
+    }else if(q.kind === 'fsw'){
+      /* a 3PDT stomp switch. Its nine lugs are named down the board-facing
+         edge like every other panel part's, a column of the switch at a time
+         with a gap between columns, so a wire visibly ends on its lug and a
+         wire passing behind the body does not look joined to it. The body
+         pictures the lug field as it is in your hand, three columns of three
+         blades lying crosswise, with the column numbers under it. */
+      P.out.push('<rect x="' + (cx - 24) + '" y="' + (cy - 56) + '" width="48" height="112" rx="5" fill="#E3E6EE" stroke="#3B4A5A" stroke-width="1.6"/>');
+      for(let c = -1; c <= 1; c++){
+        for(let r = -1; r <= 1; r++)
+          P.out.push('<rect x="' + (cx + c * 14 - 5) + '" y="' + (cy - 6 + r * 13 - 2) + '" width="10" height="4" rx="1" fill="#C9A227" stroke="#444" stroke-width="0.8"/>');
+        txt(cx + c * 14, cy + 28, String(c + 2), 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
+      }
+      txt(cx, cy - 38, '3PDT', 7, 'fill="#3B4A5A" font-weight="bold" text-anchor="middle"');
+      lib.lugs.forEach((nm, i) => {
+        const dy = (Math.floor(i / 3) - 1) * 36 + (i % 3 - 1) * 11;
+        P.out.push('<line x1="' + (cx + f * 24) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 28) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
+        lug(nm, cx + f * 30, cy + dy, true);
+      });
+      top = cy - 62; bot = cy + 62;
     }else{                                         // dc
       P.out.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
       txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
@@ -5028,7 +5062,9 @@ function walkthrough(){
       const ties = obw.filter(w => (w.a === q.id && w.al === lug) || (w.b === q.id && w.bl === lug))
                       .map(w => w.a === q.id && w.al === lug ? w.b + ' lug ' + w.bl : w.a + ' lug ' + w.al);
       const to = pads.concat(ties);
-      const lugName = q.kind === 'diode' ? (lug === 'K' ? 'The banded end (K)' : 'The plain end (A)') : 'Lug ' + lug;
+      const lugName = q.kind === 'diode' ? (lug === 'K' ? 'The banded end (K)' : 'The plain end (A)')
+                    : q.kind === 'fsw' ? 'Column ' + lug[0] + ', ' + ({T:'top', C:'middle', B:'bottom'})[lug[1]] + ' lug (' + lug + ')'
+                    : 'Lug ' + lug;
       if(to.length) body.push(lugName + ' to ' + to.join(' and ') + '.');
       else if(q.kind === 'pot' || q.kind === 'toggle') body.push('Lug ' + lug + ' stays empty.');
     }

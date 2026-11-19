@@ -3508,6 +3508,80 @@ console.log('-- off the board: a diode, v1.7.14 --');
 }
 S = demoProject(); computeNets();
 
+console.log('-- off the board: a 3PDT footswitch, v1.7.25 --');
+{
+  /* True bypass on a pedal, 19 Nov 2026: the jack tips, the board's input and
+     output and the LED's short leg all land on the switch, and before this
+     they were drawn going nowhere. Lugs are column then T, C or B. */
+  const raw = {version:2, name:'stomp', board:{rows:4, cols:6}, cuts:[], ics:[], parts:[],
+    pads:[
+      {id:'a', label:'IN', at:[0,0], parts:[{id:'FSW1', kind:'fsw', lug:'1T', value:'3PDT'}]},
+      {id:'b', label:'OUT', at:[1,0], parts:[{id:'FSW1', kind:'fsw', lug:'2T', value:'3PDT'}]},
+      {id:'c', label:'GND', at:[2,0], parts:[{id:'FSW1', kind:'fsw', lug:'3C', value:'3PDT'}, {id:'JK1', kind:'jack', lug:'S'},
+                                             {id:'JK2', kind:'jack', lug:'S'}, {id:'FSW1', kind:'fsw', lug:'4T'}]},
+      {id:'d', label:'LED+', at:[3,0], parts:[{id:'LED1', kind:'led', lug:'A'}]},
+    ],
+    offboard:['JK1.T - FSW1.1C', 'JK2.T - FSW1.2C', 'FSW1.1B - FSW1.2B', 'LED1.K - FSW1.3T', 'JK1.T - FSW1.2M']};
+  ok(OFFBOARD_LIB.fsw.lugs.length === 9 && OFFBOARD_LIB.fsw.prefix === 'FSW', 'nine lugs, numbered FSW1, FSW2');
+  const up = migrate(JSON.parse(JSON.stringify(raw)));
+  const byL = l => up.pads.find(d => d.label === l);
+  ok(byL('IN').parts[0].kind === 'fsw' && byL('IN').parts[0].lug === '1T', 'a footswitch entry on 1T is kept');
+  ok(byL('GND').parts.length === 3 && !byL('GND').parts.some(e => e.lug === '4T'), 'there is no fourth column, and that entry is dropped');
+  S = up; computeNets();
+  ok(offboardParts().map(q => q.id).join(' ') === 'FSW1 JK1 JK2 LED1', 'the footswitch lists with the switches, ahead of the jacks');
+  const rep = offboardWireReport();
+  ok(rep.wires.length === 4, 'the two tips, the bypass jumper and the LED leg all resolve');
+  ok(rep.bad.length === 1 && /FSW1 has no lug 2M/.test(rep.bad[0].why), 'a lug that is not on the switch is read out, not drawn');
+  ok(rep.wires.some(w => w.a === 'FSW1' && w.al === '1B' && w.b === 'FSW1' && w.bl === '2B'), 'the jumper joins two lugs of the one switch');
+  /* apronGlyph is in the model, the page's esc() is not: stand in for it here */
+  if(typeof esc !== 'function') globalThis.esc = t => String(t);
+  const P = {out:[], lugAt:new Map(), used:() => true, lug:'#000', lead:'#000', plus:'#000', val:'#000'};
+  const q = offboardParts().find(p => p.id === 'FSW1');
+  const ext = apronGlyph(q, 100, 100, 1, '#000', P);
+  ok(OFFBOARD_LIB.fsw.lugs.every(l => P.lugAt.has('FSW1.' + l)), 'the drawing gives every one of the nine lugs a place for a wire to land');
+  ok(new Set(OFFBOARD_LIB.fsw.lugs.map(l => P.lugAt.get('FSW1.' + l).slice(0, 2).join(','))).size === 9, 'and no two lugs share a spot');
+  ok(!/fill-opacity/.test(P.out.join('')), 'the body is opaque, so a wire passing behind it does not read as joined to it');
+  const at = l => P.lugAt.get('FSW1.' + l);
+  const ys = OFFBOARD_LIB.fsw.lugs.map(l => at(l)[1]);
+  ok(ys.every((y, i) => i === 0 || y > ys[i - 1]) && new Set(OFFBOARD_LIB.fsw.lugs.map(l => at(l)[0])).size === 1,
+     'the lugs run down one edge in order: column 1 top, common, bottom, then column 2, then 3');
+  ok(ys[3] - ys[2] > ys[1] - ys[0] && ys[6] - ys[5] > ys[1] - ys[0], 'with a wider gap where one column of the switch ends and the next begins');
+  const P2 = {out:[], lugAt:new Map(), used:() => true, lug:'#000', lead:'#000', plus:'#000', val:'#000'};
+  apronGlyph(q, 100, 100, -1, '#000', P2);
+  ok(at('1T')[0] > 100 && P2.lugAt.get('FSW1.1T')[0] < 100 && P2.lugAt.get('FSW1.1T')[1] === at('1T')[1],
+     'the lugs are on the edge that faces the board, whichever side the switch hangs off');
+  ok(/FSW1/.test(P.out.join('')) && !/>DC</.test(P.out.join('')), 'it draws its own body, not the DC jack fall-through');
+  ok(ext.bot - ext.top > 80, 'and reports a body tall enough that the next part down clears it');
+  ok(bom().some(r => r.kind === 'ob:fsw' && r.offboard === true && r.what === '3PDT'), 'the BOM has the footswitch, flagged off-board');
+  const wt = walkthrough();
+  ok(/FSW1 - footswitch 3PDT, on the panel, off the board/.test(wt) && /Column 1, top lug \(1T\) to pad IN/.test(wt) &&
+     /Column 1, bottom lug \(1B\) to FSW1 lug 2B/.test(wt) && /Column 3, middle lug \(3C\) to pad GND/.test(wt),
+     'the walkthrough names each lug by column and position, the way you find it on the switch');
+  ok(nextOffboardId('fsw') === 'FSW2', 'a second footswitch is FSW2');
+  {
+    /* IN and OUT are on the left edge, GND and LED+ on the right: by its pads
+       alone the switch would hang left, two to one, but the two jacks and the
+       LED it is wired to all hang off the right */
+    const wide = JSON.parse(JSON.stringify(raw));
+    wide.board = {rows:4, cols:10};
+    wide.pads.forEach(d => { if(d.label !== 'IN' && d.label !== 'OUT') d.at = [d.at[0], 9]; });
+    wide.offboard = wide.offboard.slice(0, 4);
+    S = migrate(wide); computeNets();
+    const sides = apronSides(offboardParts(), offboardWires(), 4, 10);
+    const f1 = sides.find(p => p.id === 'FSW1');
+    ok(sides.find(p => p.id === 'JK1').left === false && f1.left === false,
+       'a footswitch hangs off the side most of what it reaches is on, its wired parts counted with its pads');
+    ok(f1.row > 0 && f1.row < 3, 'at a height between them');
+    S.offboard = []; computeNets();
+    const alone = apronSides(offboardParts(), offboardWires(), 4, 10).find(p => p.id === 'FSW1');
+    ok(alone.left === true && Math.abs(alone.row - 1) < 1e-9, 'with no wires its three pads decide, two of them on the left');
+    S = up; computeNets();
+  }
+  ok(offboardLines().some(l => l.id === 'FSW1' && /1T > IN/.test(l.legs.join(' ')) && /3T > LED1\.K/.test(l.legs.join(' '))),
+     'the OFF THE BOARD line says where each lug goes');
+}
+S = demoProject(); computeNets();
+
 console.log('-- off the board: a transformer, v1.7.2 --');
 {
   /* The Tube Meter's T1, Sept 24 2026: a mains transformer bolted to the box,
