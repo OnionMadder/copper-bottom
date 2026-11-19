@@ -3508,7 +3508,7 @@ console.log('-- off the board: a diode, v1.7.14 --');
 }
 S = demoProject(); computeNets();
 
-console.log('-- off the board: a 3PDT footswitch, v1.7.25 --');
+console.log('-- off the board: a 3PDT footswitch, v1.7.25 and v1.7.26 --');
 {
   /* True bypass on a pedal, 19 Nov 2026: the jack tips, the board's input and
      output and the LED's short leg all land on the switch, and before this
@@ -3540,16 +3540,15 @@ console.log('-- off the board: a 3PDT footswitch, v1.7.25 --');
   const ext = apronGlyph(q, 100, 100, 1, '#000', P);
   ok(OFFBOARD_LIB.fsw.lugs.every(l => P.lugAt.has('FSW1.' + l)), 'the drawing gives every one of the nine lugs a place for a wire to land');
   ok(new Set(OFFBOARD_LIB.fsw.lugs.map(l => P.lugAt.get('FSW1.' + l).slice(0, 2).join(','))).size === 9, 'and no two lugs share a spot');
-  ok(!/fill-opacity/.test(P.out.join('')), 'the body is opaque, so a wire passing behind it does not read as joined to it');
+  ok(/fill-opacity/.test(P.out.join('')), 'the body is see-through, so a wire shows all the way to the lug it reaches');
   const at = l => P.lugAt.get('FSW1.' + l);
-  const ys = OFFBOARD_LIB.fsw.lugs.map(l => at(l)[1]);
-  ok(ys.every((y, i) => i === 0 || y > ys[i - 1]) && new Set(OFFBOARD_LIB.fsw.lugs.map(l => at(l)[0])).size === 1,
-     'the lugs run down one edge in order: column 1 top, common, bottom, then column 2, then 3');
-  ok(ys[3] - ys[2] > ys[1] - ys[0] && ys[6] - ys[5] > ys[1] - ys[0], 'with a wider gap where one column of the switch ends and the next begins');
+  ok(at('1T')[0] < at('2T')[0] && at('2T')[0] < at('3T')[0] && at('1T')[1] < at('1C')[1] && at('1C')[1] < at('1B')[1],
+     'the lugs are a field: columns run left to right and each runs top, common, bottom');
+  ok(at('1T')[1] === at('2T')[1] && at('1C')[0] === at('1T')[0], 'rows line up across the columns and a column is one straight line');
   const P2 = {out:[], lugAt:new Map(), used:() => true, lug:'#000', lead:'#000', plus:'#000', val:'#000'};
   apronGlyph(q, 100, 100, -1, '#000', P2);
-  ok(at('1T')[0] > 100 && P2.lugAt.get('FSW1.1T')[0] < 100 && P2.lugAt.get('FSW1.1T')[1] === at('1T')[1],
-     'the lugs are on the edge that faces the board, whichever side the switch hangs off');
+  ok(P2.lugAt.get('FSW1.1T')[0] === at('1T')[0] && P2.lugAt.get('FSW1.3B')[0] === at('3B')[0],
+     'column 1 stays on the left on either side of the board: it is the switch in your hand, not a mirror of it');
   ok(/FSW1/.test(P.out.join('')) && !/>DC</.test(P.out.join('')), 'it draws its own body, not the DC jack fall-through');
   ok(ext.bot - ext.top > 80, 'and reports a body tall enough that the next part down clears it');
   ok(bom().some(r => r.kind === 'ob:fsw' && r.offboard === true && r.what === '3PDT'), 'the BOM has the footswitch, flagged off-board');

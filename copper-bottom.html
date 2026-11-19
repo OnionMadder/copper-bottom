@@ -1022,7 +1022,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.25';
+const APP_VERSION = 'v1.7.26';
 
 const K = (r,c) => r + ',' + c;
 
@@ -4479,25 +4479,22 @@ function apronGlyph(q, cx, cy, f, ink, P){
       });
       top = cy - 20; bot = cy + 20;
     }else if(q.kind === 'fsw'){
-      /* a 3PDT stomp switch. Its nine lugs are named down the board-facing
-         edge like every other panel part's, a column of the switch at a time
-         with a gap between columns, so a wire visibly ends on its lug and a
-         wire passing behind the body does not look joined to it. The body
-         pictures the lug field as it is in your hand, three columns of three
-         blades lying crosswise, with the column numbers under it. */
-      P.out.push('<rect x="' + (cx - 24) + '" y="' + (cy - 56) + '" width="48" height="112" rx="5" fill="#E3E6EE" stroke="#3B4A5A" stroke-width="1.6"/>');
-      for(let c = -1; c <= 1; c++){
-        for(let r = -1; r <= 1; r++)
-          P.out.push('<rect x="' + (cx + c * 14 - 5) + '" y="' + (cy - 6 + r * 13 - 2) + '" width="10" height="4" rx="1" fill="#C9A227" stroke="#444" stroke-width="0.8"/>');
-        txt(cx + c * 14, cy + 28, String(c + 2), 7, 'fill="#333" font-weight="bold" text-anchor="middle"');
-      }
-      txt(cx, cy - 38, '3PDT', 7, 'fill="#3B4A5A" font-weight="bold" text-anchor="middle"');
+      /* a 3PDT stomp switch from its lug side: nine blades lying crosswise in
+         three columns of three, column 1 on the left whichever side of the
+         board it hangs off, so the picture is the switch in your hand and
+         each wire runs straight to the lug it is soldered to. v1.7.25 named
+         the lugs down one edge instead, like the other panel parts; she saw
+         both and chose this one, 19 Nov 2026. The body is see-through because
+         the wires are drawn under the parts: an opaque one would hide which
+         lug each wire reaches, the one thing this drawing is for. */
+      P.out.push('<rect x="' + (cx - 31) + '" y="' + (cy - 31) + '" width="62" height="62" rx="5" fill="#E3E6EE" fill-opacity="0.35" stroke="#3B4A5A" stroke-width="1.6"/>');
       lib.lugs.forEach((nm, i) => {
-        const dy = (Math.floor(i / 3) - 1) * 36 + (i % 3 - 1) * 11;
-        P.out.push('<line x1="' + (cx + f * 24) + '" y1="' + (cy + dy) + '" x2="' + (cx + f * 28) + '" y2="' + (cy + dy) + '" stroke="' + P.lead + '" stroke-width="1.4"/>');
-        lug(nm, cx + f * 30, cy + dy, true);
+        const lx = cx + (Math.floor(i / 3) - 1) * 20, ly = cy + (i % 3 - 1) * 20 - 3;
+        lug(nm, lx, ly, false);
+        P.out.push('<rect x="' + (lx - 7) + '" y="' + (ly - 2.5) + '" width="14" height="5" rx="1" fill="#C9A227" stroke="#444" stroke-width="1"/>');
+        txt(lx, ly + 10, nm, 6.5, 'fill="#333" text-anchor="middle"');
       });
-      top = cy - 62; bot = cy + 62;
+      top = cy - 37; bot = cy + 37;
     }else{                                         // dc
       P.out.push('<rect x="' + (cx - 20) + '" y="' + (cy - 13) + '" width="40" height="26" rx="3" fill="#E4E4E4" stroke="#444" stroke-width="1.5"/>');
       txt(cx, cy + 4, 'DC', 10, 'fill="#333" font-weight="bold" text-anchor="middle"');
