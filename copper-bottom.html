@@ -711,14 +711,16 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
     <button id="btnRef" title="keep a schematic or layout photo beside the board, behind it, or both at once">reference</button>
     <button id="btnNet" title="optional: describe the circuit and have the board checked against it">netlist</button>
     <button id="btnParts" title="optional: paste a parts list and have the board checked against it">parts</button>
+    <!-- Out of the download menu and onto the bar: it is a second way to build the
+         circuit, not a file format, and nobody found it one menu deep. -->
+    <button id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps with exact holes">to breadboard</button>
     <span class="drop" id="outDrop">
       <button id="btnOut" aria-haspopup="true" aria-expanded="false" aria-controls="outMenu"
-              title="everything this layout can be turned into: the printable sheet, the share image, the schematic, the breadboard version, the written steps">download <span class="caret" aria-hidden="true">&#9662;</span></button>
+              title="everything this layout can be turned into: the printable sheet, the share image, the schematic, the written steps">download <span class="caret" aria-hidden="true">&#9662;</span></button>
       <div class="dropmenu" id="outMenu" role="menu" hidden>
         <button role="menuitem" id="btnSheet" title="printable build sheet: both sides at 1:1, cut list, build order">build sheet<span class="dk">print / PDF</span></button>
         <button role="menuitem" id="btnClassic2" title="the layout as the classic share image - title, tan strips, parts list - as a .png">layout image<span class="dk">.png</span></button>
         <button role="menuitem" id="btnSch" title="the circuit this board implements, derived from the board itself - the layout says where, a schematic says why">schematic<span class="dk">.png</span></button>
-        <button role="menuitem" id="btnBB" title="the same circuit re-placed on a solderless breadboard, verified, written as steps">breadboard<span class="dk">re-placed</span></button>
         <button role="menuitem" id="btnWalk" title="this layout written out as steps somebody can follow">walkthrough<span class="dk">as steps</span></button>
       </div>
     </span>
@@ -1022,7 +1024,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.26';
+const APP_VERSION = 'v1.7.27';
 
 const K = (r,c) => r + ',' + c;
 
