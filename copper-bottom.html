@@ -1024,7 +1024,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.28';
+const APP_VERSION = 'v1.7.29';
 
 const K = (r,c) => r + ',' + c;
 
@@ -6870,7 +6870,10 @@ function breadboardText(planArg){
   const group = (name) => { L.push('== ' + name + ' =='); L.push(''); };
   const val = (p) => {
     const isDefault = isGenericDevice(p.kind, p.device);
-    const dev = p.device && !isDefault ? p.device : '';
+    let dev = p.device && !isDefault ? p.device : '';
+    /* a diode or transistor is usually saved with its part number as both
+       value and device, and "1N4148 1N4148" is one fact said twice */
+    if(dev && String(p.value == null ? '' : p.value).toUpperCase().indexOf(String(dev).toUpperCase()) >= 0) dev = '';
     return [p.value, dev].filter(Boolean).join(' ');
   };
   const seen = {};

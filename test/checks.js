@@ -2776,7 +2776,7 @@ ok(!bbp.failed && bbp.check.ok, 'a bare transistor board translates and self-che
    refuses the plan, which is what the Haunt Detector HD-E1 did on Nov 20 2026
    along with sixteen other boards on the shelf. */
 S = {version:2, name:'two positives', board:{rows:4, cols:8}, cuts:[], parts:[
-  {id:'d1', kind:'diode', ref:'D1', value:'1N5817', pins:[[0,2],[1,2]]},
+  {id:'d1', kind:'diode', ref:'D1', value:'1N5817', device:'1N5817', pins:[[0,2],[1,2]]},
   {id:'r1', kind:'res', ref:'R1', value:'10k', device:'fixed', pins:[[1,3],[2,3]]},
   {id:'r2', kind:'res', ref:'R2', value:'10k', device:'fixed', pins:[[1,4],[2,4]]},
 ], ics:[], pads:[
@@ -2795,6 +2795,9 @@ ok(!bbp.failed && bbp.check.ok, 'two positive nets translate and self-check');
      'the other one is named in a note');
   const vin = bbp.landings.find(l => l.label === '@VIN');
   ok(vin && !vin.at.rail, 'VIN lands in a column, not on a rail');
+  const dt = breadboardText(bbp);
+  ok(dt.indexOf('Diode D1 (1N5817):') >= 0 && dt.indexOf('1N5817 1N5817') < 0,
+     'a part saved with the same value and device prints it once');
 }
 
 /* A net too big for its columns. Thirteen things on one net fill three
