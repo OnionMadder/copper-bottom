@@ -2770,6 +2770,50 @@ ok(!bbp.failed && bbp.check.ok, 'a bare transistor board translates and self-che
   ok(breadboardText(bbp).indexOf('flat face toward you') >= 0, 'the step states the package orientation');
 }
 
+/* Two positive nets. A polarity diode between the DC jack and the circuit
+   makes VIN and +9V separate nets, and both are supply-class. One rail carries
+   one net: with both on the + rail the diode is bridged and the self-check
+   refuses the plan, which is what the Haunt Detector HD-E1 did on Nov 20 2026
+   along with sixteen other boards on the shelf. */
+S = {version:2, name:'two positives', board:{rows:4, cols:8}, cuts:[], parts:[
+  {id:'d1', kind:'diode', ref:'D1', value:'1N5817', pins:[[0,2],[1,2]]},
+  {id:'r1', kind:'res', ref:'R1', value:'10k', device:'fixed', pins:[[1,3],[2,3]]},
+  {id:'r2', kind:'res', ref:'R2', value:'10k', device:'fixed', pins:[[1,4],[2,4]]},
+], ics:[], pads:[
+  {id:'p1', label:'VIN', at:[0,0]},
+  {id:'p2', label:'+9V', at:[1,0]},
+  {id:'p3', label:'GND', at:[2,0]},
+]};
+computeNets();
+bbp = breadboardPlan();
+ok(!bbp.failed && bbp.check.ok, 'two positive nets translate and self-check');
+{
+  const pos = [...bbp.rails.values()].filter(r => r.pol === 'pos');
+  ok(pos.length === 1, 'only one net is given the + rail (' + pos.length + ')');
+  ok(pos[0] && pos[0].label === '+9V', 'and it is the net with more on it, +9V');
+  ok(bbp.notes.some(n => n.indexOf('VIN') === 0 && n.indexOf('ordinary columns') > 0),
+     'the other one is named in a note');
+  const vin = bbp.landings.find(l => l.label === '@VIN');
+  ok(vin && !vin.at.rail, 'VIN lands in a column, not on a rail');
+}
+
+/* A net too big for its columns. Thirteen things on one net fill three
+   columns to four, which leaves three free holes where two jumpers need four:
+   the bridge pass threw "no free hole left to bridge from" on four boards. */
+S = {version:2, name:'crowded net', board:{rows:3, cols:16}, cuts:[], parts:[], ics:[], pads:[
+  {id:'p1', label:'MIX', at:[0,0]},
+  {id:'p2', label:'OUT', at:[1,0]},
+]};
+for(let i = 0; i < 12; i++)
+  S.parts.push({id:'rc' + i, kind:'res', ref:'R' + (i + 1), value:'10k', device:'fixed', pins:[[0, i + 2],[1, i + 2]]});
+computeNets();
+{
+  let threw = null;
+  try{ bbp = breadboardPlan(); }catch(e){ threw = e.message || String(e); }
+  ok(!threw, 'a thirteen-terminal net bridges instead of throwing' + (threw ? ' (' + threw + ')' : ''));
+  ok(!threw && !bbp.failed && bbp.check.ok, 'and its plan self-checks');
+}
+
 console.log('-- DIYLC import --');
 /* A synthetic .diy exercising every branch the importer has. The geometry
  * facts it encodes were verified against DIYLC's own source and regression

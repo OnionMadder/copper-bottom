@@ -1024,7 +1024,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.27';
+const APP_VERSION = 'v1.7.28';
 
 const K = (r,c) => r + ',' + c;
 
@@ -6413,23 +6413,39 @@ const bbSameHole = (a, b) => !bbIsRail(a) && !bbIsRail(b) && a.row === b.row && 
 function bbRailNets(){
   const rails = new Map();     // net.id -> {pol, label}
   const notes = [];
+  /* A rail is ONE net. A board with a polarity diode or a regulator has two
+     positive-class nets (VIN and +9V, +12V and VCC), and putting both on the
+     + rail joins them: the diode is bridged and the self-check refuses the
+     plan. So the rail goes to the net with the most on it - the one the
+     circuit actually runs from - and the other rides ordinary columns. */
+  const cand = {pos:[], gnd:[], neg:[]};
   for(const net of NET.nets){
     const classed = padsOnNet(net).map(d => ({d:d, c:powerClass(d.label)})).filter(x => x.c);
     if(!classed.length) continue;
     const c = classed[0];
-    if(c.c.cls === 'pos')      rails.set(net.id, {pol:'pos', label:c.d.label});
-    else if(c.c.cls === 'gnd') rails.set(net.id, {pol:'neg', label:c.d.label});
-    else notes.push(c.d.label + ' is a negative supply. A breadboard has a + rail and a - ' +
-                    'rail, so this net rides ordinary columns - double-check it against the rails.');
+    cand[c.c.cls].push({net:net, label:c.d.label, size:netMembers(net).length});
   }
-  /* no ground but a bare negative rail: that pair still maps cleanly */
-  if(![...rails.values()].some(r => r.pol === 'neg'))
-    for(const net of NET.nets){
-      const neg = padsOnNet(net).map(d => ({d:d, c:powerClass(d.label)}))
-                    .filter(x => x.c && x.c.cls === 'neg')[0];
-      if(neg){ rails.set(net.id, {pol:'neg', label:neg.d.label});
-               notes.pop(); break; }
-    }
+  const biggest = (list) => list.reduce((best, x) => (!best || x.size > best.size) ? x : best, null);
+  const give = (list, pol, word) => {
+    const win = biggest(list);
+    if(!win) return;
+    rails.set(win.net.id, {pol:pol, label:win.label});
+    for(const x of list)
+      if(x !== win)
+        notes.push(x.label + ' is a second ' + word + ' net. A breadboard rail carries one net, and the ' +
+                   (pol === 'pos' ? '+' : '-') + ' rail here is ' + win.label + ', so ' + x.label +
+                   ' rides ordinary columns - follow its steps, not the rail.');
+  };
+  give(cand.pos, 'pos', 'positive supply');
+  give(cand.gnd, 'neg', 'ground');
+  if(cand.gnd.length){
+    for(const x of cand.neg)
+      notes.push(x.label + ' is a negative supply. A breadboard has a + rail and a - ' +
+                 'rail, so this net rides ordinary columns - double-check it against the rails.');
+  } else {
+    /* no ground but a bare negative rail: that pair still maps cleanly */
+    give(cand.neg, 'neg', 'negative supply');
+  }
   return {rails:rails, notes:notes};
 }
 
@@ -6514,7 +6530,14 @@ function bbLand(st, netId, rail, opts){
   const owned = st.netCols.get(netId) || [];
   /* an owned column with a spare hole, nearest the anchor, same bank first */
   let pick = null, pickW = Infinity;
+  /* Joining k columns takes k-1 jumpers, two holes each. Three columns filled
+     to four have three holes between them and need four, so a landing that
+     would leave the net short of bridge holes takes a fresh column instead.
+     A rail net is exempt: each of its columns needs one drop, not a chain. */
+  const spareAll = owned.reduce((n, t) => n + 5 - Object.keys(st.use[t.bank][t.col].rows).length, 0);
+  const tight = !rail && spareAll - 1 < 2 * (owned.length - 1);
   for(const t of owned){
+    if(tight) break;
     const cu = st.use[t.bank][t.col];
     /* full at FOUR: the fifth hole stays free for the bridge or rail-drop
        jumper this column may still need. A landing that will not fit here
@@ -6674,23 +6697,38 @@ function bbAttempt(cols, rails){
       /* Each new column hooks to the nearest ALREADY-CONNECTED column that
          still has a free hole - a plain left-to-right chain can ask a full
          column for a sixth hole when a net grows past two columns. */
-      const done = [colsOf[0]];
-      const room = (t) => Object.keys(st.use[t.bank][t.col].rows).length < 5;
-      for(const b of colsOf.slice(1)){
-        let a = null, aW = Infinity;
-        for(const t of done){
-          if(!room(t)) continue;
-          const w = Math.abs(t.col - b.col) + (t.bank === b.bank ? 0 : 100);
-          if(w < aW){ aW = w; a = t; }
+      /* Planned on a count of free holes first, and only then claimed. In
+         board order a nearly full column can spend its last hole early and
+         leave a later column nothing to hook to, so when that order fails
+         the roomiest columns go first and the full ones hang off them as
+         leaves - which always works while the net has holes enough. */
+      const spare = (t) => 5 - Object.keys(st.use[t.bank][t.col].rows).length;
+      const hookups = (order) => {
+        const left = new Map(order.map(t => [t, spare(t)]));
+        const done = [order[0]], pairs = [];
+        for(const b of order.slice(1)){
+          let a = null, aW = Infinity;
+          for(const t of done){
+            if(left.get(t) < 1) continue;
+            const w = Math.abs(t.col - b.col) + (t.bank === b.bank ? 0 : 100);
+            if(w < aW){ aW = w; a = t; }
+          }
+          if(!a || left.get(b) < 1) return null;
+          left.set(a, left.get(a) - 1); left.set(b, left.get(b) - 1);
+          pairs.push([a, b]); done.push(b);
         }
-        if(!a) throw new Error('bb: net ' + netName(net) + ' has no free hole left to bridge from');
+        return pairs;
+      };
+      const pairs = hookups(colsOf) ||
+                    hookups(colsOf.slice().sort((x, y) => spare(y) - spare(x) || x.bank - y.bank || x.col - y.col));
+      if(!pairs) throw new Error('bb: net ' + netName(net) + ' has no free hole left to bridge from');
+      for(const [a, b] of pairs){
         const named = (t) => owners(t.bank, t.col).filter(w => w !== 'jumper')[0];
         const from = bbClaimRow(st, a.bank, a.col, BB_WIRE_ROWS[a.bank], null, 'jumper');
         const to   = bbClaimRow(st, b.bank, b.col, BB_WIRE_ROWS[b.bank], null, 'jumper');
         st.jumpers.push({from:from, to:to,
                          why:(named(a) && named(b)) ? named(a) + ' to ' + named(b)
                                                     : 'both are net ' + netName(net)});
-        done.push(b);
       }
     }
   }
