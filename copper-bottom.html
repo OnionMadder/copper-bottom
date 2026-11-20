@@ -1004,6 +1004,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
+  <span><span id="txrayLbl">parts</span> <button id="txray" aria-labelledby="txrayLbl txray" title="X-ray: fade the part bodies so the copper, holes and net colors under them show. Changes only the screen: not the file, not the checks, not anything you download">solid</button></span>
   <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list to the right of it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
@@ -1025,7 +1026,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.8.1';
 
 const K = (r,c) => r + ',' + c;
 
@@ -8578,6 +8579,13 @@ let NETCOLOUR = false;
    drawn with the board whichever way this is set, because it is edited there.
 
    Remembered per machine, like the theme. Shown unless it was turned off. */
+/* X-ray: part bodies, chip bodies and hardware go see-through on the editing
+   board, so the copper, the holes and the net colors under them can be read.
+   A screen preference and nothing else: the file, the checks and every export
+   are the same either way. Remembered per machine, and solid unless asked. */
+const XRAY_KEY = 'copper-bottom.xray';
+let XRAY = false;
+try{ XRAY = localStorage.getItem(XRAY_KEY) === '1'; }catch(err){}
 const OFFB_KEY = 'copper-bottom.offboard';
 let SHOW_OFFB = true;
 try{ SHOW_OFFB = localStorage.getItem(OFFB_KEY) !== '0'; }catch(err){}
@@ -8934,7 +8942,7 @@ function render(){
       o.push('<rect x="' + (x0-5) + '" y="' + (y0-5) + '" width="' + (x1-x0+10) + '" height="' + (y1-y0+10) +
              '" rx="8" fill="' + C('accent') + '" fill-opacity="0.16" stroke="' + C('accent') + '" stroke-width="1.6"/>');
     o.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + (x1-x0) + '" height="' + (y1-y0) +
-           '" rx="4" fill="' + C('chip') + '" fill-opacity="' + C('chipFill') + '" stroke="' + C('chipEdge') + '" stroke-width="1.2"/>');
+           '" rx="4" fill="' + C('chip') + '" fill-opacity="' + (XRAY ? 0.1 : C('chipFill')) + '" stroke="' + C('chipEdge') + '" stroke-width="1.2"/>');
     if(!custom)
       o.push('<path d="M' + ((x0+x1)/2 - 8) + ' ' + y0 + 'a8 8 0 0 0 16 0" fill="' + C('board') + '" stroke="' + C('chipEdge') + '" stroke-width="1.2"/>');
     o.push('<text class="icref" x="' + ((x0+x1)/2) + '" y="' + ((y0+y1)/2 - 3) + '">' + esc(ic.ref) + '</text>');
@@ -8956,6 +8964,7 @@ function render(){
     }
   }
 
+  const xrayAt = [];         // where each part's drawing starts, for X-ray
   /* --- parts, drawn at real size: a 1/4W resistor body really is two holes
      long, and seeing that is what tells you whether it will physically fit --- */
   /* one table drives both the drawing and the collision check, so a part is
@@ -8966,6 +8975,7 @@ function render(){
   const TR = PITCH * FOOTPRINT.trans.dia / 2;
   const labels = [];
   for(const p of S.parts){
+    xrayAt.push([o.length, p.kind]);
     const xs = p.pins.map(q => X(q[1])), ys = p.pins.map(q => Y(q[0]));
     const sel = SEL && SEL.type === 'part' && SEL.id === p.id;
     const wire = (x1, y1, x2, y2, col, w) =>
@@ -9356,6 +9366,16 @@ function render(){
                 tx + ',' + ty + ') rotate(' + ldeg + ')" x="0" y="3.5">' +
                 esc(label) + '</text>');
   }
+  /* Bodies and their leads fade; a wire link does not, because a link is
+     wiring and the copper cannot be read without it. Last part first, so the
+     positions noted on the way in still mean what they meant. */
+  if(XRAY)
+    for(let i = xrayAt.length - 1; i >= 0; i--){
+      const end = i + 1 < xrayAt.length ? xrayAt[i + 1][0] : o.length;
+      if(xrayAt[i][1] === 'link' || end <= xrayAt[i][0]) continue;
+      o.splice(end, 0, '</g>');
+      o.splice(xrayAt[i][0], 0, '<g opacity="0.28">');
+    }
   /* ---- parts that live off the board ----
      Three terminals on the copper do not say "this is one component". The
      body does, and the lines from its lugs say which hole is lug 1. */
@@ -9464,7 +9484,7 @@ function render(){
     if(SEL && SEL.type === 'hw' && SEL.id === h.id)
       o.push('<circle cx="' + hx + '" cy="' + hy + '" r="' + (drop + 6) +
              '" fill="' + C('accent') + '" fill-opacity="0.22" stroke="' + C('accent') + '" stroke-width="1.8"/>');
-    o.push(hwGlyph(h, hx, hy, PITCH, {hole:C('hole'), ink:C('link'), land:C('chip'), landFill:0.6, sw:1.6}));
+    o.push(hwGlyph(h, hx, hy, PITCH, {hole:C('hole'), ink:C('link'), land:C('chip'), landFill:XRAY ? 0.12 : 0.6, sw:1.6}));
     o.push('<text class="pad" text-anchor="middle" x="' + hx + '" y="' + (hy + drop + 12) +
            '" fill="' + C('link') + '">' + esc(h.ref) + '</text>');
   }
@@ -13351,6 +13371,13 @@ async function openShareLink(){
 window.addEventListener('hashchange', () => { openShareLink(); });
 
 /* the off-board toggle: the screen only, remembered per machine */
+const syncXray = () => { txray.textContent = XRAY ? 'x-ray' : 'solid'; };
+syncXray();
+txray.onclick = () => {
+  XRAY = !XRAY;
+  try{ localStorage.setItem(XRAY_KEY, XRAY ? '1' : '0'); }catch(err){}
+  syncXray(); render();
+};
 const syncOffb = () => { toff.textContent = SHOW_OFFB ? 'shown' : 'hidden'; };
 syncOffb();
 toff.onclick = () => {
