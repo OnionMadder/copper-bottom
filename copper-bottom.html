@@ -1004,7 +1004,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
   <span>board <button id="bkind" title="stripboard has copper strips you cut; perfboard has one pad per hole and the links do all the wiring">strips</button></span>
   <span>zoom <button id="zout">&minus;</button> <b id="zlvl">100%</b> <button id="zin">+</button></span>
   <span>strips <button id="tnet" title="N - color every net, or leave the board quiet">copper</button></span>
-  <span><span id="txrayLbl">parts</span> <button id="txray" aria-labelledby="txrayLbl txray" title="X-ray: fade the part bodies so the copper, holes and net colors under them show. Changes only the screen: not the file, not the checks, not anything you download">solid</button></span>
+  <span><span id="txrayLbl">x-ray</span> <button id="txray" aria-labelledby="txrayLbl txray" title="fade the part bodies so the copper, holes and net colors under them show. Changes only the screen: not the file, not the checks, not anything you download">off</button></span>
   <span><span id="toffLbl">off-board</span> <button id="toff" aria-labelledby="toffLbl toff" title="the panel parts the pads name - pots, jacks, switches - drawn beside the board with their wires, and the off the board list to the right of it. Hiding them changes only the screen: not the file, not the checks, not anything you download">shown</button></span>
   <span>view <button id="tflip" title="M - the back of the board beside the front, mirrored and synced">show back</button></span>
   <span>theme <button id="ttheme" title="light, dark, or whatever this machine already asks for">auto</button></span>
@@ -1026,7 +1026,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.8.1';
+const APP_VERSION = 'v1.8.2';
 
 const K = (r,c) => r + ',' + c;
 
@@ -13371,7 +13371,7 @@ async function openShareLink(){
 window.addEventListener('hashchange', () => { openShareLink(); });
 
 /* the off-board toggle: the screen only, remembered per machine */
-const syncXray = () => { txray.textContent = XRAY ? 'x-ray' : 'solid'; };
+const syncXray = () => { txray.textContent = XRAY ? 'on' : 'off'; };
 syncXray();
 txray.onclick = () => {
   XRAY = !XRAY;
