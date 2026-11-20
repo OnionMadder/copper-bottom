@@ -4101,6 +4101,165 @@ console.log('-- v1.7.20: squeezing out empty lines, proven on a copy --');
   ok(by('SW2').left === false && by('SW2').row === 4.5, 'a padless toggle wired to nothing goes right, at mid board');
 }
 
+/* v1.8.0: mounting hardware. A screw, a spacer or a bare drilled hole takes
+   the copper with it, keeps parts out from under it, and joins strips when
+   it is metal. Every rule here is planted to fire and then shown quiet. */
+{
+  console.log('-- mounting hardware --');
+  const base = (hardware, more) => Object.assign({version:2, name:'hw', board:{rows:9, cols:12}, cuts:[],
+    parts:[], ics:[], pads:[{id:'a', label:'IN', at:[4,0]}, {id:'b', label:'OUT', at:[4,11]}],
+    hardware:hardware}, more || {});
+  const load = (raw) => { S = migrate(JSON.parse(JSON.stringify(raw))); computeNets(); };
+  const rules = (rule) => runDRC().filter(f => f.rule === rule);
+  const nylon = {id:'h1', ref:'MH1', at:[4,5], kind:'screw', size:'M3', insulated:true};
+  const metal = {id:'h1', ref:'MH1', at:[4,5], kind:'screw', size:'M3'};
+
+  /* the drill is a cut */
+  load(base([]));
+  ok(sameNet([4,0], [4,11]), 'with no hardware the strip is whole');
+  ok(S.hardware === undefined, 'an empty hardware list is not carried');
+  load(base([nylon]));
+  ok(!sameNet([4,0], [4,11]), 'an M3 hole breaks the strip it is drilled in');
+  ok(NET.netAt(4, 5) === null, 'the drilled hole itself is dead copper');
+  ok(sameNet([3,0], [3,11]) && sameNet([5,0], [5,11]), 'an M3 hole leaves the strips either side whole');
+  ok(String(hwDrillKeys(S.hardware[0])) === '4,5', 'an M3 drill takes one hole');
+  load(base([{id:'h1', ref:'MH1', at:[4,5], kind:'hole', dia:7}]));
+  ok(!sameNet([3,0], [3,11]) && !sameNet([5,0], [5,11]), 'a 7 mm hole breaks the strips either side too');
+  ok(NET.netAt(3, 4) !== null, 'a 7 mm hole leaves the diagonal holes alone');
+  ok(hwDrillKeys(S.hardware[0]).length === 5, 'a 7 mm drill takes its hole and the four beside it');
+  ok(sameNet([2,0], [2,11]), 'two strips away is untouched');
+
+  /* a lead in the drilled hole */
+  const r = (a, b) => ({id:'p1', kind:'res', ref:'R1', value:'10k', pins:[a, b]});
+  load(base([nylon], {parts:[r([4,5], [8,5])]}));
+  ok(rules('on-drill').length === 1 && /MH1/.test(rules('on-drill')[0].msg) && rules('on-drill')[0].sev === 'error',
+     'a lead in a drilled hole is an error that names the hardware');
+  load(base([nylon], {parts:[r([2,8], [6,8])]}));
+  ok(rules('on-drill').length === 0 && rules('hw-clash').length === 0, 'a part clear of the hardware raises nothing');
+
+  /* what is under the nut */
+  load(base([nylon], {parts:[r([4,6], [8,6])]}));
+  ok(rules('hw-clash').length === 1 && /^R1 is under the nut of MH1/.test(rules('hw-clash')[0].msg),
+     'a lead in the hole beside an M3 screw is under its nut');
+  load(base([nylon], {parts:[r([3,6], [7,6])]}));
+  ok(rules('hw-clash').length === 0, 'the diagonal hole is clear of an M3 nut');
+  load(base([nylon], {parts:[r([3,4], [3,6])]}));
+  ok(rules('hw-clash').length === 1 && /its body is in the way/.test(rules('hw-clash')[0].msg),
+     'a body lying across the land clashes even with both leads clear');
+  load(base([{id:'h1', ref:'MH1', at:[4,5], kind:'spacer', size:'M3', insulated:true}], {parts:[r([4,6], [8,6])]}));
+  ok(/under the spacer of MH1/.test((rules('hw-clash')[0] || {}).msg), 'a spacer is called a spacer');
+  load(base([{id:'h1', ref:'MH1', at:[4,5], kind:'hole', size:'M3'}], {parts:[r([4,6], [8,6])]}));
+  ok(rules('hw-clash').length === 0, 'a bare hole has no nut, so the hole beside it is free');
+  load(base([nylon, {id:'h2', ref:'MH2', at:[4,7], kind:'screw', size:'M3', insulated:true}]));
+  ok(rules('hw-clash').length === 1, 'two nuts two holes apart overlap, reported once');
+  load(base([nylon, {id:'h2', ref:'MH2', at:[4,9], kind:'screw', size:'M3', insulated:true}]));
+  ok(rules('hw-clash').length === 0, 'two nuts four holes apart do not');
+  load(base([nylon], {board:{rows:9, cols:12, pitch:0.2}, parts:[r([4,6], [8,6])]}));
+  ok(rules('hw-clash').length === 0, 'on a 0.2 in board the same nut does not reach the next hole');
+
+  /* metal against copper */
+  const four = {pads:[{id:'a', label:'IN', at:[4,0]}, {id:'b', label:'OUT', at:[4,11]},
+                      {id:'c', label:'UP', at:[3,0]}, {id:'d', label:'DOWN', at:[5,0]}]};
+  load(base([metal], four));
+  let f = rules('hw-short');
+  ok(f.length === 1 && f[0].sev === 'error' && /4 nets/.test(f[0].msg) && f[0].fix && f[0].fix.type === 'hw-insulate',
+     'a metal nut on four live nets is one error, with the insulate fix');
+  ok(['IN', 'OUT', 'UP', 'DOWN'].every(n => f[0].msg.indexOf(n) >= 0), 'and it names all four');
+  load(base([nylon], four));
+  ok(rules('hw-short').length === 0 && rules('hw-live').length === 0, 'the same screw in nylon joins nothing');
+  load(base([{id:'h1', ref:'MH1', at:[4,5], kind:'hole', size:'M3'}], four));
+  ok(rules('hw-short').length === 0, 'a bare hole joins nothing');
+  load(base([metal]));
+  ok(rules('hw-short').length === 1 && /2 nets/.test(rules('hw-short')[0].msg),
+     'a metal nut joins back the two halves of the strip its own drill cut');
+  load(base([metal], Object.assign({}, four, {cuts:['3,4', '3,6', '4,4', '4,6', '5,4', '5,6']})));
+  ok(rules('hw-short').length === 0 && rules('hw-live').length === 0, 'six cuts around it leave the nut on dead copper');
+  load(base([metal], Object.assign({}, four, {cuts:['3,4', '3,6', '4,4', '4,6', '5,6']})));
+  ok(rules('hw-live').length === 1 && /DOWN/.test(rules('hw-live')[0].msg) && rules('hw-live')[0].sev === 'warn',
+     'miss one of the six and the nut is live on that strip');
+  load(base([metal], {pads:[{id:'a', label:'GND', at:[4,0]}]}));
+  ok(rules('hw-live').length === 0 && rules('hw-short').length === 0, 'metal hardware on ground alone says nothing');
+  load(base([metal], {pads:[{id:'a', label:'+9V', at:[4,0]}]}));
+  ok(rules('hw-live').length === 1, 'metal hardware on a supply alone is a warning');
+  load(base([metal], {board:{rows:9, cols:12, kind:'perf'},
+                      pads:[{id:'a', label:'IN', at:[4,4]}, {id:'b', label:'OUT', at:[4,6]}]}));
+  ok(rules('hw-short').length === 1, 'on perfboard a metal nut joins the pads beside it');
+  ok(rules('hw-clash').length === 2, 'and both of those pads are under it');
+  for(const rule of ['on-drill', 'hw-clash', 'hw-short', 'hw-live'])
+    ok(typeof DRC_WHY[rule] === 'string' && DRC_WHY[rule].length > 40, rule + ' says what the board will do');
+
+  /* rows, columns, blocks */
+  load(base([nylon]));
+  insertLine(0, 0);
+  ok(String(S.hardware[0].at) === '5,5', 'inserting a row above moves the hardware down');
+  insertLine(1, 9);
+  ok(String(S.hardware[0].at) === '5,5', 'inserting a column past it leaves it alone');
+  insertLine(1, 2);
+  ok(String(S.hardware[0].at) === '5,6', 'inserting a column before it moves it along');
+  const gone = deleteLine(0, 5);
+  ok(gone.ok && String(gone.removed.hardware) === 'MH1' && S.hardware === undefined,
+     'deleting its row takes the hardware and says so');
+  load(base([nylon]));
+  const reg = normRegion([3,4], [5,6]);
+  ok(regionCount(reg) === 1, 'a block counts the hardware inside it');
+  moveRegion(reg, 1, 2);
+  ok(String(S.hardware[0].at) === '5,7', 'moving a block moves its hardware');
+  load(base([nylon]));
+  const made = duplicateRegion(reg, 3, 0);
+  ok(S.hardware.length === 2 && made.hardware[0].ref === 'MH2' && String(made.hardware[0].at) === '7,5' &&
+     made.hardware[0].id !== 'h1', 'duplicating a block copies its hardware under the next ref');
+  deleteRegion(reg);
+  ok(S.hardware.length === 1 && S.hardware[0].ref === 'MH2', 'deleting a block deletes only its own hardware');
+  load(base([Object.assign({}, nylon, {at:[3,4]})]));
+  const turned = rotateRegion(normRegion([3,4], [4,6]), 1);
+  ok(turned.ok && String(S.hardware[0].at) === '3,5', 'turning a block carries its hardware around');
+
+  /* trim and squeeze */
+  load(base([nylon], {pads:[]}));
+  ok(usedExtent() && usedExtent().r0 === 4 && usedExtent().c0 === 5, 'hardware alone still occupies the board');
+  trimBoard();
+  ok(S.hardware && S.hardware.length === 1, 'trimming the board never takes the hardware');
+  load(base([nylon]));
+  const plan = squeezePlan();
+  ok(plan.rows.indexOf(4) < 0 && plan.cols.indexOf(5) < 0, 'the squeeze leaves the line a screw is on');
+  ok(plan.rows.length > 0, 'and still finds the empty rows around it');
+
+  /* the file */
+  load(base([nylon, {ref:'MH1', at:[1,1], kind:'spacer', size:'M4'},
+             {at:[2,2], kind:'screw', size:'M9'}, {at:[2,3], kind:'bolt', size:'M3'},
+             {at:[2,4], kind:'hole', dia:50}, {at:[2,5], kind:'screw', dia:3},
+             {at:'x', kind:'hole', size:'M3'}, {at:[6,6], kind:'hole', size:'M3', insulated:true, value:' pot bushing '}]));
+  ok(S.hardware.length === 3, 'migrate keeps the three it can place and drops the five it cannot');
+  ok(MIGRATE_NOTES.some(n => /5 pieces of mounting hardware/.test(n)), 'and says how many it dropped');
+  ok(S.hardware.map(h => h.ref).join(' ') === 'MH1 MH2 MH3', 'a repeated or missing ref gets the next free one');
+  ok(S.hardware[2].insulated === undefined && S.hardware[2].value === 'pot bushing',
+     'a bare hole cannot be insulated, and a value is trimmed');
+  const again = migrate(JSON.parse(JSON.stringify(saveProject())));
+  ok(JSON.stringify(again.hardware) === JSON.stringify(S.hardware), 'hardware survives a save and a load unchanged');
+  load({version:2, name:'x', board:{rows:5, cols:5}, cuts:[], parts:[], ics:[], pads:[], hardware:'no'});
+  ok(S.hardware === undefined && MIGRATE_NOTES.some(n => /mounting hardware/.test(n)), 'a hardware list that is not a list is dropped and said');
+  load(base([Object.assign({}, nylon, {at:[40,5]})]));
+  ok(rules('bounds').some(x => /MH1/.test(x.msg)), 'hardware off the board is reported');
+
+  /* the build documents */
+  load(base([nylon, {id:'h2', ref:'MH2', at:[1,2], kind:'screw', size:'M3', insulated:true},
+             {id:'h3', ref:'MH3', at:[7,9], kind:'hole', dia:7, value:'pot bushing'}]));
+  const dl = drillList();
+  ok(dl.map(d => d.ref).join(' ') === 'MH2 MH1 MH3', 'the drill list runs row by row');
+  ok(dl[0].back === 10 && dl[0].mm === 3.2 && dl[2].mm === 7, 'with the hole counted from the back and the drill size');
+  const hb = hwBom();
+  ok(hb.length === 1 && hb[0].qty === 2 && hb[0].what === 'M3 nylon' && hb[0].refs.join(' ') === 'MH1 MH2',
+     'two nylon M3 screws are one line of two, and a bare hole is nothing to buy');
+  const md = buildMarkdown();
+  ok(md.indexOf('## Drill (3)') >= 0 && md.indexOf('## Hardware (2)') >= 0 && md.indexOf('pot bushing') >= 0,
+     'the markdown sheet lists what to drill and what to buy');
+  ok(md.indexOf('## Drill (3)') < md.indexOf('## Cuts'), 'drilling comes before cutting');
+  ok(/Z - mounting hardware. 3 holes to drill/.test(walkthrough()), 'the walkthrough drills first');
+  load(base([]));
+  ok(buildMarkdown().indexOf('## Drill') < 0 && buildMarkdown().indexOf('## Hardware') < 0 &&
+     walkthrough().indexOf('mounting hardware') < 0, 'a board with no hardware prints none of it');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

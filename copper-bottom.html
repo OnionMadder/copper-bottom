@@ -766,6 +766,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
       <button class="tool" data-tool="xfmr"><kbd>H</kbd><span class="lbl">transformer</span></button>
       <button class="tool" data-tool="ic"><kbd>U</kbd><span class="lbl">IC / DIP</span></button>
       <button class="tool" data-tool="pad"><kbd>P</kbd><span class="lbl">pad / wire out</span></button>
+      <button class="tool" data-tool="hw"><kbd>Z</kbd><span class="lbl">screw / hole</span></button>
       <div class="sect">Edit</div>
       <button class="tool" data-tool="fly"><kbd>F</kbd><span class="lbl">flying lead</span><span class="tbadge" id="flyBadge" title="off-board leads on the board - one hookup wire each"></span></button>
       <button class="tool" data-tool="erase"><kbd>Del</kbd><span class="lbl">erase</span></button>
@@ -1024,7 +1025,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.7.29';
+const APP_VERSION = 'v1.8.0';
 
 const K = (r,c) => r + ',' + c;
 
@@ -1453,6 +1454,32 @@ function migrate(obj){
     const lostW = (Array.isArray(o.offboard) ? had.length : 1) - keep.length;
     if(lostW) note(lostW + ' off-board wire' + (lostW === 1 ? '' : 's') + ' (not written as A.lug - B.lug)');
     if(keep.length) o.offboard = keep; else delete o.offboard;
+  }
+
+  /* mounting hardware: an entry this version cannot place is dropped and
+     counted. A ref that is missing or taken gets the next free one. */
+  if(o.hardware !== undefined){
+    const hadH = Array.isArray(o.hardware) ? o.hardware : [];
+    const okH = hadH.filter(hwValid);
+    const takenH = new Set();
+    const keepH = okH.map(h => {
+      const q = {id:(typeof h.id === 'string' && h.id) ? h.id : uid(), ref:'', at:[h.at[0], h.at[1]], kind:h.kind};
+      if(HW_SIZE[h.size]) q.size = h.size; else q.dia = h.dia;
+      if(h.insulated === true && h.kind !== 'hole') q.insulated = true;
+      if(typeof h.value === 'string' && h.value.trim()) q.value = h.value.trim();
+      const ref = (typeof h.ref === 'string' && h.ref.trim()) ? h.ref.trim().toUpperCase() : '';
+      if(ref && !takenH.has(ref)){ q.ref = ref; takenH.add(ref); }
+      return q;
+    });
+    for(const q of keepH){
+      if(q.ref) continue;
+      let n = 1;
+      while(takenH.has('MH' + n)) n++;
+      q.ref = 'MH' + n; takenH.add(q.ref);
+    }
+    const lostH = (Array.isArray(o.hardware) ? hadH.length : 1) - keepH.length;
+    if(lostH) note(lostH + ' piece' + (lostH === 1 ? '' : 's') + ' of mounting hardware (unknown kind or size)');
+    if(keepH.length) o.hardware = keepH; else delete o.hardware;
   }
 
   for(const k of ['cuts', 'parts', 'ics', 'pads']){
@@ -3168,10 +3195,174 @@ const BREAD_ROWS = 14;
 const BREAD_LABEL = ['+','-','J','I','H','G','F','E','D','C','B','A','-','+'];
 const breadZone = (r) => r < 2 ? 'railTop' : r < 7 ? 'bankTop' : r < 12 ? 'bankBot' : 'railBot';
 
+/* ============================================================
+   MOUNTING HARDWARE
+   A screw through the board, a spacer under it, or a bare drilled hole.
+   None of it is in the circuit and all of it changes the circuit: the drill
+   takes the copper with it exactly as a cut does, and a metal nut or spacer
+   lies across every strip it covers and joins them.
+
+   S.hardware is a list of {id, ref, at:[r,c], kind, size | dia, insulated,
+   value}. `kind` is hole, screw or spacer. A screw or a spacer has a thread
+   `size` from the table below. A bare hole has either a `size` (the
+   clearance hole for that thread) or its own `dia` in millimeters.
+
+   `drill` is the clearance hole, ISO 273 close fit. `land` is the widest
+   metal against the board: the hex nut across its corners, from the across
+   flats of ISO 4032 (5, 5.5 and 7 mm) over cos 30. A hex spacer of the same
+   thread is the same size or smaller.
+
+   Inch threads are left out. Two published tables disagree on whether a
+   #4-40 nut is 1/4 in or 5/16 in across the flats, and a land that is a
+   guess is a short reported or missed on a guess. A bare hole with its own
+   diameter covers them in the meantime.
+   ============================================================ */
+const HW_SIZE = {
+  'M2.5': {drill:2.7, land:5.8},
+  'M3':   {drill:3.2, land:6.4},
+  'M4':   {drill:4.3, land:8.1},
+};
+const HW_KIND = {hole:'drilled hole', screw:'screw and nut', spacer:'screw and spacer'};
+const HW_DIA_MIN = 2, HW_DIA_MAX = 20;      // mm, a bare hole's own diameter
+/* Copper per strip and per perfboard pad, in holes. A strip is about 2 mm
+   of copper on a 2.54 mm pitch; a pad is a ring about 1.8 mm across. */
+const HW_STRIP_HALF = 0.4, HW_PAD_R = 0.35;
+
+const hwList = () => Array.isArray(S.hardware) ? S.hardware : [];
+const hwPitchMM = () => boardPitch() * 25.4;
+function hwDrillMM(h){
+  if(h.kind === 'hole' && !HW_SIZE[h.size]) return h.dia;
+  return HW_SIZE[h.size].drill;
+}
+/* a bare hole has no nut: what it takes off the board is the drill and no more */
+function hwLandMM(h){ return h.kind === 'hole' ? hwDrillMM(h) : HW_SIZE[h.size].land; }
+function hwMetal(h){ return h.kind !== 'hole' && h.insulated !== true; }
+function hwWhat(h){
+  if(h.kind === 'hole') return (HW_SIZE[h.size] ? h.size + ' clearance, ' : '') + hwDrillMM(h) + ' mm hole';
+  return h.size + ' ' + HW_KIND[h.kind] + (h.insulated === true ? ', insulated' : '');
+}
+function hwValid(h){
+  if(!h || typeof h !== 'object' || !isHole(h.at) || !HW_KIND[h.kind]) return false;
+  if(HW_SIZE[h.size]) return true;
+  return h.kind === 'hole' && Number.isFinite(h.dia) && h.dia >= HW_DIA_MIN && h.dia <= HW_DIA_MAX;
+}
+function nextHwRef(){
+  const used = new Set(hwList().map(h => h.ref));
+  let n = 1;
+  while(used.has('MH' + n)) n++;
+  return 'MH' + n;
+}
+
+/* Every hole whose center the drill removes, as keys. Its own hole always;
+   a wide one takes its neighbors too. */
+function hwDrillKeys(h){
+  const R = hwDrillMM(h) / 2 / hwPitchMM(), n = Math.ceil(R), out = [];
+  for(let dr = -n; dr <= n; dr++)
+    for(let dc = -n; dc <= n; dc++){
+      if(Math.hypot(dr, dc) > R + 1e-9 && (dr || dc)) continue;
+      const r = h.at[0] + dr, c = h.at[1] + dc;
+      if(r >= 0 && c >= 0 && r < S.board.rows && c < S.board.cols) out.push(K(r, c));
+    }
+  return out;
+}
+/* key -> the hardware whose drill took that hole */
+function drilledMap(){
+  const m = new Map();
+  for(const h of hwList()) for(const k of hwDrillKeys(h)) if(!m.has(k)) m.set(k, h);
+  return m;
+}
+
+/* How far a hole's copper is from a point, in holes. On stripboard the
+   copper of a live hole is its cell of the strip; on the other boards it is
+   the pad around the hole. */
+function hwCopperDist(h, r, c){
+  const dr = Math.abs(r - h.at[0]), dc = Math.abs(c - h.at[1]);
+  if(noCuts()) return Math.max(0, Math.hypot(dr, dc) - HW_PAD_R);
+  return Math.hypot(Math.max(0, dc - 0.5), Math.max(0, dr - HW_STRIP_HALF));
+}
+/* The nets whose copper the land of this hardware lies on. Needs NET. */
+function hwNetsUnder(h){
+  const R = hwLandMM(h) / 2 / hwPitchMM(), n = Math.ceil(R + 0.5), ids = new Set();
+  for(let dr = -n; dr <= n; dr++)
+    for(let dc = -n; dc <= n; dc++){
+      const r = h.at[0] + dr, c = h.at[1] + dc;
+      if(r < 0 || c < 0 || r >= S.board.rows || c >= S.board.cols) continue;
+      if(hwCopperDist(h, r, c) >= R - 1e-9) continue;
+      const net = NET.netAt(r, c);
+      if(net) ids.add(net.id);
+    }
+  return [...ids].sort((a, b) => a - b);
+}
+/* the footprint the head, nut or spacer takes, as a body for the overlap tests */
+function hwBody(h){
+  return {shape:'disc', dia:hwLandMM(h) / hwPitchMM(), cx:h.at[1], cy:h.at[0], ang:0, ref:h.ref, pinned:true};
+}
+
+/* One picture of a piece of hardware at true size, shared by every view so
+   they cannot drift. `pitch` is that view's distance between holes, and `k`
+   its colors: {hole, ink, land, landFill, sw}. A spacer is its hexagon, a
+   screw is its round head, and both show the cross of the screw. A bare
+   hole is the hole and a center mark running past its edge. Nylon, or
+   anything else insulated, wears a dashed outline. */
+function hwGlyph(h, cx, cy, pitch, k){
+  const n = v => +v.toFixed(2);
+  const rd = hwDrillMM(h) / 2 / hwPitchMM() * pitch, rl = hwLandMM(h) / 2 / hwPitchMM() * pitch;
+  const sw = k.sw, o = [];
+  const edge = '" fill="' + k.land + '" fill-opacity="' + k.landFill + '" stroke="' + k.ink + '" stroke-width="' + sw + '"' +
+    (h.insulated === true ? ' stroke-dasharray="' + n(sw * 2.6) + ' ' + n(sw * 2) + '"' : '') + '/>';
+  if(h.kind === 'spacer'){
+    const pts = [];
+    for(let i = 0; i < 6; i++){
+      const a = Math.PI / 3 * i;
+      pts.push(n(cx + rl * Math.cos(a)) + ',' + n(cy + rl * Math.sin(a)));
+    }
+    o.push('<polygon points="' + pts.join(' ') + edge);
+  }else if(h.kind === 'screw')
+    o.push('<circle cx="' + n(cx) + '" cy="' + n(cy) + '" r="' + n(rl) + edge);
+  o.push('<circle cx="' + n(cx) + '" cy="' + n(cy) + '" r="' + n(rd) + '" fill="' + k.hole +
+         '" stroke="' + k.ink + '" stroke-width="' + sw + '"/>');
+  const t = h.kind === 'hole' ? rd + pitch * 0.2 : rd * 0.62;
+  o.push('<path d="M' + n(cx - t) + ' ' + n(cy) + 'H' + n(cx + t) + 'M' + n(cx) + ' ' + n(cy - t) + 'V' + n(cy + t) +
+         '" fill="none" stroke="' + k.ink + '" stroke-width="' + n(h.kind === 'hole' ? sw * 0.7 : sw * 1.3) + '" stroke-linecap="round"/>');
+  return o.join('');
+}
+/* Every hole with no copper left in it: the cuts and whatever a drill took.
+   The drawings break their strips on this; the checks keep the two apart. */
+function deadKeys(){
+  const s = new Set(S.cuts);
+  for(const k of drilledMap().keys()) s.add(k);
+  return s;
+}
+/* how far below its hole a piece of hardware's name sits, in that view's units */
+function hwLabelDrop(h, pitch){ return hwLandMM(h) / 2 / hwPitchMM() * pitch; }
+
+/* What to drill, in the order you would work across the back of the board. */
+function drillList(){
+  return hwList().map(h => ({ref:h.ref, row:h.at[0], col:h.at[1], back:backHole(h.at[1]),
+                             mm:hwDrillMM(h), what:hwWhat(h), value:h.value || ''}))
+    .sort((a, b) => a.row - b.row || a.back - b.back);
+}
+/* Hardware as lines you buy. A bare hole is nothing to buy. */
+function hwBom(){
+  const rows = new Map();
+  for(const h of hwList()){
+    if(h.kind === 'hole') continue;
+    const what = h.size + (h.insulated === true ? ' nylon' : '') + (h.value ? ' - ' + h.value : '');
+    const key = h.kind + '|' + what;
+    if(!rows.has(key)) rows.set(key, {kind:h.kind, name:HW_KIND[h.kind], what:what, qty:0, refs:[]});
+    const r = rows.get(key);
+    r.qty++; r.refs.push(h.ref);
+  }
+  const out = [...rows.values()];
+  for(const r of out) r.refs.sort((a, b) => a.localeCompare(b, undefined, {numeric:true}));
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.what.localeCompare(b.what));
+}
+
 function computeNets(){
   const rows = S.board.rows, cols = S.board.cols;
   const cut = new Set(S.cuts);
-  const seg = [];            // seg[r][c] -> segment id, or null on a cut
+  const drilled = drilledMap();
+  const seg = [];            // seg[r][c] -> segment id, or null on a cut or a drilled hole
   const segHoles = [];
   let n = 0;
 
@@ -3183,6 +3374,7 @@ function computeNets(){
       seg[r] = [];
       const zone = breadZone(r);
       for(let c = 0; c < cols; c++){
+        if(drilled.has(K(r,c))){ seg[r][c] = null; continue; }
         const key = zone[0] === 'r' ? zone + ':' + r : zone + ':' + c;
         if(!ids.has(key)){ ids.set(key, n++); segHoles[ids.get(key)] = []; }
         const s = ids.get(key);
@@ -3195,7 +3387,7 @@ function computeNets(){
     seg[r] = [];
     let cur = -1;
     for(let c = 0; c < cols; c++){
-      if(!noCuts() && cut.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
+      if((!noCuts() && cut.has(K(r,c))) || drilled.has(K(r,c))){ seg[r][c] = null; cur = -1; continue; }
       if(isPerf() || cur < 0){ cur = n++; segHoles[cur] = []; }
       seg[r][c] = cur;
       segHoles[cur].push([r,c]);
@@ -3345,6 +3537,7 @@ function occupants(r, c){
     if(n) out.push({type:'ic', ic:ic, pin:n});
   }
   for(const d of S.pads) if(d.at[0] === r && d.at[1] === c) out.push({type:'pad', pad:d});
+  for(const h of hwList()) if(h.at[0] === r && h.at[1] === c) out.push({type:'hw', hw:h});
   return out;
 }
 function padsOnNet(net){
@@ -3577,6 +3770,19 @@ const DRC_WHY = {
     'The tool cannot tell which part or which lug you mean, so that connection is left out of ' +
     'the drawing, the walkthrough and the build sheet. Somebody building from those never makes ' +
     'it, and nothing tells them it was ever meant to be there.',
+  'on-drill':
+    'That hole gets drilled out for the hardware, and the copper around it goes with the drill. ' +
+    'There is nothing left there to solder a lead to.',
+  'hw-clash':
+    'A screw head, a nut or a spacer sits flat against the board and needs the room. A solder joint ' +
+    'or a part body under it means the hardware will not seat, or it crushes what is there when you tighten it.',
+  'hw-short':
+    'A metal nut or spacer pressed against the copper is a wire across every strip it covers. ' +
+    'Those nets are joined the moment you tighten the screw. Use nylon hardware or a fiber washer, ' +
+    'or cut the strips clear around it.',
+  'hw-live':
+    'Metal hardware on a live strip carries that strip to whatever it is bolted to. In a metal ' +
+    'enclosure that is the whole box, and the box is usually ground through the jacks.',
   'vee-ground':
     'That pin is the negative supply of the chip, and at ground it sits at 0V. On a split rail the ' +
     'part needs the negative side to pull below ground - tied to ground it has none, its outputs ' +
@@ -3594,6 +3800,7 @@ function runDRC(){
 
   /* --- off the board, and leads on dead holes --- */
   const sites = [];
+  const drilled = drilledMap();
   for(const p of S.parts){
     const names = legLabels(p);
     p.pins.forEach((at, i) => {
@@ -3610,6 +3817,7 @@ function runDRC(){
     const r = s.at[0], c = s.at[1];
     if(!inB(r, c)) add('error', 'bounds', s.who + ' is off the board', s.at);
     else if(cutSet.has(K(r,c))) add('error', 'on-cut', s.who + ' sits on a cut hole', s.at);
+    else if(drilled.has(K(r,c))) add('error', 'on-drill', s.who + ' sits in the hole drilled for ' + drilled.get(K(r,c)).ref, s.at);
   }
 
   /* --- group every connection by net --- */
@@ -3886,6 +4094,59 @@ function runDRC(){
     add('warn', 'body-clash',
         clash.a + ' and ' + clash.b + ' bodies overlap - ' + clash.why,
         clash.at);
+
+  /* --- mounting hardware ---
+     Three things a screw does to a board that the drawing does not show.
+     The lead in a drilled hole is reported with the cut holes above. Here:
+     what ends up under the head or the nut, and what a metal one joins. */
+  {
+    const liveNet = id => (byNet.get(id) || []).length > 0;
+    const bs = hwList().length ? bodies() : [];
+    for(const h of hwList()){
+      if(!inB(h.at[0], h.at[1])){ add('error', 'bounds', h.ref + ' is off the board', h.at); continue; }
+      const R = hwLandMM(h) / 2 / hwPitchMM();
+      const piece = h.kind === 'hole' ? 'hole' : h.kind === 'spacer' ? 'spacer' : 'nut';
+
+      /* one finding per thing in the way, a lead or its body, whichever
+         comes first */
+      const under = new Map();
+      const own = new Set(hwDrillKeys(h));
+      for(const s of sites){
+        if(!inB(s.at[0], s.at[1]) || own.has(K(s.at[0], s.at[1]))) continue;
+        if(Math.hypot(s.at[0] - h.at[0], s.at[1] - h.at[1]) >= R - 1e-9) continue;
+        const who = s.who.replace(/ (lead|leg|pin) .*$/, '');
+        if(!under.has(who)) under.set(who, {at:s.at, how:who === s.who ? 'its wire is soldered there' : s.who + ' is soldered there'});
+      }
+      const disc = hwBody(h);
+      for(const b of bs){
+        if(!b.pinned || under.has(b.ref)) continue;
+        if(bodiesOverlap(disc, b)) under.set(b.ref, {at:h.at, how:'its body is in the way'});
+      }
+      for(const o of hwList()){
+        if(o === h || o.ref >= h.ref) continue;
+        if(bodiesOverlap(disc, hwBody(o))) under.set(o.ref, {at:h.at, how:'the two overlap'});
+      }
+      for(const [who, u] of under)
+        add('warn', 'hw-clash', who + ' is under the ' + piece + ' of ' + h.ref + ' - ' + u.how, u.at);
+
+      if(!hwMetal(h)) continue;
+      const ids = hwNetsUnder(h).filter(liveNet);
+      if(ids.length > 1)
+        add('error', 'hw-short',
+            h.ref + ' is metal and its ' + piece + ' lies on ' + ids.length + ' nets (' +
+            ids.map(id => netName(NET.nets[id])).join(', ') + ') - it joins them',
+            h.at, null, {type:'hw-insulate', id:h.id});
+      else if(ids.length === 1){
+        const net = NET.nets[ids[0]];
+        const gnd = padsOnNet(net).some(d => (powerClass(d.label) || {}).cls === 'gnd');
+        if(!gnd)
+          add('warn', 'hw-live',
+              h.ref + ' is metal and its ' + piece + ' lies on ' + netName(net) +
+              ' - the screw, and whatever it bolts to, is on that net',
+              h.at, net.id, {type:'hw-insulate', id:h.id});
+      }
+    }
+  }
 
   /* --- DIP straddling an uncut strip ---
      A row whose two pins ride a RAIL is left alone: a 4070's ground pin faces
@@ -5002,6 +5263,13 @@ function walkthrough(){
        def.about ? ic.part + ' - ' + def.about + '.' : null].filter(Boolean));
   }
 
+  if(hwList().length){
+    const dl = drillList();
+    step('Z - mounting hardware. ' + dl.length + ' hole' + (dl.length === 1 ? '' : 's') + ' to drill, before anything is soldered.',
+      dl.map(d => d.ref + ' at ' + at([d.row, d.col]) + ' - ' + d.mm + ' mm, ' + d.what)
+        .concat(['The drill takes the copper around the hole with it, so it breaks the strip the way a cut does.']));
+  }
+
   /* cuts the builder has to make by hand, as opposed to the ones a chip brought */
   const owned = new Set();
   for(const ic of S.ics) for(const k of ic.autoCuts || []) owned.add(k);
@@ -5417,6 +5685,17 @@ function buildMarkdown(){
          : isBread() ? ', PERMANENT BREADBOARD - rails top and bottom, tie columns of five.' : '.'));
   L.push('');
 
+  const drills = drillList();
+  if(drills.length){
+    L.push('## Drill (' + drills.length + ')');
+    L.push('');
+    L.push('Drill these before anything is soldered. Each one takes the copper around it, the same as a cut.');
+    L.push('');
+    table(['ref', 'hole', 'from left (back)', 'drill', 'for'],
+          drills.map(d => [d.ref, holeShort(d.row, d.col), d.back, d.mm + ' mm',
+                           d.what + (d.value ? ' - ' + d.value : '')]));
+  }
+
   const cuts = cutList();
   if(!noCuts()){
     L.push('## Cuts (' + cuts.length + ')');
@@ -5446,6 +5725,13 @@ function buildMarkdown(){
     L.push('');
     table(['qty', 'part', 'value', 'ids'],
           offParts.map(r => [r.qty, r.name, r.what || '-', r.refs.join(' ')]));
+  }
+
+  const hw = hwBom();
+  if(hw.length){
+    L.push('## Hardware (' + hw.reduce((n, r) => n + r.qty, 0) + ')');
+    L.push('');
+    table(['qty', 'part', 'size', 'refs'], hw.map(r => [r.qty, r.name, r.what, r.refs.join(' ')]));
   }
 
   const items = buildList();
@@ -5512,11 +5798,12 @@ function regionContents(reg){
            }),
     pads:  S.pads.filter(d => inRegion(reg, d.at[0], d.at[1])),
     cuts:  S.cuts.filter(k => { const p = k.split(','); return inRegion(reg, +p[0], +p[1]); }),
+    hardware: hwList().filter(h => inRegion(reg, h.at[0], h.at[1])),
   };
 }
 function regionCount(reg){
   const c = regionContents(reg);
-  return c.parts.length + c.ics.length + c.pads.length + c.cuts.length;
+  return c.parts.length + c.ics.length + c.pads.length + c.cuts.length + c.hardware.length;
 }
 function regionFits(reg, dr, dc){
   return reg.r0 + dr >= 0 && reg.c0 + dc >= 0 &&
@@ -5528,7 +5815,7 @@ const shiftKey = (k, dr, dc) => { const p = k.split(','); return K(+p[0] + dr, +
    is pushed before the next is named, so a copied R1 R2 becomes R3 R4. */
 function duplicateRegion(reg, dr, dc){
   const src = regionContents(reg);
-  const made = {parts:[], ics:[], pads:[], cuts:[]};
+  const made = {parts:[], ics:[], pads:[], cuts:[], hardware:[]};
 
   for(const k of src.cuts){
     const nk = shiftKey(k, dr, dc);
@@ -5560,6 +5847,14 @@ function duplicateRegion(reg, dr, dc){
     S.pads.push(q);
     made.pads.push(q);
   }
+  for(const h of src.hardware){
+    const q = JSON.parse(JSON.stringify(h));
+    q.id = uid();
+    q.at = [h.at[0] + dr, h.at[1] + dc];
+    q.ref = nextHwRef();
+    S.hardware.push(q);
+    made.hardware.push(q);
+  }
   return made;
 }
 
@@ -5577,6 +5872,7 @@ function moveRegion(reg, dr, dc){
     ic.autoCuts = (ic.autoCuts || []).map(k => shiftKey(k, dr, dc));
   }
   for(const d of src.pads) d.at = [d.at[0] + dr, d.at[1] + dc];
+  for(const h of src.hardware) h.at = [h.at[0] + dr, h.at[1] + dc];
   return src;
 }
 
@@ -5591,6 +5887,11 @@ function deleteRegion(reg){
   S.parts = S.parts.filter(p => !dp.has(p.id));
   S.ics   = S.ics.filter(x => !di.has(x.id));
   S.pads  = S.pads.filter(x => !da.has(x.id));
+  if(src.hardware.length){
+    const dh = new Set(src.hardware.map(x => x.id));
+    S.hardware = S.hardware.filter(x => !dh.has(x.id));
+    if(!S.hardware.length) delete S.hardware;
+  }
   return src;
 }
 
@@ -5622,7 +5923,7 @@ function lineEdit(axis, at, delta){
       if(at > icStart(ic) && at <= icEnd(ic))
         return {ok:false, reason:'that line runs through ' + ic.ref + ', and a DIP cannot stretch'};
 
-  const removed = {parts:[], ics:[], pads:[], cuts:0};
+  const removed = {parts:[], ics:[], pads:[], cuts:0, hardware:[]};
   const bump = p => axis ? [p[0], p[1] + delta] : [p[0] + delta, p[1]];
 
   /* auto-cuts are derived from where their IC sits, so lift them out now and
@@ -5636,6 +5937,7 @@ function lineEdit(axis, at, delta){
     for(const p of S.parts) p.pins = p.pins.map(g => g[axis] >= at ? bump(g) : g);
     for(const d of S.pads) if(d.at[axis] >= at) d.at = bump(d.at);
     for(const ic of S.ics) if(ic.pin1[axis] >= at) ic.pin1 = bump(ic.pin1);
+    for(const h of hwList()) if(h.at[axis] >= at) h.at = bump(h.at);
   }else{
     cuts = cuts.filter(p => { if(p[axis] === at){ removed.cuts++; return false; } return true; })
                .map(p => p[axis] > at ? bump(p) : p);
@@ -5655,6 +5957,14 @@ function lineEdit(axis, at, delta){
       if(ic.pin1[axis] > at) ic.pin1 = bump(ic.pin1);
       return true;
     });
+    if(hwList().length){
+      S.hardware = S.hardware.filter(h => {
+        if(h.at[axis] === at){ removed.hardware.push(h.ref); return false; }
+        if(h.at[axis] > at) h.at = bump(h.at);
+        return true;
+      });
+      if(!S.hardware.length) delete S.hardware;
+    }
   }
 
   S.board[dim] = size + delta;
@@ -5753,6 +6063,7 @@ function rotateRegion(reg, turns){
   }
   for(const p of src.parts) p.pins = p.pins.map(g => map(g[0], g[1]));
   for(const d of src.pads) d.at = map(d.at[0], d.at[1]);
+  for(const h of src.hardware) h.at = map(h.at[0], h.at[1]);
 
   return {ok:true, region:{r0:reg.r0, c0:reg.c0, r1:reg.r0 + nH - 1, c1:reg.c0 + nW - 1}};
 }
@@ -7771,6 +8082,7 @@ function usedExtent(){
   };
   for(const p of S.parts) for(const q of p.pins) hit(q[0], q[1]);
   for(const d of S.pads) hit(d.at[0], d.at[1]);
+  for(const h of hwList()) hit(h.at[0], h.at[1]);
   for(const ic of S.ics){
     const e = icExtent(ic);
     hit(e.r0, e.c0); hit(e.r1, e.c1);
@@ -7828,7 +8140,7 @@ function trimBoard(){
       const r = deleteLine(t[0], t[1]);
       if(!r.ok) continue;
       const lost = r.removed &&
-        (r.removed.parts.length + r.removed.ics.length + r.removed.pads.length);
+        (r.removed.parts.length + r.removed.ics.length + r.removed.pads.length + r.removed.hardware.length);
       if(lost){ took = r.removed; break; }
       did = true;
       break;
@@ -7915,7 +8227,7 @@ function squeezePlan(){
           const keep = JSON.stringify(S);
           const r = deleteLine(axis, at);
           const took = !r.ok || r.removed.parts.length || r.removed.ics.length ||
-                       r.removed.pads.length || r.removed.cuts;
+                       r.removed.pads.length || r.removed.cuts || r.removed.hardware.length;
           let ok = !took && netSignature() === sig;
           if(ok){
             const now = drcCounts();
@@ -8494,7 +8806,7 @@ function render(){
     }
   }
   const hl = highlightedNet();
-  const cutSet = new Set(S.cuts);
+  const cutSet = deadKeys();
   const o = [];
 
   o.push('<svg id="board" viewBox="' + (-gutL) + ' ' + (-gutT) + ' ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
@@ -9145,6 +9457,18 @@ function render(){
     }
   }
 
+  /* --- mounting hardware: over the copper its drill removes --- */
+  for(const h of hwList()){
+    if(h.at[0] >= rows || h.at[1] >= cols) continue;
+    const hx = X(h.at[1]), hy = Y(h.at[0]), drop = hwLabelDrop(h, PITCH);
+    if(SEL && SEL.type === 'hw' && SEL.id === h.id)
+      o.push('<circle cx="' + hx + '" cy="' + hy + '" r="' + (drop + 6) +
+             '" fill="' + C('accent') + '" fill-opacity="0.22" stroke="' + C('accent') + '" stroke-width="1.8"/>');
+    o.push(hwGlyph(h, hx, hy, PITCH, {hole:C('hole'), ink:C('link'), land:C('chip'), landFill:0.6, sw:1.6}));
+    o.push('<text class="pad" text-anchor="middle" x="' + hx + '" y="' + (hy + drop + 12) +
+           '" fill="' + C('link') + '">' + esc(h.ref) + '</text>');
+  }
+
   /* --- cuts, drawn last so nothing can cover them.
      A DIP body sits directly over its own auto-cuts, and those are the cuts
      you have to make before the IC can go in. --- */
@@ -9222,6 +9546,9 @@ function render(){
         o.push('<circle class="phit pinhit" data-part="' + sp.id + '" data-pin="' + i +
                '" cx="' + X(q[1]) + '" cy="' + Y(q[0]) + '" r="' + (PITCH*0.34) + '" fill="transparent"/>'));
     }
+    for(const h of hwList())
+      o.push('<circle class="phit" data-hw="' + h.id + '" cx="' + X(h.at[1]) + '" cy="' + Y(h.at[0]) +
+             '" r="' + Math.max(PITCH * 0.4, hwLabelDrop(h, PITCH)) + '" fill="transparent"/>');
     for(const d of S.pads)
       o.push('<circle class="phit" data-pad="' + d.id + '" cx="' + X(d.at[1]) +
              '" cy="' + Y(d.at[0]) + '" r="' + (PITCH*0.4) + '" fill="transparent"/>');
@@ -9272,7 +9599,7 @@ function render(){
 
   stage.innerHTML = o.join('') + (FLIP ? renderSolderView(hl) : '');
   if(typeof startup !== 'undefined')
-    startup.hidden = !!(S.parts.length || S.ics.length || S.pads.length || S.cuts.length);
+    startup.hidden = !!(S.parts.length || S.ics.length || S.pads.length || S.cuts.length || hwList().length);
   document.getElementById('zlvl').textContent = Math.round(Z * 100) + '%';
   /* The pin used to be announced only in the inspect readout, which is gone
      the moment you pick another tool - so a net stayed lit with nothing on
@@ -9307,7 +9634,7 @@ function renderSolderView(hl){
   const W = MARGIN * 2 + (cols - 1) * PITCH;
   const H = MARGIN * 2 + (rows - 1) * PITCH;
   const mX = c => X(cols - 1 - c);
-  const cutSet = new Set(S.cuts);
+  const cutSet = deadKeys();
   const o = [];
 
   o.push('<svg id="board2" viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.round(W * Z) +
@@ -9405,6 +9732,14 @@ function renderSolderView(hl){
            '" r="8" fill="none" stroke="' + C('padMark') + '" stroke-width="1.6"/>');
     o.push('<text class="pad" fill="' + C('padMark') + '" x="' + (mX(d.at[1]) + 11) + '" y="' + (Y(d.at[0]) + 3.5) + '">' +
            esc(d.label) + '</text>');
+  }
+
+  /* mounting hardware: this is the side its nut or spacer presses on */
+  for(const h of hwList()){
+    if(h.at[0] >= rows || h.at[1] >= cols) continue;
+    o.push(hwGlyph(h, mX(h.at[1]), Y(h.at[0]), PITCH, {hole:C('hole'), ink:C('link'), land:C('chip'), landFill:0.6, sw:1.6}));
+    o.push('<text class="pad" text-anchor="middle" x="' + mX(h.at[1]) + '" y="' + (Y(h.at[0]) + hwLabelDrop(h, PITCH) + 12) +
+           '" fill="' + C('link') + '">' + esc(h.ref) + '</text>');
   }
 
   /* cuts last and boldest - they are what the back is FOR */
@@ -9580,6 +9915,16 @@ function applyFix(f){
     if(!link) return;
     pushUndo();
     link.insulated = true;
+    commit();
+    return;
+  }
+  if(f.fix.type === 'hw-insulate'){
+    /* Says this hardware is nylon, or sits on a fiber washer. Changes no
+       wiring, and undo puts it back. */
+    const h = hwList().find(x => x.id === f.fix.id);
+    if(!h) return;
+    pushUndo();
+    h.insulated = true;
     commit();
     return;
   }
@@ -9772,7 +10117,7 @@ function exportSVG(side, fit){
            '" x2="' + ex.toFixed(2) + '" y2="' + ey.toFixed(2) +
            '" stroke="#000" stroke-width="0.18" stroke-dasharray="0.9 0.9" opacity="0.5"/>';
   });
-  const cutSet = new Set(S.cuts);
+  const cutSet = deadKeys();
   const o = [];
   const T = (tx, ty, s, size, extra) => '<text x="' + tx + '" y="' + ty + '" font-size="' + size +
         '" font-family="monospace" ' + (extra || '') + '>' + esc(s) + '</text>';
@@ -10224,6 +10569,14 @@ function exportSVG(side, fit){
              '" stroke="#000" stroke-width="0.35" stroke-dasharray="1.2 1" stroke-linecap="round"/>');
     }
 
+  /* ---- mounting hardware, at true size like everything else here ---- */
+  for(const h of hwList()){
+    if(h.at[0] >= rows || h.at[1] >= cols) continue;
+    const hx = x(h.at[1]), hy = y(h.at[0]);
+    o.push(hwGlyph(h, hx, hy, MM, {hole:'#fff', ink:'#000', land:'#fff', landFill:0.7, sw:0.28}));
+    o.push(TL(hx, hy + hwLabelDrop(h, MM) + 2.1, h.ref, 1.9, 'text-anchor="middle" fill="#000"'));
+  }
+
   /* ---- cuts. On screen they can be loud - they are pink against colored
      parts. In monochrome a fat X at every cut overwhelmed everything around
      it, so here the BAND BREAK is the cut's main signal (the copper already
@@ -10357,6 +10710,23 @@ function renderSheet(){
     '<tr><td><b>' + esc(w.label) + '</b></td><td class="mono">' + holeShort(w.row, w.col) + '</td><td>' +
     w.back + '</td><td class="fill">' + esc(w.to || '') + '</td></tr>').join('');
 
+  const drills = drillList(), hwRows = hwBom();
+  const drillTable = drills.length
+    ? '<h2>Drill <span class="n">' + drills.length + '</span></h2>' +
+      '<p>Drill these before anything is soldered. Each one takes the copper around it, the same as a cut. ' +
+      '<b>from left (back)</b> counts holes from the left edge as you look at the back of the board.</p>' +
+      '<table><thead><tr><th></th><th>ref</th><th>hole</th><th>from left (back)</th><th>drill</th><th>for</th></tr></thead><tbody>' +
+      drills.map(d => '<tr><td>' + box('drill:' + d.ref) + '</td><td><b>' + esc(d.ref) + '</b></td><td class="mono">' +
+        holeShort(d.row, d.col) + '</td><td><b>' + d.back + '</b></td><td>' + d.mm + ' mm</td><td>' +
+        esc(d.what + (d.value ? ' - ' + d.value : '')) + '</td></tr>').join('') + '</tbody></table>'
+    : '';
+  const hwTable = hwRows.length
+    ? '<h2>Hardware <span class="n">' + hwRows.reduce((n, r) => n + r.qty, 0) + '</span></h2>' +
+      '<table><thead><tr><th>qty</th><th>part</th><th>size</th><th>refs</th></tr></thead><tbody>' +
+      hwRows.map(r => '<tr><td><b>' + r.qty + '</b></td><td>' + esc(r.name) + '</td><td>' + esc(r.what) +
+        '</td><td>' + esc(r.refs.join(' ')) + '</td></tr>').join('') + '</tbody></table>'
+    : '';
+
   sheetdoc.innerHTML =
     '<div class="brandrow"><span class="bwordmark">COPPER<span>BOTTOM</span></span>' +
     '<span class="bsite">stripboard build sheet - messopedals.com/diy/copper-bottom  ' +
@@ -10368,6 +10738,7 @@ function renderSheet(){
     '<p>The board as you see it with the copper facing you. Column numbers are still ' +
       'those of the layout, so a coordinate from the cut list lands on the same hole in both views.</p>' +
     '<div class="svgwrap">' + exportSVG('solder') + '</div>' +
+    drillTable +
     (noCuts() ? '' :
     '<h2>Cuts <span class="n">' + cuts.length + '</span></h2>' +
     '<p>Made on the solder side. <b>from left (back)</b> counts holes from the left edge as you ' +
@@ -10380,6 +10751,7 @@ function renderSheet(){
     '<table><thead><tr><th>qty</th><th>part</th><th>value</th><th>refs</th></tr></thead>' +
       '<tbody>' + (partRows || '<tr><td colspan="4">nothing placed</td></tr>') + '</tbody></table>' +
     offTable +
+    hwTable +
     '<h2>Build order <span class="n">' + items.length + '</span></h2>' +
     '<p>Flat parts first, tall parts last, so nothing blocks the iron.</p>' +
     '<table><thead><tr><th></th><th>#</th><th>ref</th><th>part</th><th>value</th><th>holes</th></tr></thead>' +
@@ -10528,7 +10900,7 @@ function classicSVG(opts){
   const TITLE_H = 86;
   const boardTop = TITLE_H + 34;
   const boardH = (rows - 1) * CP + CP;
-  const cutSet = new Set(S.cuts);
+  const cutSet = deadKeys();
   const rowName = r => (r >= 26 ? 'a' : '') + String.fromCharCode(97 + (r % 26));
   const x = c => BX + CP / 2 + c * CP;
   const y = r => boardTop + CP / 2 + r * CP;
@@ -10635,6 +11007,14 @@ function classicSVG(opts){
       }
       o.push('<circle cx="' + x(c2) + '" cy="' + y(r) + '" r="2.1" fill="#FDF3DF" stroke="#B07A1E" stroke-width="0.6"/>');
     }
+  }
+
+  /* ---- mounting hardware: drawn where its drill takes the copper ---- */
+  for(const h of hwList()){
+    if(h.at[0] >= rows || h.at[1] >= cols) continue;
+    o.push(hwGlyph(h, x(h.at[1]), y(h.at[0]), CP, {hole:'#FFFFFF', ink:'#222', land:'#FFFFFF', landFill:0.7, sw:1.5}));
+    T(x(h.at[1]), y(h.at[0]) + hwLabelDrop(h, CP) + 12, h.ref, 11,
+      'text-anchor="middle" fill="#111" font-family="Verdana, sans-serif" font-weight="bold"');
   }
 
   /* ---- pads: a dot on the hole, the label pushed to the nearer margin ----
@@ -10955,6 +11335,12 @@ function classicSVG(opts){
         }
         o.push('<circle cx="' + xm(c2) + '" cy="' + yb(r) + '" r="2.1" fill="#FDF3DF" stroke="#B07A1E" stroke-width="0.6"/>');
       }
+    }
+    for(const h of hwList()){
+      if(h.at[0] >= rows || h.at[1] >= cols) continue;
+      o.push(hwGlyph(h, xm(h.at[1]), yb(h.at[0]), CP, {hole:'#FFFFFF', ink:'#222', land:'#FFFFFF', landFill:0.7, sw:1.5}));
+      T(xm(h.at[1]), yb(h.at[0]) + hwLabelDrop(h, CP) + 12, h.ref, 11,
+        'text-anchor="middle" fill="#111" font-family="Verdana, sans-serif" font-weight="bold"');
     }
     /* solder points: a leg that is bent up is not soldered, so it gets no dot */
     const bentUp = (p, i) => Array.isArray(p.bent) && p.bent.indexOf(i) >= 0;
@@ -11578,10 +11964,11 @@ const DEVICE = {trans:'2N5088', reg:'78L05', trim:'trimpot', pot:'potentiometer'
                 xfmr:'600:600 line', xfmr5:'600CT:600', xfmrct:'600CT:600CT',
                 xfmrsp:'split secondary'};
 let PAD_LABEL = 'GND', IC_PART = 'CD40106', IC_SPAN = 3, IC_PINS = 8;
+let HW_NEW = {kind:'screw', size:'M3', insulated:false};
 
 const KEYMAP = {v:'inspect', s:'select', a:'area', b:'line', x:'cut', j:'link', r:'res', c:'cap',
                 e:'ecap', d:'diode', q:'trans', w:'trim', o:'pot', g:'reg', u:'ic', p:'pad', f:'fly',
-                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct', l:'xfmr5', k:'xfmrsp'};
+                t:'spst', y:'spdt', h:'xfmr', i:'xfmrct', l:'xfmr5', k:'xfmrsp', z:'hw'};
 /* 20x20, currentColor, no fills that would fight the row's own color. Drawn
    rather than fetched: this file has no network and no icon font. */
 const TOOL_ICON = {
@@ -11611,6 +11998,7 @@ const TOOL_ICON = {
   spst   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.6" fill="currentColor" stroke="none"/><path d="M5 15 13 7" stroke-width="1.8" stroke-linecap="round"/></svg>',
   spdt   :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="15" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="15" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/><path d="M10 15 16 7" stroke-width="1.8" stroke-linecap="round"/></svg>',
   fly    :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="14.5" r="1.9" fill="currentColor" stroke="none"/><path d="M5.5 14.5C10 14.5 10 5.5 15 5.5"/><circle cx="16.2" cy="5" r="1.5"/></svg>',
+  hw     :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2.5 16.5 6.25v7.5L10 17.5 3.5 13.75v-7.5z"/><circle cx="10" cy="10" r="3"/><path d="M8.4 10h3.2M10 8.4v3.2" stroke-width="1.2"/></svg>',
   erase  :'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8.4 15.5H16"/><path d="M3.9 12.6 9 7.5a1.6 1.6 0 0 1 2.2 0l3.3 3.3a1.6 1.6 0 0 1 0 2.2l-2.4 2.4H6.6z"/><path d="M7.6 8.9 12.6 14"/></svg>',
 };
 
@@ -11638,6 +12026,7 @@ const HINTS = {
   spst   :'two clicks: the two lugs. an on/off switch, usually flown off-board with F.',
   spdt   :'three clicks: throw, common, throw. the center lug is the common. usually flown off-board.',
   fly    :'click a part leg to lift it off the board on a flying wire. click it again to set it back down.',
+  hw     :'click a hole to drill it for a screw, a spacer or a bare hole. pick the kind and size above. the drill takes the copper with it.',
   erase  :'click anything - body or leg - to remove it. a chip takes its own cuts with it. to move ONE leg instead, use select and drag the leg handle.',
 };
 
@@ -11780,6 +12169,7 @@ function renderCtx(){
     const p  = SEL && SEL.type === 'part' ? S.parts.find(x => x.id === SEL.id) : null;
     const ic = SEL && SEL.type === 'ic'   ? S.ics.find(x => x.id === SEL.id)   : null;
     const pd = SEL && SEL.type === 'pad'  ? S.pads.find(x => x.id === SEL.id)  : null;
+    const hwSel = SEL && SEL.type === 'hw' ? hwList().find(x => x.id === SEL.id) : null;
     if(p){
       o.push('<label>REF</label><input id="edRef" value="' + esc(p.ref) + '">');
       /* A part can have both: LEG_LIB fixes what the legs are CALLED, DEV_LIB
@@ -11843,6 +12233,22 @@ function renderCtx(){
                (p.polarized === false ? ' checked' : '') + '> non-polarized (NP / bipolar)</label>');
         o.push('<div class="hint">a bipolar can has no plus leg and no stripe, so it goes in either way around - which is what you want wherever the signal swings both ways, like a coupling cap between two stages. tick it and the board stops drawing a +, the walkthrough stops naming legs, and the parts list asks for an NP part, because it is a different drawer trip.</div>');
       }
+    }else if(hwSel){
+      o.push('<label>REF</label><input id="edHwRef" value="' + esc(hwSel.ref) + '">');
+      o.push('<label>KIND</label><select id="edHwKind">' + Object.keys(HW_KIND).map(k =>
+        '<option value="' + k + '"' + (k === hwSel.kind ? ' selected' : '') + '>' + HW_KIND[k] + '</option>').join('') + '</select>');
+      o.push('<label>SIZE</label><select id="edHwSize">' +
+             opts(Object.keys(HW_SIZE).concat(hwSel.kind === 'hole' ? ['other'] : []), HW_SIZE[hwSel.size] ? hwSel.size : 'other') + '</select>');
+      if(hwSel.kind === 'hole' && !HW_SIZE[hwSel.size])
+        o.push('<label>DIAMETER, mm</label><input id="edHwDia" type="number" step="0.1" min="' + HW_DIA_MIN +
+               '" max="' + HW_DIA_MAX + '" value="' + hwSel.dia + '">');
+      if(hwSel.kind !== 'hole')
+        o.push('<label class="chk"><input type="checkbox" id="edHwIns"' + (hwSel.insulated ? ' checked' : '') +
+               '> nylon, or on a fiber washer</label>');
+      o.push('<label>NOTE</label><input id="edHwVal" value="' + esc(hwSel.value || '') + '" placeholder="10 mm standoff">');
+      o.push('<div class="hint">drill ' + hwDrillMM(hwSel) + ' mm' +
+             (hwSel.kind === 'hole' ? '' : ', and ' + hwLandMM(hwSel) + ' mm of ' + (hwSel.kind === 'spacer' ? 'spacer' : 'nut') + ' against the board') +
+             '. the note prints on the build sheet.</div>');
     }else if(pd){
       o.push('<label>PAD LABEL</label><input id="edPadLabel" value="' + esc(pd.label) + '">');
       o.push('<label>GOES TO</label><input id="edPadTo" value="' + esc(pd.to || '') +
@@ -11977,6 +12383,15 @@ function renderCtx(){
     }
   }else if(TOOL === 'pad'){
     o.push('<label>LABEL</label><input id="ctxPad" value="' + esc(PAD_LABEL) + '">');
+  }else if(TOOL === 'hw'){
+    o.push('<label>KIND</label><select id="ctxHwKind">' + Object.keys(HW_KIND).map(k =>
+      '<option value="' + k + '"' + (k === HW_NEW.kind ? ' selected' : '') + '>' + HW_KIND[k] + '</option>').join('') + '</select>');
+    o.push('<label>SIZE</label><select id="ctxHwSize">' + opts(Object.keys(HW_SIZE), HW_NEW.size) + '</select>');
+    if(HW_NEW.kind !== 'hole')
+      o.push('<label class="chk"><input type="checkbox" id="ctxHwIns"' + (HW_NEW.insulated ? ' checked' : '') +
+             '> nylon, or on a fiber washer</label>');
+    o.push('<div class="hint">the drill takes the copper around the hole, the same as a cut. a metal nut or spacer ' +
+           'joins every strip it sits on, and the checks say which.</div>');
   }
   ctx.innerHTML = o.join('');
   if(typeof editwrap !== 'undefined') editwrap.hidden = !ctx.innerHTML;
@@ -12176,6 +12591,34 @@ function renderCtx(){
     const v = e.target.value.trim();
     if(v) p.to = v; else delete p.to;
   }));
+  on('ctxHwKind', 'onchange', e => { HW_NEW.kind = e.target.value; renderCtx(); });
+  on('ctxHwSize', 'onchange', e => { HW_NEW.size = e.target.value; });
+  on('ctxHwIns',  'onchange', e => { HW_NEW.insulated = e.target.checked; });
+  on('edHwRef', 'onchange', e => edit(() => {
+    const h = selObj(), v = e.target.value.trim().toUpperCase();
+    if(h && v && !hwList().some(x => x !== h && x.ref === v)) h.ref = v;
+  }));
+  on('edHwKind', 'onchange', e => edit(() => {
+    const h = selObj(); if(!h) return;
+    h.kind = e.target.value;
+    if(h.kind === 'hole') delete h.insulated;
+    else if(!HW_SIZE[h.size]){ h.size = 'M3'; delete h.dia; }
+  }));
+  on('edHwSize', 'onchange', e => edit(() => {
+    const h = selObj(); if(!h) return;
+    if(HW_SIZE[e.target.value]){ h.size = e.target.value; delete h.dia; }
+    else if(h.kind === 'hole'){ h.dia = hwDrillMM(h); delete h.size; }
+  }));
+  on('edHwDia', 'onchange', e => edit(() => {
+    const h = selObj(), v = Number(e.target.value);
+    if(h && Number.isFinite(v) && v >= HW_DIA_MIN && v <= HW_DIA_MAX) h.dia = Math.round(v * 10) / 10;
+  }));
+  on('edHwIns', 'onchange', e => edit(() => { const h = selObj(); if(!h) return; if(e.target.checked) h.insulated = true; else delete h.insulated; }));
+  on('edHwVal', 'onchange', e => edit(() => {
+    const h = selObj(); if(!h) return;
+    const v = e.target.value.trim();
+    if(v) h.value = v; else delete h.value;
+  }));
   on('edPadLabel','onchange', e => edit(() => { const d = selObj(); if(d) d.label = e.target.value; }));
   on('edPadTo',   'onchange', e => edit(() => {
     const d = selObj(); if(!d) return;
@@ -12315,6 +12758,7 @@ function selObj(){
   if(!SEL) return null;
   return SEL.type === 'part' ? S.parts.find(x => x.id === SEL.id)
        : SEL.type === 'pad'  ? S.pads.find(x => x.id === SEL.id)
+       : SEL.type === 'hw'   ? hwList().find(x => x.id === SEL.id)
        : S.ics.find(x => x.id === SEL.id);
 }
 
@@ -12391,7 +12835,9 @@ function onHole(r, c){
     const ic   = occ.find(o => o.type === 'ic');
     const pad  = occ.find(o => o.type === 'pad');
     const cut  = occ.find(o => o.type === 'cut');
-    if(part){ pushUndo(); S.parts = S.parts.filter(p => p !== part.part); }
+    const hwo  = occ.find(o => o.type === 'hw');
+    if(hwo){ pushUndo(); S.hardware = S.hardware.filter(h => h !== hwo.hw); if(!S.hardware.length) delete S.hardware; }
+    else if(part){ pushUndo(); S.parts = S.parts.filter(p => p !== part.part); }
     else if(ic){
       pushUndo();
       S.ics = S.ics.filter(x => x !== ic.ic);
@@ -12401,6 +12847,16 @@ function onHole(r, c){
     else if(pad){ pushUndo(); S.pads = S.pads.filter(d => d !== pad.pad); }
     else if(cut){ pushUndo(); S.cuts = S.cuts.filter(k => k !== key); }
     else return;
+    commit(); return;
+  }
+
+  if(TOOL === 'hw'){
+    if(hwList().some(h => h.at[0] === r && h.at[1] === c)) return;
+    pushUndo();
+    const h = {id:uid(), ref:nextHwRef(), at:[r,c], kind:HW_NEW.kind, size:HW_NEW.size};
+    if(HW_NEW.insulated && h.kind !== 'hole') h.insulated = true;
+    if(!Array.isArray(S.hardware)) S.hardware = [];
+    S.hardware.push(h);
     commit(); return;
   }
 
@@ -12545,7 +13001,7 @@ function moveSel(dr, dc, basePins, basePin1, basePadAt){
   if(!t) return;
   if(SEL.type === 'part'){
     t.pins = (basePins || t.pins).map(q => [q[0] + dr, q[1] + dc]);
-  }else if(SEL.type === 'pad'){
+  }else if(SEL.type === 'pad' || SEL.type === 'hw'){
     const base = basePadAt || t.at;
     t.at = [base[0] + dr, base[1] + dc];
   }else{
@@ -12562,6 +13018,9 @@ function deleteSel(){
     S.parts = S.parts.filter(p => p.id !== SEL.id);
   }else if(SEL.type === 'pad'){
     S.pads = S.pads.filter(d => d.id !== SEL.id);
+  }else if(SEL.type === 'hw'){
+    S.hardware = hwList().filter(h => h.id !== SEL.id);
+    if(!S.hardware.length) delete S.hardware;
   }else{
     const ic = S.ics.find(x => x.id === SEL.id);
     if(ic){
@@ -12631,10 +13090,11 @@ stage.addEventListener('click', e => {
      bench read was "delete is broken", worst with the reference pane open
      shrinking every target. Same overlays the select tool uses. */
   if(TOOL === 'erase' && t.closest){
-    const el = t.closest('[data-part],[data-ic],[data-pad]');
+    const el = t.closest('[data-part],[data-ic],[data-pad],[data-hw]');
     if(el){
       pushUndo();
-      if(el.dataset.part) S.parts = S.parts.filter(p => p.id !== el.dataset.part);
+      if(el.dataset.hw){ S.hardware = hwList().filter(h => h.id !== el.dataset.hw); if(!S.hardware.length) delete S.hardware; }
+      else if(el.dataset.part) S.parts = S.parts.filter(p => p.id !== el.dataset.part);
       else if(el.dataset.pad) S.pads = S.pads.filter(d => d.id !== el.dataset.pad);
       else if(el.dataset.ic){
         const ic = S.ics.find(x => x.id === el.dataset.ic);
@@ -12661,7 +13121,7 @@ stage.addEventListener('click', e => {
 });
 stage.addEventListener('pointerdown', e => {
   if(TOOL !== 'select') return;
-  const t = e.target.closest ? e.target.closest('[data-part],[data-ic],[data-pad]') : null;
+  const t = e.target.closest ? e.target.closest('[data-part],[data-ic],[data-pad],[data-hw]') : null;
   if(!t){
     /* Empty board, so this gesture was going spare: drag it and you are
        picking a BLOCK. Region used to be its own tool behind its own palette
@@ -12687,6 +13147,7 @@ stage.addEventListener('pointerdown', e => {
   const wasIc = SEL && SEL.type === 'ic' ? SEL.id : null;
   SEL = t.dataset.part ? {type:'part', id:t.dataset.part}
       : t.dataset.pad  ? {type:'pad',  id:t.dataset.pad}
+      : t.dataset.hw   ? {type:'hw',   id:t.dataset.hw}
       : {type:'ic', id:t.dataset.ic};
   if(!(SEL.type === 'ic' && SEL.id === wasIc)) FOOT = false;
   const obj = selObj();
@@ -13026,6 +13487,7 @@ function shareProject(){
              parts:S.parts, ics:saveProject().ics, pads:S.pads};
   if(Array.isArray(S.panel) && S.panel.length) p.panel = S.panel;
   if(Array.isArray(S.offboard) && S.offboard.length) p.offboard = S.offboard;
+  if(Array.isArray(S.hardware) && S.hardware.length) p.hardware = S.hardware;
   return p;
 }
 function b64url(bytes){

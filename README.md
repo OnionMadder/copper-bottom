@@ -7,7 +7,7 @@ Named for the copper bottom of the board - the side you cut.
 **It checks the board electrically, and it needs no schematic to do it.** That is the
 part people miss, so it goes first: nets are worked out from the copper alone - strips,
 cuts, links - and then read against a library of **47 chips** that knows what each pin
-is for. **15 rules** run on every edit. Two pins of one chip on a strip with no supply
+is for. **19 rules** run on every edit. Two pins of one chip on a strip with no supply
 on it. A CMOS input connected to nothing. A DIP straddling strips nothing has cut. Two
 leads in one hole. A strip with one thing on it. A part shorted end to end. A chip on a
 supply its datasheet does not allow.
@@ -116,6 +116,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | transformers - audio, five-pin, and split-secondary | done |
 | non-polarized electrolytics | done |
 | a spelling check in the test suite | done |
+| mounting hardware - screws, spacers and drilled holes that the checks understand | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
@@ -164,6 +165,7 @@ internet, and only at the moment you paste.
 | `X` cut | `J` wire link | `R` resistor | `C` capacitor |
 | `E` electrolytic (first hole is `+`) | `D` diode (band on the second hole) | `Q` transistor | `W` trimpot |
 | `G` regulator | `U` IC / DIP | `P` pad | `N` strip color |
+| `Z` screw / hole | | | |
 | `[` `]` zoom | `,` `.` turn the selection | `Esc` cancel / deselect | `Del` erase tool, or delete the selection |
 | `Shift` + arrows nudge the overlay picture | | | |
 
@@ -462,6 +464,16 @@ at all; `offboard` is a list of `"JK1.T - POT1.3"` strings for wires between two
 parts that never touch the board. None of it affects the netlist - pads are already
 the netlist's edge.
 
+**`hardware` is the screws, spacers and drilled holes.** Each entry is
+`{ "ref": "MH1", "at": [4,5], "kind": "screw", "size": "M3" }`. `kind` is `hole`, `screw`
+or `spacer`; `size` is `M2.5`, `M3` or `M4`, and a bare hole may carry its own `dia` in
+millimeters instead. `"insulated": true` means nylon, or metal on a fiber washer. **The
+drill takes the copper with it**, so a drilled hole breaks its strip exactly as a cut does
+and no net passes through it, but it is NOT listed in `cuts`. Metal hardware joins nothing
+in the solved nets either: what it would short is a finding, not a connection. Inch
+threads are not in the table yet, because two published tables disagree on the size of a
+#4-40 nut.
+
 **`netlist` is a view, never the source.** It is a string, written from the copper by
 the app, and checking a board against a netlist derived from that same board can only
 ever pass. To get the solved nets as data, derive them - do not parse the string, and
@@ -507,6 +519,10 @@ Click any finding to ring the offending hole and pin its net. Hover to light the
 | warn | a chip is below its minimum supply |
 | warn | an off-board wire, or a pad, names a panel part or a lug that nothing on the layout declares |
 | error | a DIP on a board whose hole spacing is not 0.1 in - its pins will not reach |
+| error | a lead, pin or pad sits in a hole drilled for mounting hardware |
+| error | a metal nut or spacer lies on two or more live nets - offers a one-click "it is nylon" |
+| warn | a metal nut or spacer lies on one live net that is not ground |
+| warn | a lead, a pad or a part body is under a screw, a nut or a spacer |
 
 ### Lead span, and why it says "will not lie flat"
 
