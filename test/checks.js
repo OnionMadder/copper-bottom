@@ -4260,6 +4260,39 @@ console.log('-- v1.7.20: squeezing out empty lines, proven on a copy --');
      walkthrough().indexOf('mounting hardware') < 0, 'a board with no hardware prints none of it');
 }
 
+/* ---- cut marks on the front: a cut under a part is lighter than the part ---- */
+{
+  const P = (kind, ref, value, a, b) => ({id:uid(), kind:kind, ref:ref, value:value, pins:[a, b]});
+  S = demoProject(); S.cuts.push(K(0,10)); computeNets();
+  let u = cutsUnderBodies();
+  ok([3,4,5,6,7,8,9].every(r => u.has(K(r,8))), 'the seven cuts down the chip are under a body');
+  ok(!u.has(K(0,10)) && u.size === 7, 'and a cut on bare strip is not');
+  const board = parts => migrate({version:2, name:'x', board:{rows:8, cols:12}, cuts:[K(1,3), K(4,3), K(6,3), K(6,8)],
+                                  parts:parts, ics:[], pads:[]});
+  S = board([P('ecap','C1','100u',[1,2],[1,4]), P('res','R1','10k',[4,1],[4,5]), P('cap','C2','100n',[6,2],[6,4]),
+             P('link','J1','',[6,7],[6,9])]);
+  u = cutsUnderBodies();
+  ok(u.has(K(1,3)) && u.has(K(4,3)) && u.has(K(6,3)), 'a cut under a can, a resistor and a film cap is under a body');
+  ok(!u.has(K(6,8)), 'a wire link has no body, so the cut under it keeps the full mark');
+  S = board([Object.assign(P('ecap','C1','100u',[1,2],[1,4]), {fly:[0,1]})]);
+  ok(cutsUnderBodies().size === 0, 'a part on flying leads has no body on the board and covers no cut');
+  S = board([]);
+  ok(cutsUnderBodies().size === 0, 'with the parts gone, no cut is under anything');
+
+  const ink = {pink:'#P', cut:'#C', edge:'#E', markFill:'#F'};
+  const widths = svg => (svg.match(/stroke-width="[0-9.]+"/g) || []).map(w => +w.replace(/[^0-9.]/g, ''));
+  const bare = cutMark(100, 50, false, ink), under = cutMark(100, 50, true, ink);
+  ok(bare.indexOf('r="16"') >= 0 && bare.indexOf('fill="#F"') >= 0 && Math.max.apply(null, widths(bare)) === 6,
+     'a cut on bare copper keeps its glow, its filled disc and its heavy X');
+  ok(under.indexOf('#F') < 0 && under.indexOf('#E') < 0 && under.indexOf('fill-opacity') < 0 &&
+     under.indexOf('fill="none"') >= 0 && under.indexOf('stroke-dasharray') >= 0,
+     'a cut under a part is an outline: nothing filled, nothing dark laid over the part');
+  ok(widths(under).length === 2 && Math.max.apply(null, widths(under)) <= 1.6,
+     'and its heaviest line is half the weight of the bare mark\'s X');
+  ok(under.indexOf('#P') >= 0 && under.indexOf('<path') >= 0 && under.indexOf('<circle') >= 0,
+     'it is still a ring and an X in the cut color, so it can be found');
+}
+
 S = demoProject(); computeNets();
 
 console.log('\n' + (fail ? fail + ' FAILURES' : 'ALL CHECKS PASS') + '\n');

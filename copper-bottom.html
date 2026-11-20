@@ -1026,7 +1026,7 @@ svg{display:block; margin:0 auto; user-select:none; touch-action:none}
    sheet or a walkthrough found on a bench a year from now says what made it.
    It lives in the model region because two of the stamps that use it do.
    Bump it when cutting a release, and nowhere else. */
-const APP_VERSION = 'v1.8.2';
+const APP_VERSION = 'v1.8.3';
 
 const K = (r,c) => r + ',' + c;
 
@@ -3305,6 +3305,45 @@ function hwBody(h){
    screw is its round head, and both show the cross of the screw. A bare
    hole is the hole and a center mark running past its edge. Nylon, or
    anything else insulated, wears a dashed outline. */
+/* ---- cut marks on the component side ----
+   A cut is made on the copper side, so on the front it is a note about the
+   back of the board. Drawn at full weight over a part it outranked the part:
+   a solid X in a dark disc sat on the body and across its name (hers, 20 Nov
+   2026, and her pick from three renders the same day). So a cut
+   with a body over it is an outline now - a dashed ring and a thin X, nothing
+   filled - and it goes down UNDER the part names. A cut on bare copper keeps
+   the full mark, because there it is the only thing to find. The solder side
+   and every export draw their own cuts and are not touched by this.
+
+   Which cuts those are comes from bodies(), the same boxes the collision
+   check and the drawing use. A transformer is drawn as a box over its pin
+   field, which is not its FOOTPRINT box, so its field is asked as well. A
+   part on flying leads has no body on the board and covers nothing. */
+function cutsUnderBodies(){
+  const bs = bodies(), out = new Set();
+  const fields = S.parts.filter(p => /^xfmr/.test(p.kind) && !isFlying(p)).map(xfmrBox);
+  for(const k of S.cuts){
+    const p = k.split(','), r = +p[0], c = +p[1];
+    const pt = {shape:'disc', dia:0.3, cx:c, cy:r, ang:0};
+    if(bs.some(b => bodiesOverlap(pt, b)) ||
+       fields.some(f => r >= f.r0 && r <= f.r1 && c >= f.c0 && c <= f.c1)) out.add(k);
+  }
+  return out;
+}
+/* k carries the theme's colors: pink, cut, edge, markFill */
+function cutMark(x, y, under, k){
+  const s = under ? 5 : 7.5;
+  const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
+                'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
+  if(under)
+    return '<circle cx="' + x + '" cy="' + y + '" r="9" fill="none" stroke="' + k.pink + '" stroke-width="1.4" stroke-dasharray="3 2.6"/>' +
+           '<path d="' + cross + '" stroke="' + k.pink + '" stroke-width="1.6" stroke-linecap="round"/>';
+  return '<circle cx="' + x + '" cy="' + y + '" r="16" fill="' + k.pink + '" fill-opacity="0.14"/>' +
+         '<circle cx="' + x + '" cy="' + y + '" r="9" fill="' + k.markFill + '" stroke="' + k.pink + '" stroke-width="1.8"/>' +
+         '<path d="' + cross + '" stroke="' + k.edge + '" stroke-width="6" stroke-linecap="round"/>' +
+         '<path d="' + cross + '" stroke="' + k.cut + '" stroke-width="3.2" stroke-linecap="round"/>';
+}
+
 function hwGlyph(h, cx, cy, pitch, k){
   const n = v => +v.toFixed(2);
   const rd = hwDrillMM(h) / 2 / hwPitchMM() * pitch, rl = hwLandMM(h) / 2 / hwPitchMM() * pitch;
@@ -9430,6 +9469,17 @@ function render(){
     o.push('</g>');
   }
 
+  /* --- cuts with a part over them: an outline, and under the names, so the
+     part is what the eye lands on. See cutMark(). --- */
+  const cutUnder = cutsUnderBodies();
+  const cutInk = {pink:C('pink'), cut:C('cut'), edge:C('edge'), markFill:C('markFill')};
+  for(const k of S.cuts){
+    if(!cutUnder.has(k)) continue;
+    const p = k.split(','), r = +p[0], c = +p[1];
+    if(r >= rows || c >= cols) continue;
+    o.push(cutMark(X(c), Y(r), true, cutInk));
+  }
+
   o.push(labels.join(''));
 
   /* grab handles on the IC being reshaped */
@@ -9489,19 +9539,13 @@ function render(){
            '" fill="' + C('link') + '">' + esc(h.ref) + '</text>');
   }
 
-  /* --- cuts, drawn last so nothing can cover them.
-     A DIP body sits directly over its own auto-cuts, and those are the cuts
-     you have to make before the IC can go in. --- */
+  /* --- cuts on bare copper, drawn last and at full weight so nothing can
+     cover them. The ones under a part went down earlier, as outlines. --- */
   for(const k of S.cuts){
+    if(cutUnder.has(k)) continue;
     const p = k.split(','), r = +p[0], c = +p[1];
     if(r >= rows || c >= cols) continue;
-    const x = X(c), y = Y(r), s = 7.5;
-    const cross = 'M' + (x-s) + ' ' + (y-s) + 'L' + (x+s) + ' ' + (y+s) +
-                  'M' + (x+s) + ' ' + (y-s) + 'L' + (x-s) + ' ' + (y+s);
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="16" fill="' + C('pink') + '" fill-opacity="0.14"/>');
-    o.push('<circle cx="' + x + '" cy="' + y + '" r="9" fill="' + C('markFill') + '" stroke="' + C('pink') + '" stroke-width="1.8"/>');
-    o.push('<path d="' + cross + '" stroke="' + C('edge') + '" stroke-width="6" stroke-linecap="round"/>');
-    o.push('<path d="' + cross + '" stroke="' + C('cut') + '" stroke-width="3.2" stroke-linecap="round"/>');
+    o.push(cutMark(X(c), Y(r), false, cutInk));
   }
 
   /* --- pending placement ghost --- */

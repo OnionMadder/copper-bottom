@@ -118,6 +118,7 @@ obviously broken. Exit code is non-zero if there are errors, so it suits a pre-c
 | a spelling check in the test suite | done |
 | mounting hardware - screws, spacers and drilled holes that the checks understand | done |
 | X-ray - part bodies fade so the copper under them can be read | done |
+| A cut under a part is drawn as an outline on the front, so the part outranks it | done |
 
 Layouts autosave to browser storage, and `export .json` / `import` move them between
 machines. Old v1 files still load.
